@@ -1,0 +1,531 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/network/api_client.dart';
+import '../../../core/utils/native_file_picker.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../donors/presentation/donors_screen.dart' show demoLocalDonors, mockDonorData;
+import 'receipt_generator.dart';
+
+const _brand700 = Color(0xFF0B6E5D);
+const _brand600 = Color(0xFF0E8C76);
+const _brand100 = Color(0xFFD6F3EC);
+const _amber600 = Color(0xFFE0921A);
+const _coral500 = Color(0xFFF2685E);
+const _violet500 = Color(0xFF7C6CF0);
+const _sky500 = Color(0xFF2D9CDB);
+const _green500 = Color(0xFF14A98C);
+const _onSurface1 = Color(0xFF15211E);
+const _onSurface2 = Color(0xFF5A6B67);
+const _onSurface3 = Color(0xFF93A29F);
+const _border = Color(0xFFE5EBE9);
+const _surface2 = Color(0xFFF4F7F6);
+
+Color _avColor(String seed) {
+  final p = [_brand600, const Color(0xFFF6A723), _violet500, _sky500, _coral500, _green500];
+  int h = 0;
+  for (int i = 0; i < seed.length; i++) { h = ((h * 31) + seed.codeUnitAt(i)) & 0xFFFFFFFF; }
+  return p[h % p.length];
+}
+String _initials(String name) {
+  final parts = name.trim().split(RegExp(r'\s+'));
+  return ((parts[0].isNotEmpty ? parts[0][0] : '') + (parts.length > 1 && parts[1].isNotEmpty ? parts[1][0] : '')).toUpperCase();
+}
+
+class _TypeInfo {
+  const _TypeInfo(this.key, this.color, this.icon);
+  final String key; final Color color; final IconData icon;
+}
+
+const _typeVisuals = {
+  'Education Fund':    (_TypeInfo('Education Fund',    _violet500, Icons.school_outlined)),
+  'Child Sponsorship': (_TypeInfo('Child Sponsorship', _brand600,  Icons.favorite_outline)),
+  'Healthcare':        (_TypeInfo('Healthcare',        _coral500,  Icons.medical_services_outlined)),
+  'General Donation':  (_TypeInfo('General Donation',  _sky500,    Icons.account_balance_wallet_outlined)),
+  'Food & Nutrition':  (_TypeInfo('Food & Nutrition',  _amber600,  Icons.restaurant_outlined)),
+};
+
+const _methods = ['UPI', 'Bank Transfer', 'Cheque', 'Cash', 'Payment Link'];
+const _methodModes = {
+  'UPI': 'UPI', 'Bank Transfer': 'BANK_TRANSFER',
+  'Cheque': 'CHEQUE', 'Cash': 'CASH', 'Payment Link': 'PAYMENT_LINK',
+};
+
+const _quickAmounts = [5000, 11000, 25000, 51000];
+
+// ══════════════════════════════════════════════════════════════════════
+class AddDonationScreen extends StatefulWidget {
+  const AddDonationScreen({super.key});
+  @override
+  State<AddDonationScreen> createState() => _AddDonationScreenState();
+}
+
+class _AddDonationScreenState extends State<AddDonationScreen> {
+  final _amountCtrl = TextEditingController();
+  String? _selectedDonorId;
+  String? _selectedDonorName;
+  String _donationType = 'Education Fund';
+  String _method = 'UPI';
+  String _date = '';
+  bool _saving = false;
+  final List<String> _attachments = [];
+  bool _pickingFile = false;
+
+  // Loaded from API
+  List<({String id, String name, String city, String tier})> _donors = [];
+  Map<String, String> _typeLabelToId = {};
+  List<String> _typeLabels = [];
+  bool _loadingData = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    _date = '${now.day.toString().padLeft(2,'0')} ${months[now.month-1]} ${now.year}';
+    // pre-populate synchronously so dialog always has data
+    _donors = _fallbackDonors();
+    _loadFormData();
+  }
+
+  List<({String id, String name, String city, String tier})> _fallbackDonors() {
+    final all = [...demoLocalDonors, ...mockDonorData];
+    return all.map<({String id, String name, String city, String tier})>((d) => (
+      id:   d['id']   as String? ?? '',
+      name: d['name'] as String? ?? '',
+      city: d['city'] as String? ?? '',
+      tier: d['tier'] as String? ?? 'SILVER',
+    )).toList();
+  }
+
+  Future<void> _loadFormData() async {
+    try {
+      final results = await Future.wait([
+        apiClient.get('/donors', params: {'limit': '100'}),
+        apiClient.get('/donations/types'),
+      ]);
+
+      // Parse donors
+      final dRes = results[0];
+      final dInner = dRes['data'];
+      List<dynamic> dList = dInner is Map ? (dInner['data'] as List? ?? []) : (dInner as List? ?? []);
+      var donors = dList.map<({String id, String name, String city, String tier})>((d) {
+        final m = d as Map<String, dynamic>;
+        return (id: m['id'] as String? ?? '', name: m['name'] as String? ?? '', city: m['city'] as String? ?? '', tier: m['tier'] as String? ?? 'SILVER');
+      }).toList();
+
+      // Always include demo/local donors
+      donors = [..._fallbackDonors(), ...donors];
+
+      // Parse donation types
+      final tRes = results[1];
+      final tInner = tRes['data'];
+      List<dynamic> tList = tInner is List ? tInner : (tInner is Map ? (tInner['data'] as List? ?? []) : []);
+      final labelToId = <String, String>{};
+      for (final t in tList) {
+        final m = t as Map<String, dynamic>;
+        labelToId[m['label'] as String? ?? ''] = m['id'] as String? ?? '';
+      }
+
+      if (mounted) {
+        setState(() {
+          _donors = donors;
+          _typeLabelToId = labelToId;
+          _typeLabels = labelToId.keys.toList();
+          if (_typeLabels.isNotEmpty && !_typeLabels.contains(_donationType)) {
+            _donationType = _typeLabels.first;
+          }
+          _loadingData = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _donors = _fallbackDonors();
+          _loadingData = false;
+        });
+      }
+    }
+  }
+
+  String get _receipt => 'SF/26-27/${DateTime.now().millisecondsSinceEpoch % 10000 + 400}';
+
+  void _pickAmount(int amount) {
+    _amountCtrl.text = amount.toString();
+  }
+
+  void _pickDate() async {
+    final d = await showDatePicker(
+      context: context, initialDate: DateTime(2026, 6, 4),
+      firstDate: DateTime(2020), lastDate: DateTime(2030),
+      builder: (ctx, child) => Theme(data: Theme.of(ctx).copyWith(colorScheme: const ColorScheme.light(primary: _brand600)), child: child!),
+    );
+    if (d != null) setState(() => _date = '${d.day.toString().padLeft(2, '0')} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.month - 1]} ${d.year}');
+  }
+
+  Future<void> _openDonorPicker() async {
+    String search = '';
+    await showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) {
+        final filtered = search.isEmpty
+          ? _donors
+          : _donors.where((d) => d.name.toLowerCase().contains(search.toLowerCase())).toList();
+        final kb = MediaQuery.of(ctx).viewInsets.bottom;
+        return Padding(
+          padding: EdgeInsets.only(bottom: kb),
+          child: Container(
+          height: MediaQuery.of(context).size.height * 0.72,
+          decoration: BoxDecoration(color: ctx.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+          child: Column(children: [
+            const SizedBox(height: 8),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: ctx.border, borderRadius: BorderRadius.circular(2))),
+            Padding(padding: const EdgeInsets.fromLTRB(18, 16, 18, 0), child: Row(children: [
+              Expanded(child: Text('Select Donor', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: ctx.textPrimary))),
+              IconButton(icon: const Icon(Icons.close, size: 20), onPressed: () => Navigator.pop(ctx), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+            ])),
+            Padding(padding: const EdgeInsets.fromLTRB(18, 10, 18, 10), child: Container(
+              decoration: BoxDecoration(color: ctx.scaffoldBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: ctx.border)),
+              child: TextField(
+                onChanged: (v) => setSt(() => search = v),
+                decoration: InputDecoration(hintText: 'Search donor…', hintStyle: TextStyle(fontSize: 14, color: ctx.textHint),
+                  prefixIcon: Icon(Icons.search, color: ctx.textHint, size: 20), border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(vertical: 12)),
+              ))),
+            if (_loadingData)
+              const Expanded(child: Center(child: CircularProgressIndicator(color: _brand600)))
+            else
+              Expanded(child: filtered.isEmpty
+                ? Center(child: Text('No donors found', style: TextStyle(color: ctx.textSub)))
+                : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
+                  itemCount: filtered.length,
+                  itemBuilder: (_, i) {
+                    final d = filtered[i];
+                    final isSelected = _selectedDonorId == d.id;
+                    final av = _avColor(d.name);
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() { _selectedDonorId = d.id; _selectedDonorName = d.name; });
+                        Navigator.pop(ctx);
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                        decoration: BoxDecoration(color: isSelected ? _brand100 : ctx.cardBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: isSelected ? _brand600 : ctx.border)),
+                        child: Row(children: [
+                          Container(width: 40, height: 40, decoration: BoxDecoration(gradient: LinearGradient(colors: [av, Color.lerp(av, Colors.black, 0.2)!]), shape: BoxShape.circle),
+                            child: Center(child: Text(_initials(d.name), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)))),
+                          const SizedBox(width: 11),
+                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(d.name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: ctx.textPrimary)),
+                            Text('${d.city} · ${d.tier}', style: TextStyle(fontSize: 12, color: ctx.textSub, fontWeight: FontWeight.w500)),
+                          ])),
+                          if (isSelected) const Icon(Icons.check_circle_rounded, color: _brand600, size: 22),
+                        ]),
+                      ),
+                    );
+                  }),
+              ),
+          ]),
+        ));
+      }),
+    );
+  }
+
+  void _save() async {
+    final amountText = _amountCtrl.text.trim();
+    if (amountText.isEmpty) {
+      _snack('Please enter an amount', isError: true); return;
+    }
+    if (_selectedDonorId == null) {
+      _snack('Please select a donor', isError: true); return;
+    }
+    final typeId = _typeLabelToId[_donationType];
+    if (typeId == null || typeId.isEmpty) {
+      _snack('Donation types not loaded — check connection', isError: true); return;
+    }
+    setState(() => _saving = true);
+    try {
+      final resp = await apiClient.post('/donations', {
+        'donorId': _selectedDonorId,
+        'typeId': typeId,
+        'amount': int.parse(amountText),
+        'paymentMode': _methodModes[_method] ?? 'CASH',
+      });
+      if (!mounted) return;
+      final data = resp['data'] as Map<String, dynamic>? ?? {};
+      final receiptNo = data['receiptNo'] as String? ?? 'SF/${DateTime.now().year}/${(DateTime.now().millisecondsSinceEpoch % 9999 + 1000)}';
+      final receipt = DonationReceipt(
+        receiptNo:    receiptNo,
+        donorName:    _selectedDonorName ?? 'Donor',
+        donorPhone:   '',
+        donorCity:    '',
+        donorPan:     '',
+        donationType: _donationType,
+        amount:       int.parse(amountText),
+        paymentMode:  _method,
+        date:         _date,
+        taxExemption: false,
+      );
+      await showReceiptSheet(context, receipt);
+      if (mounted) context.go('/donations');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      _snack('Failed: ${e.toString()}', isError: true);
+    }
+  }
+
+
+  void _snack(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
+      backgroundColor: isError ? _coral500 : _brand600,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+  }
+
+  @override
+  void dispose() { _amountCtrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    final top = MediaQuery.of(context).padding.top;
+    final bottom = MediaQuery.of(context).padding.bottom;
+    return Scaffold(
+      body: Column(children: [
+        // header
+        Container(color: context.headerBg, padding: EdgeInsets.fromLTRB(18, top + 14, 18, 16),
+          child: Row(children: [
+            IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20), onPressed: () => context.go('/donations'), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+            const SizedBox(width: 10),
+            Expanded(child: Text('Add Donation', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: context.textPrimary))),
+            Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(10)),
+              child: Text(_receipt, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _brand700, letterSpacing: 0.2))),
+          ])),
+
+        Expanded(child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Padding(padding: const EdgeInsets.fromLTRB(18, 16, 18, 0), child: Column(children: [
+
+            // amount entry card
+            _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const _Label('Amount'),
+              const SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: context.border, width: 1.5)),
+                child: Row(children: [
+                  Container(width: 44, height: 52, alignment: Alignment.center,
+                    child: const Text('₹', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _brand600))),
+                  Expanded(child: TextField(
+                    controller: _amountCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: context.textPrimary),
+                    decoration: InputDecoration(hintText: '0', hintStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: context.textHint), border: InputBorder.none, contentPadding: EdgeInsets.zero),
+                  )),
+                ]),
+              ),
+              const SizedBox(height: 12),
+              Row(children: _quickAmounts.map((a) {
+                return Expanded(child: Padding(padding: EdgeInsets.only(right: a == _quickAmounts.last ? 0 : 8), child: GestureDetector(
+                  onTap: () { _pickAmount(a); setState(() {}); },
+                  child: Container(padding: const EdgeInsets.symmetric(vertical: 7),
+                    decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: context.border)),
+                    child: Center(child: Text(a >= 1000 ? '₹${a ~/ 1000}K' : '₹$a', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand700)))),
+                )));
+              }).toList()),
+            ])),
+
+            const SizedBox(height: 12),
+
+            // donor picker
+            _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const _Label('Donor'),
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: _openDonorPicker,
+                child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                  decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: _selectedDonorId != null ? _brand600 : context.border, width: 1.5)),
+                  child: Row(children: [
+                    if (_selectedDonorName != null) ...[
+                      Container(width: 32, height: 32, decoration: BoxDecoration(gradient: LinearGradient(colors: [_avColor(_selectedDonorName!), Color.lerp(_avColor(_selectedDonorName!), Colors.black, 0.2)!]), shape: BoxShape.circle),
+                        child: Center(child: Text(_initials(_selectedDonorName!), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 11)))),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(_selectedDonorName!, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.textPrimary))),
+                      const Icon(Icons.check_circle_rounded, color: _brand600, size: 18),
+                    ] else ...[
+                      Icon(Icons.search, color: context.textHint, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text('Search & select donor…', style: TextStyle(fontSize: 14, color: context.textHint, fontWeight: FontWeight.w500))),
+                      Icon(Icons.chevron_right, color: context.textHint, size: 20),
+                    ],
+                  ])),
+              ),
+            ])),
+
+            const SizedBox(height: 12),
+
+            // donation type
+            _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const _Label('Allocate towards'),
+              const SizedBox(height: 12),
+              if (_loadingData)
+                const Center(child: SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600)))
+              else
+                Wrap(spacing: 8, runSpacing: 8, children: (_typeLabels.isNotEmpty ? _typeLabels : _typeVisuals.keys.toList()).map((label) {
+                  final active = _donationType == label;
+                  final info = _typeVisuals[label] ?? _TypeInfo(label, _brand600, Icons.account_balance_wallet_outlined);
+                  return GestureDetector(
+                    onTap: () => setState(() => _donationType = label),
+                    child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(color: active ? info.color.withValues(alpha: 0.12) : context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? info.color : context.border)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(info.icon, size: 15, color: active ? info.color : context.textHint),
+                        const SizedBox(width: 6),
+                        Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? info.color : context.textSub)),
+                      ])),
+                  );
+                }).toList()),
+            ])),
+
+            const SizedBox(height: 12),
+
+            // payment method
+            _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const _Label('Payment Method'),
+              const SizedBox(height: 12),
+              Wrap(spacing: 8, runSpacing: 8, children: _methods.map((m) {
+                final active = _method == m;
+                return GestureDetector(
+                  onTap: () => setState(() => _method = m),
+                  child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(color: active ? _brand600 : context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? _brand600 : context.border)),
+                    child: Text(m, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub))),
+                );
+              }).toList()),
+            ])),
+
+            const SizedBox(height: 12),
+
+            // receipt + date
+            _Card(child: Row(children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const _Label('Receipt No.'),
+                const SizedBox(height: 8),
+                Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)),
+                  child: Text(_receipt, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _brand700, letterSpacing: 0.3))),
+              ])),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const _Label('Date'),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: _pickDate,
+                  child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.border)),
+                    child: Row(children: [
+                      Expanded(child: Text(_date, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.textPrimary))),
+                      Icon(Icons.calendar_today_outlined, size: 14, color: context.textHint),
+                    ])),
+                ),
+              ])),
+            ])),
+
+            const SizedBox(height: 12),
+
+            // attachment upload
+            _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const _Label('Attachments'),
+              const SizedBox(height: 10),
+              GestureDetector(
+                onTap: _pickingFile ? null : () async {
+                  setState(() => _pickingFile = true);
+                  final result = await NativeFilePicker.pickAny();
+                  if (result != null && mounted) setState(() => _attachments.add(result.name));
+                  if (mounted) setState(() => _pickingFile = false);
+                },
+                child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 20),
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: context.border, width: 1.5)),
+                  child: _pickingFile
+                    ? const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600)))
+                    : Column(children: [
+                        Icon(Icons.upload_file_outlined, color: context.textHint, size: 28),
+                        const SizedBox(height: 7),
+                        Text('Tap to attach receipt / proof', style: TextStyle(fontSize: 13, color: context.textHint, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 3),
+                        Text('PDF, JPG, PNG — any file type', style: TextStyle(fontSize: 11, color: context.textHint, fontWeight: FontWeight.w500)),
+                      ])),
+              ),
+              if (_attachments.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                ..._attachments.asMap().entries.map((e) => Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(10)),
+                  child: Row(children: [
+                    const Icon(Icons.attach_file_rounded, size: 16, color: _brand600),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(e.value, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _brand600), overflow: TextOverflow.ellipsis)),
+                    GestureDetector(
+                      onTap: () => setState(() => _attachments.removeAt(e.key)),
+                      child: const Icon(Icons.close, size: 16, color: _brand600)),
+                  ]),
+                )),
+              ],
+            ])),
+
+            const SizedBox(height: 24),
+          ])),
+        )),
+
+        // bottom action bar — inline in Column (not bottomNavigationBar) to avoid double-bar with MainShell
+        Container(
+          decoration: BoxDecoration(color: context.cardBg, border: Border(top: BorderSide(color: context.border)),
+            boxShadow: const [BoxShadow(color: Color(0x140D2822), blurRadius: 12, offset: Offset(0, -4))]),
+          padding: EdgeInsets.fromLTRB(18, 14, 18, bottom + 14),
+          child: Row(children: [
+            Expanded(child: OutlinedButton(
+              onPressed: () => context.go('/donations'),
+              style: OutlinedButton.styleFrom(foregroundColor: context.textSub, side: BorderSide(color: context.border, width: 1.5),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: const EdgeInsets.symmetric(vertical: 16)),
+              child: const Text('Cancel', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            )),
+            const SizedBox(width: 12),
+            Expanded(flex: 2, child: ElevatedButton(
+              onPressed: _saving ? null : _save,
+              style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white,
+                disabledBackgroundColor: _brand600.withValues(alpha: 0.6),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                padding: const EdgeInsets.symmetric(vertical: 16), elevation: 0),
+              child: _saving
+                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                : const Text('Save Donation', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+            )),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+class _Card extends StatelessWidget {
+  const _Card({required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity, padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(20), border: Border.all(color: context.border),
+      boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 6, offset: Offset(0, 2))]),
+    child: child);
+}
+
+class _Label extends StatelessWidget {
+  const _Label(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: context.textHint, letterSpacing: 0.6));
+}

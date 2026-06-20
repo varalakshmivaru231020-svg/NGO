@@ -1,0 +1,1247 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:file_picker/file_picker.dart';
+
+// ── colours ───────────────────────────────────────────────────────────
+const _brand700 = Color(0xFF0B6E5D);
+const _brand600 = Color(0xFF0E8C76);
+const _brand100 = Color(0xFFD6F3EC);
+const _violet500 = Color(0xFF7C6CF0);
+const _violet100 = Color(0xFFE7E3FD);
+const _amber600 = Color(0xFFE0921A);
+const _amber100 = Color(0xFFFFF1D6);
+const _coral500 = Color(0xFFF2685E);
+const _coral100 = Color(0xFFFFE3DF);
+const _sky500 = Color(0xFF2D9CDB);
+const _sky100 = Color(0xFFDCEFFB);
+const _onSurface1 = Color(0xFF15211E);
+const _onSurface2 = Color(0xFF5A6B67);
+const _onSurface3 = Color(0xFF93A29F);
+const _border = Color(0xFFE5EBE9);
+const _surface2 = Color(0xFFF4F7F6);
+
+// ── mock data ─────────────────────────────────────────────────────────
+final _kChildren = {
+  's1': {
+    'childId': 'SKT-C-0001', 'name': 'Aarav Kumar', 'centre': 'Sulibele',
+    'age': '12 yrs', 'dob': '14 Sept 2013', 'gender': 'Male', 'class': 'Class 6',
+    'aadhaar': '4821 7765 0012', 'admDate': '01 Jun 2022', 'status': 'Active',
+    'father': 'Ramesh Kumar', 'mother': 'Sunita Kumar',
+    'guardian': 'Sunita Kumar', 'relation': 'Mother', 'mobile': '+91 98201 77432',
+    'address': 'Dharavi, Mumbai', 'sat': 'SAT-1187',
+    'familyNotes': 'Single-income household; father is a daily-wage labourer. Two siblings.',
+    'eduType': 'School', 'institution': 'Sulibele Govt High School',
+    'admNo': 'SGS-2022-0147', 'acadYear': '2025-26', 'performance': 'Above Average',
+    'schoolAddr': 'Main Road, Sulibele, Karnataka 562129',
+    'height': '132 cm', 'weight': '28 kg',
+    'medHistory': 'Mild asthma — inhaler prescribed. Vaccinations up to date.',
+    'sponsor': 'Priya Sharma', 'sponsorId': 'd2', 'sponsorDonorId': 'SF-D-0002',
+    'sponsorCategory': 'Child Sponsor', 'sponsorCity': 'Delhi',
+    'sponsorAmt': '₹18,000 / year', 'sponsorSince': '01 Jul 2022', 'enrollDate': '01 Jun 2022',
+    'attendance': '94%', 'achievementCount': '4', 'sponsorshipAmt': '₹18K',
+  },
+  's2': {
+    'childId': 'SKT-C-0002', 'name': 'Fatima Sheikh', 'centre': 'Medahalli',
+    'age': '15 yrs', 'dob': '22 Aug 2009', 'gender': 'Female', 'class': 'Class 10',
+    'aadhaar': '8812 4562 0019', 'admDate': '12 Jul 2018', 'status': 'Active',
+    'father': 'Mohammed Sheikh', 'mother': 'Razia Sheikh',
+    'guardian': 'Mohammed Sheikh', 'relation': 'Father', 'mobile': '+91 94501 77234',
+    'address': '3rd Cross, Medahalli Colony, Bengaluru 560049', 'sat': 'SAT-0089',
+    'familyNotes': 'Father drives auto-rickshaw, mother works as domestic help.',
+    'eduType': 'School', 'institution': 'Medahalli Govt PU College',
+    'admNo': 'MGP-2018-109', 'acadYear': '2025-26', 'performance': 'Excellent',
+    'schoolAddr': 'Medahalli Main Road, Bengaluru 560049',
+    'height': '157 cm', 'weight': '44 kg',
+    'medHistory': 'Mild asthma (controlled). Uses inhaler as needed.',
+    'sponsor': 'Priya Sharma', 'sponsorId': 'd2', 'sponsorDonorId': 'SF-D-0002',
+    'sponsorCategory': 'Child Sponsor', 'sponsorCity': 'Delhi',
+    'sponsorAmt': '₹18,000 / year', 'sponsorSince': '01 Jan 2022', 'enrollDate': '12 Jul 2018',
+    'attendance': '88%', 'achievementCount': '6', 'sponsorshipAmt': '₹18K',
+  },
+};
+
+Color _avColor(String seed) {
+  final palette = [_brand600, const Color(0xFFF6A723), _violet500, _sky500,
+    const Color(0xFFEC5B8B), _coral500, const Color(0xFF14A98C), const Color(0xFF5BAE8A)];
+  int h = 0;
+  for (int i = 0; i < seed.length; i++) { h = ((h * 31) + seed.codeUnitAt(i)) & 0xFFFFFFFF; }
+  return palette[h % palette.length];
+}
+String _initials(String name) {
+  final p = name.trim().split(RegExp(r'\s+'));
+  return ((p[0].isNotEmpty ? p[0][0] : '') + (p.length > 1 && p[1].isNotEmpty ? p[1][0] : '')).toUpperCase();
+}
+Color _statusColor(String s) => switch (s) {
+  'Active' => _brand600, 'Graduated' => _violet500,
+  'Relieved' => _amber600, 'Drop out' => _coral500, _ => _onSurface3,
+};
+
+final _vDivider = Container(
+  width: 1, height: 32, margin: const EdgeInsets.symmetric(horizontal: 6),
+  color: Colors.white.withValues(alpha: 0.25),
+);
+
+// ══════════════════════════════════════════════════════════════════════
+class StudentDetailScreen extends StatefulWidget {
+  const StudentDetailScreen({super.key, required this.id});
+  final String id;
+  @override
+  State<StudentDetailScreen> createState() => _StudentDetailScreenState();
+}
+
+class _StudentDetailScreenState extends State<StudentDetailScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs = TabController(length: 5, vsync: this);
+  }
+
+  @override
+  void dispose() { _tabs.dispose(); super.dispose(); }
+
+  void _showEditSheet(BuildContext context, Map<String, String> data) {
+    final nameCtrl    = TextEditingController(text: data['name']);
+    final centreCtrl  = TextEditingController(text: data['centre']);
+    final mobileCtrl  = TextEditingController(text: data['mobile']);
+    final addressCtrl = TextEditingController(text: data['address']);
+    String gender     = data['gender'] ?? 'Male';
+    String status     = data['status'] ?? 'Active';
+
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
+        Widget field(String label, TextEditingController ctrl, {TextInputType? kb, int lines = 1}) => Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: ctrl, keyboardType: kb, maxLines: lines,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              decoration: InputDecoration(
+                filled: true, fillColor: _surface2,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12))),
+          ]));
+
+        return Container(
+          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+          padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(ctx).viewInsets.bottom + 28),
+          child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(2)))),
+            const Text('Edit Student', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 16),
+            field('Full Name', nameCtrl),
+            field('Centre', centreCtrl),
+            field('Guardian Mobile', mobileCtrl, kb: TextInputType.phone),
+            field('Address', addressCtrl, lines: 2),
+            const Text('Gender', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+            const SizedBox(height: 6),
+            Wrap(spacing: 8, children: ['Male', 'Female', 'Other'].map((g) {
+              final active = gender == g;
+              return GestureDetector(
+                onTap: () => setSheet(() => gender = g),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(color: active ? _brand600 : _surface2, borderRadius: BorderRadius.circular(10)),
+                  child: Text(g, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : _onSurface2))));
+            }).toList()),
+            const SizedBox(height: 14),
+            const Text('Status', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+            const SizedBox(height: 6),
+            Wrap(spacing: 8, children: ['Active', 'Graduated', 'Relieved', 'Drop out'].map((s) {
+              final active = status == s;
+              return GestureDetector(
+                onTap: () => setSheet(() => status = s),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: active ? _statusColor(s).withValues(alpha: 0.15) : _surface2,
+                    border: active ? Border.all(color: _statusColor(s), width: 1.5) : null,
+                    borderRadius: BorderRadius.circular(10)),
+                  child: Text(s, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+                    color: active ? _statusColor(s) : _onSurface2))));
+            }).toList()),
+            const SizedBox(height: 20),
+            SizedBox(width: double.infinity, child: ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: const Text('Student updated successfully', style: TextStyle(fontWeight: FontWeight.w700)),
+                  backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                padding: const EdgeInsets.symmetric(vertical: 15)),
+              child: const Text('Save Changes', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+            )),
+          ])),
+        );
+      }),
+    );
+  }
+
+  void _showStatusSheet(BuildContext context, String current) {
+    String status = current;
+    const statuses = [
+      ('Active',     'Currently enrolled and attending', Icons.check_circle_outline, _brand600,  _brand100),
+      ('Graduated',  'Completed the programme',          Icons.school_outlined,      _violet500, _violet100),
+      ('Relieved',   'Left on own / family request',     Icons.logout_rounded,       _amber600,  _amber100),
+      ('Drop out',   'Left without completing',          Icons.cancel_outlined,      _coral500,  _coral100),
+    ];
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) => Container(
+        decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(ctx).viewInsets.bottom + 28),
+        child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(2)))),
+          const Text('Update Status', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          const Text("Update the child's enrolment status.", style: TextStyle(fontSize: 13.5, color: _onSurface2, fontWeight: FontWeight.w500)),
+          const SizedBox(height: 16),
+          ...statuses.map((s) {
+            final sel = status == s.$1;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: GestureDetector(
+                onTap: () => setSt(() => status = s.$1),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: sel ? s.$5 : _surface2,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: sel ? s.$4 : _border, width: sel ? 2 : 1),
+                  ),
+                  child: Row(children: [
+                    Container(width: 40, height: 40,
+                      decoration: BoxDecoration(color: sel ? s.$4 : Colors.white, borderRadius: BorderRadius.circular(10)),
+                      child: Icon(s.$3, color: sel ? Colors.white : _onSurface3, size: 20)),
+                    const SizedBox(width: 12),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(s.$1, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: sel ? s.$4 : _onSurface1)),
+                      Text(s.$2, style: const TextStyle(fontSize: 12.5, color: _onSurface2, fontWeight: FontWeight.w500)),
+                    ])),
+                    if (sel) Icon(Icons.radio_button_checked, color: s.$4, size: 20)
+                    else const Icon(Icons.radio_button_unchecked, color: _onSurface3, size: 20),
+                  ]),
+                ),
+              ),
+            );
+          }),
+          const SizedBox(height: 8),
+          SizedBox(width: double.infinity, child: ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('Status updated to $status', style: const TextStyle(fontWeight: FontWeight.w700)),
+                backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ));
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              padding: const EdgeInsets.symmetric(vertical: 15)),
+            child: const Text('Save Status', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+          )),
+        ])),
+      )),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final data = _kChildren[widget.id] ?? _kChildren['s1']!;
+    final name = data['name']!;
+    final color = _avColor(name);
+
+    return Scaffold(
+      backgroundColor: _surface2,
+      body: NestedScrollView(
+        headerSliverBuilder: (ctx, inner) => [
+          SliverAppBar(
+            expandedHeight: 390,
+            pinned: true,
+            backgroundColor: _brand700,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+              onPressed: () => context.go('/students'),
+            ),
+            actions: [
+              IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.white),
+                onPressed: () => _showEditSheet(context, data)),
+            ],
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [_brand700, color.withValues(alpha: 0.8)],
+                    begin: Alignment.topLeft, end: Alignment.bottomRight),
+                ),
+                child: SafeArea(child: Padding(
+                  padding: const EdgeInsets.only(bottom: 96),
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    const SizedBox(height: 16),
+                    Container(
+                      width: 70, height: 70,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [color, Color.lerp(color, Colors.black, 0.2)!]),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 3))],
+                      ),
+                      child: Center(child: Text(_initials(name), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 24))),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(name, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${data['age']} · ${data['gender']} · ${data['class']}',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(data['centre']!, style: const TextStyle(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 8),
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(10)),
+                        child: Text(data['status']!, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.white.withValues(alpha: 0.3))),
+                        child: Text(data['childId']!, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                      ),
+                    ]),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 18),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
+                        child: Row(children: [
+                          _StudentStat(label: 'Attendance',    value: data['attendance'] ?? '—'),
+                          _vDivider,
+                          _StudentStat(label: 'Achievements',  value: data['achievementCount'] ?? '—'),
+                          _vDivider,
+                          _StudentStat(label: 'Sponsorship',   value: data['sponsorshipAmt'] ?? '—'),
+                        ]),
+                      ),
+                    ),
+                  ]),
+                )),
+              ),
+            ),
+            bottom: _AppBarBottom(
+              tabController: _tabs,
+              status: data['status']!,
+              onUpdate: () => _showStatusSheet(context, data['status']!),
+            ),
+          ),
+        ],
+        body: TabBarView(
+          controller: _tabs,
+          children: [
+            _ProfileTab(data: data),
+            _EducationTab(data: data),
+            _SponsorTab(data: data),
+            _AchievementsTab(name: name),
+            const _DocumentsTab(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── stats widget ──────────────────────────────────────────────────────
+class _StudentStat extends StatelessWidget {
+  const _StudentStat({required this.label, required this.value});
+  final String label, value;
+  @override
+  Widget build(BuildContext context) => Expanded(child: Column(children: [
+    Text(value, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+    const SizedBox(height: 2),
+    Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600)),
+  ]));
+}
+
+// ── app bar bottom (current status + tab bar) ─────────────────────────
+class _AppBarBottom extends StatelessWidget implements PreferredSizeWidget {
+  const _AppBarBottom({required this.tabController, required this.status, required this.onUpdate});
+  final TabController tabController;
+  final String status;
+  final VoidCallback onUpdate;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(48.0 + 44.0);
+
+  @override
+  Widget build(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, children: [
+    Container(
+      color: _brand700,
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
+      child: Row(children: [
+        Text('Current Status', style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12.5, fontWeight: FontWeight.w600)),
+        const SizedBox(width: 10),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
+          child: Text(status, style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w800)),
+        ),
+        const Spacer(),
+        GestureDetector(
+          onTap: onUpdate,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+            child: const Text('Update', style: TextStyle(color: _brand700, fontSize: 12.5, fontWeight: FontWeight.w800)),
+          ),
+        ),
+      ]),
+    ),
+    TabBar(
+      controller: tabController,
+      isScrollable: true,
+      indicatorColor: Colors.white,
+      indicatorWeight: 3,
+      labelColor: Colors.white,
+      unselectedLabelColor: Colors.white60,
+      labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+      unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+      tabAlignment: TabAlignment.start,
+      tabs: const [
+        Tab(text: 'Profile'),
+        Tab(text: 'Education'),
+        Tab(text: 'Sponsor'),
+        Tab(text: 'Achievements'),
+        Tab(text: 'Documents'),
+      ],
+    ),
+  ]);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// PROFILE TAB
+// ══════════════════════════════════════════════════════════════════════
+class _ProfileTab extends StatelessWidget {
+  const _ProfileTab({required this.data});
+  final Map<String, String> data;
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+    physics: const BouncingScrollPhysics(),
+    padding: const EdgeInsets.all(18),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      // Basic Profile
+      _CardSection(title: 'Basic Profile', icon: Icons.person_outline, children: [
+        _InfoRow('Child ID',          data['childId']!),
+        _InfoRow('Centre',            data['centre']!),
+        _InfoRow('Date of Birth',     '${data['dob']!} (${data['age']!})'),
+        _InfoRow('Gender',            data['gender']!),
+        _InfoRow('Aadhaar Number',    data['aadhaar']!),
+        _InfoRow('Date of Admission', data['admDate']!, last: true),
+      ]),
+      const SizedBox(height: 14),
+      // Family Details
+      _CardSection(title: 'Family Details', icon: Icons.family_restroom_outlined, children: [
+        _InfoRow("Father's Name", data['father']!),
+        _InfoRow("Mother's Name", data['mother']!),
+        _InfoRow('Guardian',      '${data['guardian']!} (${data['relation']!})'),
+        _InfoRow('Mobile Number', data['mobile']!),
+        _InfoRow('Address',       data['address']!),
+        _InfoRow('SAT Number',    data['sat']!, last: true),
+      ]),
+      const SizedBox(height: 14),
+      if (data['familyNotes'] != null && data['familyNotes']!.isNotEmpty)
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(color: _amber100, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Row(children: [Icon(Icons.notes_outlined, size: 16, color: _amber600), SizedBox(width: 7), Text('Family Background', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: _amber600))]),
+            const SizedBox(height: 8),
+            Text(data['familyNotes']!, style: const TextStyle(fontSize: 14, color: _onSurface1, fontWeight: FontWeight.w500, height: 1.5)),
+          ]),
+        ),
+      const SizedBox(height: 14),
+      // Health & Medical
+      _CardSection(title: 'Health & Medical', icon: Icons.health_and_safety_outlined, children: [
+        _InfoRow('Height', data['height']!),
+        _InfoRow('Weight', data['weight']!, last: true),
+      ]),
+      if (data['medHistory'] != null && data['medHistory']!.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(color: _coral100, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Row(children: [Icon(Icons.medication_outlined, size: 16, color: _coral500), SizedBox(width: 7), Text('Medical History', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: _coral500))]),
+            const SizedBox(height: 8),
+            Text(data['medHistory']!, style: const TextStyle(fontSize: 14, color: _onSurface1, fontWeight: FontWeight.w500, height: 1.5)),
+          ]),
+        ),
+      ],
+      const SizedBox(height: 14),
+      // Document upload sections
+      const _UploadSection(label: 'Medical Documents',  sublabel: 'Prescriptions, reports, discharge summaries'),
+      const SizedBox(height: 10),
+      const _UploadSection(label: "Parents' Aadhaar",   sublabel: 'Upload Aadhaar card images'),
+      const SizedBox(height: 10),
+      const _UploadSection(label: 'Family Photo',        sublabel: 'Family photograph'),
+      const SizedBox(height: 80),
+    ]),
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// EDUCATION TAB
+// ══════════════════════════════════════════════════════════════════════
+class _EducationTab extends StatelessWidget {
+  const _EducationTab({required this.data});
+  final Map<String, String> data;
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+    physics: const BouncingScrollPhysics(),
+    padding: const EdgeInsets.all(18),
+    child: Column(children: [
+      Row(children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(color: _violet100, borderRadius: BorderRadius.circular(12)),
+          child: Row(children: [
+            const Icon(Icons.school_outlined, size: 16, color: _violet500),
+            const SizedBox(width: 7),
+            Text(data['eduType'] ?? 'School', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _violet500)),
+          ]),
+        ),
+      ]),
+      const SizedBox(height: 14),
+      _CardSection(title: 'Institution Details', icon: Icons.account_balance_outlined, children: [
+        _InfoRow('Institution',   data['institution'] ?? '—'),
+        _InfoRow('Class / Grade', data['class'] ?? '—'),
+        _InfoRow('Admission No.', data['admNo'] ?? '—'),
+        _InfoRow('Academic Year', data['acadYear'] ?? '—'),
+        _InfoRow('Performance',   data['performance'] ?? '—'),
+        _InfoRow('Address',       data['schoolAddr'] ?? '—', last: true),
+      ]),
+      const SizedBox(height: 14),
+      const _DocCard(label: 'Educational Documents', sublabel: 'Report cards, certificates, TC', icon: Icons.description_outlined, count: 3),
+      const SizedBox(height: 80),
+    ]),
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SPONSOR TAB
+// ══════════════════════════════════════════════════════════════════════
+class _SponsorTab extends StatelessWidget {
+  const _SponsorTab({required this.data});
+  final Map<String, String> data;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSponsor = (data['sponsor'] ?? '').isNotEmpty;
+    if (!hasSponsor) return _noSponsor(context);
+
+    final sponsor     = data['sponsor']!;
+    final sponsorId   = data['sponsorDonorId'] ?? data['sponsorId'] ?? '—';
+    final donorId     = data['sponsorId'] ?? '';
+    final category    = data['sponsorCategory'] ?? 'Donor';
+    final city        = data['sponsorCity'] ?? '';
+    final amount      = data['sponsorAmt'] ?? '—';
+    final since       = data['sponsorSince'] ?? '—';
+    final enrollDate  = data['enrollDate'] ?? '—';
+
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(18),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+        // ── "Sponsored Child · Active" badge ───────────────────────
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)),
+            child: const Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.favorite, color: _brand600, size: 15),
+              SizedBox(width: 6),
+              Text('Sponsored Child', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _brand600)),
+            ]),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(12)),
+            child: const Text('Active', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Colors.white)),
+          ),
+        ]),
+        const SizedBox(height: 14),
+
+        // ── Sponsor profile card ────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: _border),
+            boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 8, offset: Offset(0, 2))],
+          ),
+          child: Row(children: [
+            Container(
+              width: 52, height: 52,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [_brand700, _brand600]),
+                shape: BoxShape.circle,
+              ),
+              child: Center(child: Text(_initials(sponsor), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18))),
+            ),
+            const SizedBox(width: 13),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(sponsor, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _onSurface1)),
+              const SizedBox(height: 3),
+              Text(
+                city.isNotEmpty ? '$category · $city' : category,
+                style: const TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w600),
+              ),
+            ])),
+            GestureDetector(
+              onTap: () => context.go('/donors/$donorId'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(10)),
+                child: const Text('View Profile', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _brand600)),
+              ),
+            ),
+          ]),
+        ),
+        const SizedBox(height: 10),
+
+        // ── Sponsorship details ─────────────────────────────────────
+        Container(
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: _border)),
+          child: Column(children: [
+            _SpnRow('Sponsorship ID (Donor ID)', sponsorId, first: true),
+            _SpnRow('Sponsorship Amount', amount),
+            _SpnRow('Start Date', since),
+            _SpnRow('Sponsorship Status', 'Active', valueBold: true, valueColor: _brand600, last: true),
+          ]),
+        ),
+        const SizedBox(height: 14),
+
+        // ── Change sponsor button ───────────────────────────────────
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () {},
+            icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+            label: const Text('Change Sponsor', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _brand600,
+              side: const BorderSide(color: _brand600, width: 1.5),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+          ),
+        ),
+        const SizedBox(height: 22),
+
+        // ── Sponsorship history ─────────────────────────────────────
+        const Text('SPONSORSHIP HISTORY', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900, color: _onSurface3, letterSpacing: 1.0)),
+        const SizedBox(height: 12),
+        _TimelineEvent(
+          dot: _brand600,
+          title: 'Sponsorship active',
+          sub: '$sponsor · since $since',
+          isFirst: true,
+        ),
+        _TimelineEvent(
+          dot: _onSurface3,
+          title: 'Enrolled into programme',
+          sub: enrollDate,
+          isLast: true,
+        ),
+        const SizedBox(height: 80),
+      ]),
+    );
+  }
+
+  Widget _noSponsor(BuildContext context) => SingleChildScrollView(
+    padding: const EdgeInsets.all(18),
+    child: Column(children: [
+      const SizedBox(height: 40),
+      Container(
+        width: double.infinity, padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22), border: Border.all(color: _border)),
+        child: Column(children: [
+          Container(width: 64, height: 64, decoration: const BoxDecoration(color: _brand100, shape: BoxShape.circle),
+            child: const Icon(Icons.favorite_border, size: 30, color: _brand600)),
+          const SizedBox(height: 16),
+          const Text('No Sponsor Assigned', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          const Text('Assign a donor from the donor list to sponsor this child.',
+            textAlign: TextAlign.center, style: TextStyle(color: _onSurface2, fontSize: 13.5, fontWeight: FontWeight.w500)),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: () => context.go('/donors'),
+            style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14), elevation: 0),
+            icon: const Icon(Icons.link, size: 18),
+            label: const Text('Assign Sponsor from Donors', style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+        ]),
+      ),
+      const SizedBox(height: 80),
+    ]),
+  );
+}
+
+class _SpnRow extends StatelessWidget {
+  const _SpnRow(this.label, this.value, {this.first = false, this.last = false, this.valueBold = false, this.valueColor});
+  final String label, value;
+  final bool first, last, valueBold;
+  final Color? valueColor;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+    decoration: BoxDecoration(
+      border: last ? null : const Border(bottom: BorderSide(color: _border)),
+    ),
+    child: Row(children: [
+      Expanded(child: Text(label, style: const TextStyle(fontSize: 13, color: _onSurface3, fontWeight: FontWeight.w600))),
+      Text(value, style: TextStyle(fontSize: 13.5, fontWeight: valueBold ? FontWeight.w800 : FontWeight.w700, color: valueColor ?? _onSurface1)),
+    ]),
+  );
+}
+
+class _TimelineEvent extends StatelessWidget {
+  const _TimelineEvent({required this.dot, required this.title, required this.sub, this.isFirst = false, this.isLast = false});
+  final Color dot;
+  final String title, sub;
+  final bool isFirst, isLast;
+  @override
+  Widget build(BuildContext context) => IntrinsicHeight(
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SizedBox(width: 20, child: Column(children: [
+        Container(width: 10, height: 10, decoration: BoxDecoration(color: dot, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2), boxShadow: [BoxShadow(color: dot.withValues(alpha: 0.4), blurRadius: 4)])),
+        if (!isLast) Expanded(child: Container(width: 1.5, color: _border, margin: const EdgeInsets.symmetric(vertical: 3))),
+      ])),
+      const SizedBox(width: 12),
+      Expanded(child: Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _onSurface1)),
+          const SizedBox(height: 2),
+          Text(sub, style: const TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w500)),
+        ]),
+      )),
+    ]),
+  );
+}
+
+
+// ══════════════════════════════════════════════════════════════════════
+// ACHIEVEMENTS TAB
+// ══════════════════════════════════════════════════════════════════════
+class _Ach {
+  _Ach({required this.category, required this.title, required this.date, required this.desc,
+    required this.icon, required this.fg, required this.bg, this.certCount = 0});
+  final String category, title, date, desc;
+  final IconData icon;
+  final Color fg, bg;
+  final int certCount;
+}
+
+class _AchievementsTab extends StatefulWidget {
+  const _AchievementsTab({required this.name});
+  final String name;
+  @override
+  State<_AchievementsTab> createState() => _AchievementsTabState();
+}
+
+class _AchievementsTabState extends State<_AchievementsTab> {
+  late final List<_Ach> _list = [
+    _Ach(category: 'Arts', icon: Icons.palette_outlined, fg: _amber600, bg: _amber100, certCount: 1,
+      title: 'State Drawing Competition — Finalist',
+      date: '15 Mar',
+      desc: 'Selected as a top-10 finalist among 4,000+ entries in the "My City" themed state drawing contest.'),
+    _Ach(category: 'Sports', icon: Icons.sports_cricket_outlined, fg: _sky500, bg: _sky100,
+      title: 'District Cricket Championship — 2nd Place',
+      date: 'Jun 2024',
+      desc: 'Runner-up in the district-level cricket championship representing Sulibele centre against 16 teams.'),
+    _Ach(category: 'Academics', icon: Icons.emoji_events_outlined, fg: _violet500, bg: _violet100, certCount: 1,
+      title: 'Annual Exam — First in Class (89.5%)',
+      date: 'Mar 2024',
+      desc: 'Ranked first in class with 89.5% in the annual examinations for the academic year 2023-24.'),
+    _Ach(category: 'Discipline', icon: Icons.star_outline_rounded, fg: _brand600, bg: _brand100,
+      title: 'Best Behaviour Award — 3 consecutive months',
+      date: 'Sep 2023',
+      desc: 'Awarded for exemplary conduct and positive attitude in class for 3 consecutive months.'),
+  ];
+
+  final _titleCtrl = TextEditingController();
+  final _descCtrl  = TextEditingController();
+  String _newCat   = 'Arts';
+
+  @override
+  void dispose() { _titleCtrl.dispose(); _descCtrl.dispose(); super.dispose(); }
+
+  void _showAdd() {
+    _titleCtrl.clear(); _descCtrl.clear(); _newCat = 'Arts';
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, ss) {
+        const cats = ['Arts','Sports','Academics','Discipline','Community','Leadership'];
+        return Container(
+          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+          padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(ctx).viewInsets.bottom + 28),
+          child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(2)))),
+            const Text('Add Achievement', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 16),
+            const Text('Category', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, children: cats.map((c) {
+              final sel = _newCat == c;
+              return GestureDetector(
+                onTap: () => ss(() => _newCat = c),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(color: sel ? _brand600 : _surface2, borderRadius: BorderRadius.circular(10)),
+                  child: Text(c, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: sel ? Colors.white : _onSurface2)),
+                ),
+              );
+            }).toList()),
+            const SizedBox(height: 14),
+            const Text('Title', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+            const SizedBox(height: 6),
+            TextField(controller: _titleCtrl,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              decoration: InputDecoration(
+                hintText: 'e.g. State Drawing Competition — Finalist',
+                hintStyle: const TextStyle(color: _onSurface3, fontWeight: FontWeight.w400),
+                filled: true, fillColor: _surface2,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12))),
+            const SizedBox(height: 14),
+            const Text('Description', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+            const SizedBox(height: 6),
+            TextField(controller: _descCtrl, maxLines: 3,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              decoration: InputDecoration(
+                hintText: 'Brief description of the achievement…',
+                hintStyle: const TextStyle(color: _onSurface3, fontWeight: FontWeight.w400),
+                filled: true, fillColor: _surface2,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+                contentPadding: const EdgeInsets.all(14))),
+            const SizedBox(height: 20),
+            SizedBox(width: double.infinity, child: ElevatedButton(
+              onPressed: () {
+                if (_titleCtrl.text.trim().isEmpty) return;
+                setState(() {
+                  _list.insert(0, _Ach(
+                    category: _newCat, title: _titleCtrl.text.trim(),
+                    date: 'Just now', desc: _descCtrl.text.trim().isNotEmpty ? _descCtrl.text.trim() : 'Achievement added.',
+                    icon: _catIcon(_newCat), fg: _catFg(_newCat), bg: _catBg(_newCat),
+                  ));
+                });
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: const Text('Achievement logged!', style: TextStyle(fontWeight: FontWeight.w700)),
+                  backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                padding: const EdgeInsets.symmetric(vertical: 15)),
+              child: const Text('Log Achievement', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+            )),
+          ])),
+        );
+      }),
+    );
+  }
+
+  static IconData _catIcon(String c) => switch (c) {
+    'Arts'       => Icons.palette_outlined,
+    'Sports'     => Icons.sports_cricket_outlined,
+    'Academics'  => Icons.emoji_events_outlined,
+    'Community'  => Icons.groups_outlined,
+    'Leadership' => Icons.military_tech_outlined,
+    _            => Icons.star_outline_rounded,
+  };
+  static Color _catFg(String c) => switch (c) {
+    'Arts'       => _amber600,
+    'Sports'     => _sky500,
+    'Academics'  => _violet500,
+    'Community'  => _brand600,
+    _            => _coral500,
+  };
+  static Color _catBg(String c) => switch (c) {
+    'Arts'       => _amber100,
+    'Sports'     => _sky100,
+    'Academics'  => _violet100,
+    'Community'  => _brand100,
+    _            => _coral100,
+  };
+
+  @override
+  Widget build(BuildContext context) => Stack(children: [
+    SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 100),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Count
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(color: _amber100, borderRadius: BorderRadius.circular(12)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.emoji_events_outlined, color: _amber600, size: 16),
+            const SizedBox(width: 6),
+            Text('${_list.length} logged', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _amber600)),
+          ]),
+        ),
+        const SizedBox(height: 14),
+        ..._list.map((a) => Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Container(width: 42, height: 42, decoration: BoxDecoration(color: a.bg, borderRadius: BorderRadius.circular(12)),
+                  child: Icon(a.icon, color: a.fg, size: 20)),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: a.bg, borderRadius: BorderRadius.circular(6)),
+                    child: Text(a.category, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: a.fg))),
+                  const SizedBox(height: 5),
+                  Text(a.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, height: 1.35)),
+                  const SizedBox(height: 3),
+                  Text(a.date, style: const TextStyle(fontSize: 12, color: _onSurface3, fontWeight: FontWeight.w600)),
+                ])),
+              ]),
+              if (a.desc.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(a.desc, style: const TextStyle(fontSize: 13, color: _onSurface2, fontWeight: FontWeight.w500, height: 1.5)),
+              ],
+              if (a.certCount > 0) ...[
+                const SizedBox(height: 10),
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(color: _violet100, borderRadius: BorderRadius.circular(8)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.workspace_premium_outlined, color: _violet500, size: 14),
+                      const SizedBox(width: 5),
+                      Text('+${a.certCount} Certificate attached', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _violet500)),
+                    ]),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () {},
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                      decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(8), border: Border.all(color: _border)),
+                      child: const Text('View', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _onSurface2)),
+                    ),
+                  ),
+                ]),
+              ],
+            ]),
+          ),
+        )),
+      ]),
+    ),
+    Positioned(
+      bottom: 20, left: 18, right: 18,
+      child: SizedBox(
+        height: 50,
+        child: ElevatedButton.icon(
+          onPressed: _showAdd,
+          icon: const Icon(Icons.add, size: 20),
+          label: const Text('Add Achievement', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 4,
+            shadowColor: _brand600.withValues(alpha: 0.4),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+        ),
+      ),
+    ),
+  ]);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// DOCUMENTS TAB
+// ══════════════════════════════════════════════════════════════════════
+class _DocEntry {
+  _DocEntry({required this.label, required this.icon, this.fileName, this.uploaded = false});
+  final String label;
+  final IconData icon;
+  String? fileName;
+  bool uploaded;
+}
+
+class _DocumentsTab extends StatefulWidget {
+  const _DocumentsTab();
+  @override
+  State<_DocumentsTab> createState() => _DocumentsTabState();
+}
+
+class _DocumentsTabState extends State<_DocumentsTab> {
+  final List<_DocEntry> _docs = [
+    _DocEntry(label: 'Aadhaar Card',          icon: Icons.credit_card_outlined,                     uploaded: true,  fileName: 'aadhaar_card.pdf'),
+    _DocEntry(label: 'Birth Certificate',      icon: Icons.article_outlined,                         uploaded: true,  fileName: 'birth_cert.pdf'),
+    _DocEntry(label: 'Transfer Certificate',   icon: Icons.transfer_within_a_station_outlined,       uploaded: false),
+    _DocEntry(label: 'Medical Reports',        icon: Icons.medical_services_outlined,                uploaded: true,  fileName: 'medical_report.pdf'),
+    _DocEntry(label: 'School Report Card',     icon: Icons.school_outlined,                          uploaded: true,  fileName: 'report_card.pdf'),
+  ];
+
+  final List<String> _others = [];
+  bool _uploadingIdx = false;
+  int? _loadingDoc;
+
+  Future<void> _uploadDoc(int idx) async {
+    setState(() => _loadingDoc = idx);
+    try {
+      final result = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
+      if (result != null && result.files.isNotEmpty && mounted) {
+        final name = result.files.single.name;
+        setState(() { _docs[idx].fileName = name; _docs[idx].uploaded = true; });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('$name uploaded successfully', style: const TextStyle(fontWeight: FontWeight.w700)),
+          backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loadingDoc = null);
+  }
+
+  Future<void> _uploadOther() async {
+    setState(() => _uploadingIdx = true);
+    try {
+      final result = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
+      if (result != null && result.files.isNotEmpty && mounted) {
+        setState(() => _others.add(result.files.single.name));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${result.files.single.name} attached', style: const TextStyle(fontWeight: FontWeight.w700)),
+          backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _uploadingIdx = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final uploadedCount = _docs.where((d) => d.uploaded).length + _others.length;
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(18),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Count badge
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.folder_outlined, color: _brand600, size: 16),
+            const SizedBox(width: 6),
+            Text('$uploadedCount files', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _brand600)),
+          ]),
+        ),
+        const SizedBox(height: 14),
+
+        // Document rows
+        ..._docs.asMap().entries.map((entry) {
+          final i = entry.key;
+          final d = entry.value;
+          final loading = _loadingDoc == i;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Container(
+              padding: const EdgeInsets.all(15),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
+              child: Row(children: [
+                Container(width: 44, height: 44,
+                  decoration: BoxDecoration(color: d.uploaded ? _brand100 : _surface2, borderRadius: BorderRadius.circular(12)),
+                  child: Icon(d.icon, size: 22, color: d.uploaded ? _brand600 : _onSurface3)),
+                const SizedBox(width: 13),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(d.label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 3),
+                  Row(children: [
+                    Container(width: 6, height: 6, decoration: BoxDecoration(
+                      color: d.uploaded ? _brand600 : _onSurface3, shape: BoxShape.circle)),
+                    const SizedBox(width: 5),
+                    Text(
+                      d.uploaded ? 'PDF · Uploaded' : 'Not uploaded',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600,
+                        color: d.uploaded ? _brand600 : _onSurface3)),
+                  ]),
+                ])),
+                const SizedBox(width: 10),
+                loading
+                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600))
+                  : d.uploaded
+                    ? const Icon(Icons.check_circle_rounded, color: _brand600, size: 22)
+                    : GestureDetector(
+                        onTap: () => _uploadDoc(i),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(10), border: Border.all(color: _brand600.withValues(alpha: 0.3))),
+                          child: const Text('Upload', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand600)),
+                        ),
+                      ),
+              ]),
+            ),
+          );
+        }),
+
+        // Extra uploaded files
+        ..._others.map((name) => Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Container(
+            padding: const EdgeInsets.all(15),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
+            child: Row(children: [
+              Container(width: 44, height: 44, decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)),
+                child: const Icon(Icons.insert_drive_file_outlined, size: 22, color: _brand600)),
+              const SizedBox(width: 13),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 3),
+                const Row(children: [
+                  SizedBox(width: 6, height: 6, child: DecoratedBox(decoration: BoxDecoration(color: _brand600, shape: BoxShape.circle))),
+                  SizedBox(width: 5),
+                  Text('PDF · Uploaded', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _brand600)),
+                ]),
+              ])),
+              const Icon(Icons.check_circle_rounded, color: _brand600, size: 22),
+            ]),
+          ),
+        )),
+
+        // Upload other attachment
+        GestureDetector(
+          onTap: _uploadingIdx ? null : _uploadOther,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              color: _surface2, borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _border, width: 1.5),
+            ),
+            child: _uploadingIdx
+              ? const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600)))
+              : const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(Icons.attach_file_rounded, size: 18, color: _brand600),
+                  SizedBox(width: 8),
+                  Text('Upload other attachment', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _brand600)),
+                ]),
+          ),
+        ),
+        const SizedBox(height: 80),
+      ]),
+    );
+  }
+}
+
+// ── shared widgets ─────────────────────────────────────────────────────
+class _CardSection extends StatelessWidget {
+  const _CardSection({required this.title, required this.icon, required this.children});
+  final String title; final IconData icon; final List<Widget> children;
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: _border)),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+        child: Row(children: [
+          Icon(icon, size: 17, color: _brand600),
+          const SizedBox(width: 8),
+          Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _onSurface1)),
+        ]),
+      ),
+      const Divider(height: 1, color: _border),
+      ...children,
+    ]),
+  );
+}
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow(this.label, this.value, {this.last = false});
+  final String label, value; final bool last;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+    decoration: last ? null : const BoxDecoration(border: Border(bottom: BorderSide(color: _border))),
+    child: Row(children: [
+      SizedBox(width: 120, child: Text(label, style: const TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w600))),
+      Expanded(child: Text(value, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _onSurface1))),
+    ]),
+  );
+}
+
+class _DocCard extends StatelessWidget {
+  const _DocCard({required this.label, required this.sublabel, required this.icon, required this.count});
+  final String label, sublabel; final IconData icon; final int count;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
+    child: Row(children: [
+      Container(width: 44, height: 44, decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: _brand600, size: 22)),
+      const SizedBox(width: 13),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+        Text(sublabel, style: const TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w500)),
+      ])),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8)),
+        child: Text('$count files', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: _brand600)),
+      ),
+    ]),
+  );
+}
+
+class _UploadSection extends StatelessWidget {
+  const _UploadSection({required this.label, required this.sublabel});
+  final String label, sublabel;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
+    child: Row(children: [
+      Container(width: 44, height: 44, decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(12)),
+        child: const Icon(Icons.upload_file_outlined, color: _onSurface3, size: 22)),
+      const SizedBox(width: 13),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: _onSurface1)),
+        Text(sublabel, style: const TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w500)),
+      ])),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(10), border: Border.all(color: _border)),
+        child: const Text('Upload', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+      ),
+    ]),
+  );
+}
