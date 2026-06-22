@@ -260,32 +260,44 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
     final top = MediaQuery.of(context).padding.top;
     return Scaffold(
       body: Column(children: [
-        // ── header ─────────────────────────────────────────────────
+        // ── Compact header ─────────────────────────────────────────
         Container(
-          color: context.headerBg,
-          padding: EdgeInsets.fromLTRB(8, top + 10, 18, 14),
-          child: Column(children: [
-            Row(children: [
-              IconButton(icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: context.textPrimary), onPressed: () => context.go('/students')),
-              Expanded(child: Text('Add Child', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: context.textPrimary))),
+          color: Colors.white,
+          padding: EdgeInsets.fromLTRB(4, top + 6, 12, 10),
+          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE5EBE9)))),
+          child: Row(children: [
+            IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: Color(0xFF15211E)), onPressed: () => context.go('/students')),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Add Child', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF15211E))),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(6)),
+                child: const Text('ID  ·  SKT-C-auto', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: _brand600)),
+              ),
             ]),
-            const SizedBox(height: 10),
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)),
-              child: Row(children: [
-                const Icon(Icons.child_care, size: 18, color: _brand600),
-                const SizedBox(width: 9),
-                Text('Child ID  ·  ', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textSub)),
-                const Text('SKT-C-0007', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: _brand600)),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(8)),
-                  child: Text('auto', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: context.textHint)),
-                ),
-              ]),
+            const Spacer(),
+            OutlinedButton(
+              onPressed: () => context.go('/students'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF5A6B67), side: const BorderSide(color: Color(0xFFD8E5E0)),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Cancel', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: _saving ? null : _save,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _brand600, foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, elevation: 0,
+              ),
+              child: _saving
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : const Text('Enrol Child', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
             ),
           ]),
         ),
@@ -502,38 +514,6 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
           ),
         ),
 
-        // ── bottom buttons ─────────────────────────────────────────
-        Container(
-          padding: EdgeInsets.fromLTRB(18, 14, 18, MediaQuery.of(context).padding.bottom + 14),
-          decoration: BoxDecoration(
-            color: context.headerBg,
-            border: Border(top: BorderSide(color: context.border)),
-            boxShadow: const [BoxShadow(color: Color(0x140D2822), blurRadius: 12, offset: Offset(0, -4))],
-          ),
-          child: Row(children: [
-            Expanded(child: OutlinedButton(
-              onPressed: () => context.go('/students'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: context.textSub, side: BorderSide(color: context.border, width: 1.5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: const Text('Cancel', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-            )),
-            const SizedBox(width: 12),
-            Expanded(flex: 2, child: ElevatedButton(
-              onPressed: _saving ? null : _save,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _brand600, foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                padding: const EdgeInsets.symmetric(vertical: 16), elevation: 0,
-              ),
-              child: _saving
-                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                : const Text('Enrol Child', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-            )),
-          ]),
-        ),
       ]),
     );
   }

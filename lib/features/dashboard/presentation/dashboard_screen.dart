@@ -153,18 +153,32 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ),
   );
 
-  // ── KPI single row ───────────────────────────────────────────────
+  // ── KPI section — 6 cards, single row on desktop, wraps on mobile ──
   Widget _kpiSection(BuildContext ctx) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 18),
-    child: Row(children: [
-      Expanded(child: _KPICard(label: 'Total Offices',  value: '4',       icon: Icons.business_outlined,               fg: _sky500,    bg: _sky100,    onTap: () {})),
-      const SizedBox(width: 10),
-      Expanded(child: _KPICard(label: 'Total Donors',   value: '836',     icon: Icons.people_outlined,                 fg: _brand600,  bg: _brand100,  onTap: () => ctx.go('/donors'))),
-      const SizedBox(width: 10),
-      Expanded(child: _KPICard(label: 'Total Students', value: '178',     icon: Icons.school_outlined,                 fg: _violet500, bg: _violet100, onTap: () => ctx.go('/students'))),
-      const SizedBox(width: 10),
-      Expanded(child: _KPICard(label: 'Total Raised',   value: '₹56.1L',  icon: Icons.account_balance_wallet_outlined, fg: _amber600,  bg: _amber100,  onTap: () => ctx.go('/donations'))),
-    ]),
+    child: LayoutBuilder(builder: (_, constraints) {
+      final wide = constraints.maxWidth >= 800;
+      final cards = [
+        _KPICard(label: 'Total Raised',      value: '₹56.1L', icon: Icons.account_balance_wallet_outlined, fg: _amber600,  bg: _amber100,  onTap: () => ctx.go('/donations'), emphasis: true),
+        _KPICard(label: 'Total Donors',      value: '836',     icon: Icons.people_outlined,                 fg: _brand600,  bg: _brand100,  onTap: () => ctx.go('/donors'),    emphasis: true),
+        _KPICard(label: 'Total Students',    value: '178',     icon: Icons.school_outlined,                 fg: _violet500, bg: _violet100, onTap: () => ctx.go('/students')),
+        _KPICard(label: 'Total Offices',     value: '4',       icon: Icons.business_outlined,               fg: _sky500,    bg: _sky100,    onTap: () {}),
+        _KPICard(label: 'Birthdays Today',   value: '2',       icon: Icons.cake_outlined,                   fg: _coral500,  bg: _coral100,  onTap: () => ctx.go('/reminders')),
+        _KPICard(label: 'Anniversary Today', value: '1',       icon: Icons.favorite_border,                 fg: _coral500,  bg: _coral100,  onTap: () => ctx.go('/reminders')),
+      ];
+      if (wide) {
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: cards.expand((c) => [Expanded(child: c), const SizedBox(width: 10)]).toList()..removeLast(),
+        );
+      }
+      // narrow: 2-column wrap
+      final cardW = (constraints.maxWidth - 10) / 2;
+      return Wrap(
+        spacing: 10, runSpacing: 10,
+        children: cards.map((c) => SizedBox(width: cardW, child: c)).toList(),
+      );
+    }),
   );
 
   // ── Reminders strip ───────────────────────────────────────────────
@@ -403,20 +417,21 @@ class _QA extends StatelessWidget {
 
 // ── KPI Card ──────────────────────────────────────────────────────────
 class _KPICard extends StatelessWidget {
-  const _KPICard({required this.label, required this.value, required this.icon, required this.fg, required this.bg, required this.onTap});
+  const _KPICard({required this.label, required this.value, required this.icon, required this.fg, required this.bg, required this.onTap, this.emphasis = false});
   final String label, value;
   final IconData icon;
   final Color fg, bg;
   final VoidCallback onTap;
+  final bool emphasis;
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       decoration: BoxDecoration(
-        color: context.cardBg,
+        color: emphasis ? fg.withValues(alpha: 0.07) : context.cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: context.border),
+        border: Border.all(color: emphasis ? fg.withValues(alpha: 0.35) : context.border, width: emphasis ? 1.5 : 1),
         boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 6, offset: Offset(0, 2))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -426,7 +441,7 @@ class _KPICard extends StatelessWidget {
           child: Icon(icon, color: fg, size: 20),
         ),
         const SizedBox(height: 10),
-        Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5, color: context.textPrimary, height: 1)),
+        Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5, color: emphasis ? fg : context.textPrimary, height: 1)),
         const SizedBox(height: 4),
         Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.textSub)),
       ]),

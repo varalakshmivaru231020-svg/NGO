@@ -292,225 +292,237 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
-    final bottom = MediaQuery.of(context).padding.bottom;
     return Scaffold(
       body: Column(children: [
-        // header
-        Container(color: context.headerBg, padding: EdgeInsets.fromLTRB(18, top + 14, 18, 16),
+        // compact white header with inline action buttons
+        Container(
+          color: Colors.white,
+          padding: EdgeInsets.fromLTRB(4, top + 6, 12, 10),
+          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE5EBE9)))),
           child: Row(children: [
-            IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20), onPressed: () => context.go('/donations'), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
-            const SizedBox(width: 10),
-            Expanded(child: Text('Add Donation', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: context.textPrimary))),
-            Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(10)),
-              child: Text(_receipt, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _brand700, letterSpacing: 0.2))),
-          ])),
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+              onPressed: () => context.go('/donations'),
+              padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+            ),
+            const SizedBox(width: 6),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Add Donation', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF15211E))),
+              Container(
+                margin: const EdgeInsets.only(top: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(6)),
+                child: Text(_receipt, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _brand700, letterSpacing: 0.2)),
+              ),
+            ])),
+            OutlinedButton(
+              onPressed: () => context.go('/donations'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF5A6B67),
+                side: const BorderSide(color: Color(0xFFE5EBE9), width: 1.5),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Cancel', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: _saving ? null : _save,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _brand600, foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                elevation: 0,
+              ),
+              child: _saving
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : const Text('Save Donation', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+            ),
+          ]),
+        ),
 
         Expanded(child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          child: Padding(padding: const EdgeInsets.fromLTRB(18, 16, 18, 0), child: Column(children: [
+          child: Center(child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 32), child: Column(children: [
 
-            // amount entry card
-            _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const _Label('Amount'),
-              const SizedBox(height: 8),
-              Container(
-                decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: context.border, width: 1.5)),
-                child: Row(children: [
-                  Container(width: 44, height: 52, alignment: Alignment.center,
-                    child: const Text('₹', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _brand600))),
-                  Expanded(child: TextField(
-                    controller: _amountCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: context.textPrimary),
-                    decoration: InputDecoration(hintText: '0', hintStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: context.textHint), border: InputBorder.none, contentPadding: EdgeInsets.zero),
-                  )),
-                ]),
-              ),
-              const SizedBox(height: 12),
-              Row(children: _quickAmounts.map((a) {
-                return Expanded(child: Padding(padding: EdgeInsets.only(right: a == _quickAmounts.last ? 0 : 8), child: GestureDetector(
-                  onTap: () { _pickAmount(a); setState(() {}); },
-                  child: Container(padding: const EdgeInsets.symmetric(vertical: 7),
-                    decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: context.border)),
-                    child: Center(child: Text(a >= 1000 ? '₹${a ~/ 1000}K' : '₹$a', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand700)))),
-                )));
-              }).toList()),
-            ])),
-
-            const SizedBox(height: 12),
-
-            // donor picker
-            _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const _Label('Donor'),
-              const SizedBox(height: 8),
-              GestureDetector(
-                onTap: _openDonorPicker,
-                child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-                  decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: _selectedDonorId != null ? _brand600 : context.border, width: 1.5)),
-                  child: Row(children: [
-                    if (_selectedDonorName != null) ...[
-                      Container(width: 32, height: 32, decoration: BoxDecoration(gradient: LinearGradient(colors: [_avColor(_selectedDonorName!), Color.lerp(_avColor(_selectedDonorName!), Colors.black, 0.2)!]), shape: BoxShape.circle),
-                        child: Center(child: Text(_initials(_selectedDonorName!), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 11)))),
-                      const SizedBox(width: 10),
-                      Expanded(child: Text(_selectedDonorName!, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.textPrimary))),
-                      const Icon(Icons.check_circle_rounded, color: _brand600, size: 18),
-                    ] else ...[
-                      Icon(Icons.search, color: context.textHint, size: 18),
-                      const SizedBox(width: 10),
-                      Expanded(child: Text('Search & select donor…', style: TextStyle(fontSize: 14, color: context.textHint, fontWeight: FontWeight.w500))),
-                      Icon(Icons.chevron_right, color: context.textHint, size: 20),
-                    ],
-                  ])),
-              ),
-            ])),
-
-            const SizedBox(height: 12),
-
-            // donation type
-            _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const _Label('Allocate towards'),
-              const SizedBox(height: 12),
-              if (_loadingData)
-                const Center(child: SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600)))
-              else
-                Wrap(spacing: 8, runSpacing: 8, children: (_typeLabels.isNotEmpty ? _typeLabels : _typeVisuals.keys.toList()).map((label) {
-                  final active = _donationType == label;
-                  final info = _typeVisuals[label] ?? _TypeInfo(label, _brand600, Icons.account_balance_wallet_outlined);
-                  return GestureDetector(
-                    onTap: () => setState(() => _donationType = label),
-                    child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(color: active ? info.color.withValues(alpha: 0.12) : context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? info.color : context.border)),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(info.icon, size: 15, color: active ? info.color : context.textHint),
-                        const SizedBox(width: 6),
-                        Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? info.color : context.textSub)),
-                      ])),
-                  );
-                }).toList()),
-            ])),
-
-            const SizedBox(height: 12),
-
-            // payment method
-            _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const _Label('Payment Method'),
-              const SizedBox(height: 12),
-              Wrap(spacing: 8, runSpacing: 8, children: _methods.map((m) {
-                final active = _method == m;
-                return GestureDetector(
-                  onTap: () => setState(() => _method = m),
-                  child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(color: active ? _brand600 : context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? _brand600 : context.border)),
-                    child: Text(m, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub))),
-                );
-              }).toList()),
-            ])),
-
-            const SizedBox(height: 12),
-
-            // receipt + date
-            _Card(child: Row(children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const _Label('Receipt No.'),
+              // amount entry card
+              _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const _Label('Amount'),
                 const SizedBox(height: 8),
-                Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)),
-                  child: Text(_receipt, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _brand700, letterSpacing: 0.3))),
+                Container(
+                  decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: context.border, width: 1.5)),
+                  child: Row(children: [
+                    Container(width: 44, height: 52, alignment: Alignment.center,
+                      child: const Text('₹', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _brand600))),
+                    Expanded(child: TextField(
+                      controller: _amountCtrl,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: context.textPrimary),
+                      decoration: InputDecoration(hintText: '0', hintStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: context.textHint), border: InputBorder.none, contentPadding: EdgeInsets.zero),
+                    )),
+                  ]),
+                ),
+                const SizedBox(height: 12),
+                Row(children: _quickAmounts.map((a) {
+                  return Expanded(child: Padding(padding: EdgeInsets.only(right: a == _quickAmounts.last ? 0 : 8), child: GestureDetector(
+                    onTap: () { _pickAmount(a); setState(() {}); },
+                    child: Container(padding: const EdgeInsets.symmetric(vertical: 7),
+                      decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: context.border)),
+                      child: Center(child: Text(a >= 1000 ? '₹${a ~/ 1000}K' : '₹$a', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand700)))),
+                  )));
+                }).toList()),
               ])),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const _Label('Date'),
+
+              const SizedBox(height: 12),
+
+              // donor picker
+              _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const _Label('Donor'),
                 const SizedBox(height: 8),
                 GestureDetector(
-                  onTap: _pickDate,
-                  child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.border)),
+                  onTap: _openDonorPicker,
+                  child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                    decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: _selectedDonorId != null ? _brand600 : context.border, width: 1.5)),
                     child: Row(children: [
-                      Expanded(child: Text(_date, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.textPrimary))),
-                      Icon(Icons.calendar_today_outlined, size: 14, color: context.textHint),
+                      if (_selectedDonorName != null) ...[
+                        Container(width: 32, height: 32, decoration: BoxDecoration(gradient: LinearGradient(colors: [_avColor(_selectedDonorName!), Color.lerp(_avColor(_selectedDonorName!), Colors.black, 0.2)!]), shape: BoxShape.circle),
+                          child: Center(child: Text(_initials(_selectedDonorName!), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 11)))),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text(_selectedDonorName!, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.textPrimary))),
+                        const Icon(Icons.check_circle_rounded, color: _brand600, size: 18),
+                      ] else ...[
+                        Icon(Icons.search, color: context.textHint, size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text('Search & select donor…', style: TextStyle(fontSize: 14, color: context.textHint, fontWeight: FontWeight.w500))),
+                        Icon(Icons.chevron_right, color: context.textHint, size: 20),
+                      ],
                     ])),
                 ),
               ])),
-            ])),
 
-            const SizedBox(height: 12),
+              const SizedBox(height: 12),
 
-            // attachment upload
-            _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const _Label('Attachments'),
-              const SizedBox(height: 10),
-              GestureDetector(
-                onTap: _pickingFile ? null : () async {
-                  setState(() => _pickingFile = true);
-                  try {
-                    final result = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
-                    if (result != null && result.files.isNotEmpty && mounted) {
-                      setState(() => _attachments.add(result.files.single.name));
-                    }
-                  } catch (_) {}
-                  if (mounted) setState(() => _pickingFile = false);
-                },
-                child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 20),
-                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: context.border, width: 1.5)),
-                  child: _pickingFile
-                    ? const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600)))
-                    : Column(children: [
-                        Icon(Icons.upload_file_outlined, color: context.textHint, size: 28),
-                        const SizedBox(height: 7),
-                        Text('Tap to attach receipt / proof', style: TextStyle(fontSize: 13, color: context.textHint, fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 3),
-                        Text('PDF, JPG, PNG — any file type', style: TextStyle(fontSize: 11, color: context.textHint, fontWeight: FontWeight.w500)),
+              // donation type + payment method — 2-column on wide screen
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(child: _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const _Label('Allocate towards'),
+                  const SizedBox(height: 12),
+                  if (_loadingData)
+                    const Center(child: SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600)))
+                  else
+                    Wrap(spacing: 8, runSpacing: 8, children: (_typeLabels.isNotEmpty ? _typeLabels : _typeVisuals.keys.toList()).map((label) {
+                      final active = _donationType == label;
+                      final info = _typeVisuals[label] ?? _TypeInfo(label, _brand600, Icons.account_balance_wallet_outlined);
+                      return GestureDetector(
+                        onTap: () => setState(() => _donationType = label),
+                        child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(color: active ? info.color.withValues(alpha: 0.12) : context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? info.color : context.border)),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(info.icon, size: 15, color: active ? info.color : context.textHint),
+                            const SizedBox(width: 6),
+                            Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? info.color : context.textSub)),
+                          ])),
+                      );
+                    }).toList()),
+                ]))),
+                const SizedBox(width: 12),
+                Expanded(child: _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const _Label('Payment Method'),
+                  const SizedBox(height: 12),
+                  Wrap(spacing: 8, runSpacing: 8, children: _methods.map((m) {
+                    final active = _method == m;
+                    return GestureDetector(
+                      onTap: () => setState(() => _method = m),
+                      child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(color: active ? _brand600 : context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? _brand600 : context.border)),
+                        child: Text(m, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub))),
+                    );
+                  }).toList()),
+                ]))),
+              ]),
+
+              const SizedBox(height: 12),
+
+              // receipt + date
+              _Card(child: Row(children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const _Label('Receipt No.'),
+                  const SizedBox(height: 8),
+                  Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)),
+                    child: Text(_receipt, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _brand700, letterSpacing: 0.3))),
+                ])),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const _Label('Date'),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: _pickDate,
+                    child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.border)),
+                      child: Row(children: [
+                        Expanded(child: Text(_date, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.textPrimary))),
+                        Icon(Icons.calendar_today_outlined, size: 14, color: context.textHint),
                       ])),
-              ),
-              if (_attachments.isNotEmpty) ...[
+                  ),
+                ])),
+              ])),
+
+              const SizedBox(height: 12),
+
+              // attachment upload
+              _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const _Label('Attachments'),
                 const SizedBox(height: 10),
-                ..._attachments.asMap().entries.map((e) => Container(
-                  margin: const EdgeInsets.only(bottom: 6),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(10)),
-                  child: Row(children: [
-                    const Icon(Icons.attach_file_rounded, size: 16, color: _brand600),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(e.value, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _brand600), overflow: TextOverflow.ellipsis)),
-                    GestureDetector(
-                      onTap: () => setState(() => _attachments.removeAt(e.key)),
-                      child: const Icon(Icons.close, size: 16, color: _brand600)),
-                  ]),
-                )),
-              ],
+                GestureDetector(
+                  onTap: _pickingFile ? null : () async {
+                    setState(() => _pickingFile = true);
+                    try {
+                      final result = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
+                      if (result != null && result.files.isNotEmpty && mounted) {
+                        setState(() => _attachments.add(result.files.single.name));
+                      }
+                    } catch (_) {}
+                    if (mounted) setState(() => _pickingFile = false);
+                  },
+                  child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 20),
+                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: context.border, width: 1.5)),
+                    child: _pickingFile
+                      ? const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600)))
+                      : Column(children: [
+                          Icon(Icons.upload_file_outlined, color: context.textHint, size: 28),
+                          const SizedBox(height: 7),
+                          Text('Tap to attach receipt / proof', style: TextStyle(fontSize: 13, color: context.textHint, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 3),
+                          Text('PDF, JPG, PNG — any file type', style: TextStyle(fontSize: 11, color: context.textHint, fontWeight: FontWeight.w500)),
+                        ])),
+                ),
+                if (_attachments.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  ..._attachments.asMap().entries.map((e) => Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(10)),
+                    child: Row(children: [
+                      const Icon(Icons.attach_file_rounded, size: 16, color: _brand600),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(e.value, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _brand600), overflow: TextOverflow.ellipsis)),
+                      GestureDetector(
+                        onTap: () => setState(() => _attachments.removeAt(e.key)),
+                        child: const Icon(Icons.close, size: 16, color: _brand600)),
+                    ]),
+                  )),
+                ],
+              ])),
+
             ])),
-
-            const SizedBox(height: 24),
-          ])),
+          )),
         )),
-
-        // bottom action bar — inline in Column (not bottomNavigationBar) to avoid double-bar with MainShell
-        Container(
-          decoration: BoxDecoration(color: context.cardBg, border: Border(top: BorderSide(color: context.border)),
-            boxShadow: const [BoxShadow(color: Color(0x140D2822), blurRadius: 12, offset: Offset(0, -4))]),
-          padding: EdgeInsets.fromLTRB(18, 14, 18, bottom + 14),
-          child: Row(children: [
-            Expanded(child: OutlinedButton(
-              onPressed: () => context.go('/donations'),
-              style: OutlinedButton.styleFrom(foregroundColor: context.textSub, side: BorderSide(color: context.border, width: 1.5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: const EdgeInsets.symmetric(vertical: 16)),
-              child: const Text('Cancel', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-            )),
-            const SizedBox(width: 12),
-            Expanded(flex: 2, child: ElevatedButton(
-              onPressed: _saving ? null : _save,
-              style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white,
-                disabledBackgroundColor: _brand600.withValues(alpha: 0.6),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                padding: const EdgeInsets.symmetric(vertical: 16), elevation: 0),
-              child: _saving
-                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                : const Text('Save Donation', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-            )),
-          ]),
-        ),
       ]),
     );
   }

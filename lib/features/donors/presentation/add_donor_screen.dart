@@ -177,44 +177,50 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
     return Scaffold(
+      backgroundColor: const Color(0xFFF4F7F6),
       body: Column(children: [
-        // ── header ─────────────────────────────────────────────────
+        // ── Compact header ─────────────────────────────────────────
         Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(colors: [Color(0xFF0B6E5D), _brand600], begin: Alignment.topLeft, end: Alignment.bottomRight),
-          ),
-          padding: EdgeInsets.fromLTRB(8, top + 8, 18, 20),
-          child: Column(children: [
-            Row(children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.white),
-                onPressed: () => context.go('/donors'),
+          color: Colors.white,
+          padding: EdgeInsets.fromLTRB(4, top + 6, 12, 10),
+          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE5EBE9)))),
+          child: Row(children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: Color(0xFF15211E)),
+              onPressed: () => context.go('/donors'),
+            ),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Add Donor', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF15211E))),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(6)),
+                child: const Text('ID  ·  SF-D-auto', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: _brand600)),
               ),
-              const Expanded(child: Text('Add Donor', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: Colors.white))),
             ]),
-            const SizedBox(height: 14),
-            const PhotoPickerCircle(label: 'Profile Photo', size: 96),
-            const SizedBox(height: 16),
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+            const Spacer(),
+            OutlinedButton(
+              onPressed: () => context.go('/donors'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF5A6B67),
+                side: const BorderSide(color: Color(0xFFD8E5E0)),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: Row(children: [
-                Icon(Icons.badge_outlined, size: 18, color: Colors.white.withValues(alpha: 0.9)),
-                const SizedBox(width: 9),
-                Text('Donor ID  ·  ', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: Colors.white.withValues(alpha: 0.8))),
-                const Text('SF-D-0009', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: Colors.white)),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
-                  child: Text('auto', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white.withValues(alpha: 0.8))),
-                ),
-              ]),
+              child: const Text('Cancel', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: _saving ? null : _save,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _brand600, foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, elevation: 0,
+              ),
+              child: _saving
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : const Text('Save Donor', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
             ),
           ]),
         ),
@@ -225,46 +231,66 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
             key: _form,
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 720),
+                  constraints: const BoxConstraints(maxWidth: 760),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-                // ── Basic Information ─────────────────────────────────
-                _Section(title: 'Basic Information', children: [
-                  _Row2(
-                    left:  _Field(label: 'Full Name *',  child: _textField(context, _name,  hint: 'e.g. Rajesh Khanna', validator: (v) => v!.isEmpty ? 'Required' : null)),
-                    right: _Field(label: 'Gender',        child: _GenderToggle(value: _gender, onChanged: (v) => setState(() => _gender = v))),
-                  ),
-                  _Row2(
-                    left:  _Field(label: 'Mobile *',     child: PhoneFieldWithCode(ctrl: _mobile, required: true)),
-                    right: _Field(label: 'WhatsApp',     child: PhoneFieldWithCode(ctrl: _whatsapp)),
-                  ),
-                  _Row2(
-                    left:  _Field(label: 'Email',        child: _textField(context, _email, hint: 'name@email.com', keyboardType: TextInputType.emailAddress)),
-                    right: _Field(label: 'Donor Category', child: _CategoryDropdown(value: _category, onChanged: (v) => setState(() => _category = v))),
-                  ),
+                // ── Photo + Personal ──────────────────────────────────
+                _Section(title: 'Personal Information', children: [
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const PhotoPickerCircle(label: 'Photo', size: 72),
+                    const SizedBox(width: 16),
+                    Expanded(child: Column(children: [
+                      _Row2(
+                        left:  _Field(label: 'Full Name *', child: _textField(context, _name, hint: 'e.g. Rajesh Khanna', validator: (v) => v!.isEmpty ? 'Required' : null)),
+                        right: _Field(label: 'Gender',      child: _GenderToggle(value: _gender, onChanged: (v) => setState(() => _gender = v))),
+                      ),
+                      _Row2(
+                        left:  _Field(label: 'Date of Birth',   child: _DateField(ctrl: _dob,   hint: 'DD / MM / YYYY', onTap: () => _pickDate(_dob))),
+                        right: _Field(label: 'Donor Category',  child: _CategoryDropdown(value: _category, onChanged: (v) => setState(() => _category = v))),
+                      ),
+                    ])),
+                  ]),
                 ]),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
 
-                // ── Identity ──────────────────────────────────────────
-                _Section(title: 'Identity', children: [
+                // ── Contact Information ───────────────────────────────
+                _Section(title: 'Contact Information', children: [
                   _Row2(
-                    left:  _Field(label: 'PAN Number', child: _textField(context, _pan, hint: 'ABCDE1234F',
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')), LengthLimitingTextInputFormatter(10)],
-                      textCapitalization: TextCapitalization.characters)),
-                    right: _Field(label: 'Aadhaar', child: _textField(context, _aadhaar, hint: '0000 0000 0000',
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(12)])),
+                    left:  _Field(label: 'Mobile *',  child: PhoneFieldWithCode(ctrl: _mobile,   required: true)),
+                    right: _Field(label: 'WhatsApp',  child: PhoneFieldWithCode(ctrl: _whatsapp)),
                   ),
+                  _Row2(
+                    left:  _Field(label: 'Email',     child: _textField(context, _email, hint: 'name@email.com', keyboardType: TextInputType.emailAddress)),
+                    right: _Field(label: 'Preferred Language', child: _textField(context, _lang, hint: 'e.g. English, Hindi')),
+                  ),
+                  _Field(label: 'Preferred Contact Method', child: StatefulBuilder(builder: (ctx, ss) =>
+                    Wrap(spacing: 8, children: _preferredMethods.map((m) {
+                      final active = _commPref.contains(m);
+                      return GestureDetector(
+                        onTap: () => ss(() => setState(() => active ? _commPref.remove(m) : _commPref.add(m))),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 6, top: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: active ? _brand600 : Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: active ? _brand600 : const Color(0xFFD8E5E0), width: 1.5),
+                          ),
+                          child: Text(m, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : const Color(0xFF5A6B67))),
+                        ),
+                      );
+                    }).toList()),
+                  )),
                 ]),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
 
                 // ── Address ───────────────────────────────────────────
                 _Section(title: 'Address', children: [
                   _Field(label: 'Street Address', child: _textField(context, _street, hint: 'House / Street / Area', maxLines: 2)),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   _Row2(
                     left:  _Field(label: 'City',    child: _textField(context, _city,    hint: 'City')),
                     right: _Field(label: 'State',   child: _textField(context, _state,   hint: 'State')),
@@ -276,55 +302,33 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)])),
                   ),
                 ]),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
 
-                // ── Personal & Professional ───────────────────────────
-                _Section(title: 'Personal & Professional', children: [
+                // ── Professional & Identity ───────────────────────────
+                _Section(title: 'Professional & Identity', children: [
                   _Row2(
-                    left:  _Field(label: 'Date of Birth',   child: _DateField(ctrl: _dob,   hint: 'DD / MM / YYYY', onTap: () => _pickDate(_dob))),
-                    right: _Field(label: 'Anniversary',     child: _DateField(ctrl: _anniv, hint: 'DD / MM / YYYY', onTap: () => _pickDate(_anniv))),
+                    left:  _Field(label: 'Occupation',  child: _textField(context, _occupation, hint: 'e.g. Business Owner')),
+                    right: _Field(label: 'Organisation', child: _textField(context, _org,        hint: 'Company / Trust')),
                   ),
                   _Row2(
-                    left:  _Field(label: 'Occupation',      child: _textField(context, _occupation, hint: 'e.g. Business Owner')),
-                    right: _Field(label: 'Organisation',    child: _textField(context, _org,        hint: 'Company / Trust')),
+                    left:  _Field(label: 'Anniversary', child: _DateField(ctrl: _anniv, hint: 'DD / MM / YYYY', onTap: () => _pickDate(_anniv))),
+                    right: _Field(label: 'PAN Number',  child: _textField(context, _pan, hint: 'ABCDE1234F',
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')), LengthLimitingTextInputFormatter(10)],
+                      textCapitalization: TextCapitalization.characters)),
                   ),
-                ]),
-                const SizedBox(height: 16),
-
-                // ── Communication ─────────────────────────────────────
-                _Section(title: 'Communication Preferences', children: [
                   _Row2(
-                    left: _Field(label: 'Preferred Language', child: _textField(context, _lang, hint: 'e.g. English, Hindi')),
-                    right: _Field(label: 'Preferred Method', child: StatefulBuilder(builder: (ctx, ss) =>
-                      Wrap(spacing: 8, children: _preferredMethods.map((m) {
-                        final active = _commPref.contains(m);
-                        return GestureDetector(
-                          onTap: () => ss(() => setState(() => active ? _commPref.remove(m) : _commPref.add(m))),
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: active ? _brand600 : Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: active ? _brand600 : ctx.border, width: 1.5),
-                            ),
-                            child: Text(m, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : ctx.textSub)),
-                          ),
-                        );
-                      }).toList()),
-                    )),
+                    left:  _Field(label: 'Aadhaar', child: _textField(context, _aadhaar, hint: '0000 0000 0000',
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(12)])),
+                    right: const SizedBox(),
                   ),
                 ]),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
 
-                // ── Notes ─────────────────────────────────────────────
-                _Section(title: 'Notes', children: [
-                  _Field(label: 'Additional Notes', child: _textField(context, _notes, hint: 'Preferences, giving history, context…', maxLines: 4)),
-                ]),
-                const SizedBox(height: 16),
-
-                // ── Attachments ───────────────────────────────────────
-                _Section(title: 'Attachments', children: [
+                // ── Notes & Attachments ───────────────────────────────
+                _Section(title: 'Notes & Attachments', children: [
+                  _Field(label: 'Notes', child: _textField(context, _notes, hint: 'Preferences, giving history, context…', maxLines: 3)),
+                  const SizedBox(height: 12),
                   GestureDetector(
                     onTap: _addingFile ? null : () async {
                       setState(() => _addingFile = true);
@@ -338,78 +342,38 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
                       if (mounted) setState(() => _addingFile = false);
                     },
                     child: Container(
-                      width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF7FAF9), borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFD8E5E0), width: 1.5),
-                      ),
+                      width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(color: const Color(0xFFF7FAF9), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFD8E5E0), width: 1.5)),
                       child: _addingFile
-                        ? const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600)))
+                        ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600)))
                         : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            const Icon(Icons.attach_file_rounded, size: 18, color: _brand600),
-                            const SizedBox(width: 8),
-                            const Text('Select File', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _brand600)),
+                            const Icon(Icons.attach_file_rounded, size: 16, color: _brand600),
+                            const SizedBox(width: 6),
+                            const Text('Attach File', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _brand600)),
                           ]),
                     ),
                   ),
                   if (_attachments.isNotEmpty) ...[
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     ..._attachments.asMap().entries.map((e) => Container(
-                      margin: const EdgeInsets.only(bottom: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                      decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(10)),
+                      margin: const EdgeInsets.only(bottom: 5),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8)),
                       child: Row(children: [
-                        const Icon(Icons.insert_drive_file_outlined, size: 16, color: _brand600),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(e.value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _brand600), overflow: TextOverflow.ellipsis)),
-                        GestureDetector(onTap: () => setState(() => _attachments.removeAt(e.key)), child: const Icon(Icons.close, size: 16, color: _brand600)),
+                        const Icon(Icons.insert_drive_file_outlined, size: 14, color: _brand600),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(e.value, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _brand600), overflow: TextOverflow.ellipsis)),
+                        GestureDetector(onTap: () => setState(() => _attachments.removeAt(e.key)), child: const Icon(Icons.close, size: 14, color: _brand600)),
                       ]),
                     )),
                   ],
                 ]),
-                const SizedBox(height: 28),
+                const SizedBox(height: 24),
               ]),
                 ),
               ),
             ),
           ),
-        ),
-
-        // ── bottom buttons ─────────────────────────────────────────
-        Container(
-          padding: EdgeInsets.fromLTRB(18, 14, 18, MediaQuery.of(context).padding.bottom + 14),
-          decoration: BoxDecoration(
-            color: context.headerBg,
-            border: Border(top: BorderSide(color: context.border)),
-            boxShadow: const [BoxShadow(color: Color(0x140D2822), blurRadius: 12, offset: Offset(0, -4))],
-          ),
-          child: Row(children: [
-            Expanded(child: OutlinedButton(
-              onPressed: () => context.go('/donors'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: context.textSub,
-                side: BorderSide(color: context.border, width: 1.5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: const Text('Cancel', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-            )),
-            const SizedBox(width: 12),
-            Expanded(flex: 2, child: ElevatedButton(
-              onPressed: _saving ? null : _save,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _brand600,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: _brand600.withValues(alpha: 0.6),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                elevation: 0,
-              ),
-              child: _saving
-                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                : const Text('Save Donor', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-            )),
-          ]),
         ),
       ]),
     );
