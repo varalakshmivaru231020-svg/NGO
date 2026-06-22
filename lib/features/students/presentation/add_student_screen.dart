@@ -485,36 +485,34 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                 const SizedBox(height: 20),
 
                 // ── Inline action buttons ──────────────────────────
-                Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
-                  OutlinedButton(
-                    onPressed: () => context.go('/students'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF5A6B67),
-                      backgroundColor: Colors.white,
-                      side: const BorderSide(color: Color(0xFFD8E5E0), width: 1.5),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
-                      minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  GestureDetector(
+                    onTap: () => context.go('/students'),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 13),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFD8E5E0), width: 1.5),
+                      ),
+                      child: const Text('Cancel', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF5A6B67))),
                     ),
-                    child: const Text('Cancel', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                   ),
                   const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: _saving ? null : _save,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _brand600,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: Color(0xFF0E8C76).withValues(alpha: 0.6),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 13),
-                      minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      elevation: 0,
+                  GestureDetector(
+                    onTap: _saving ? null : _save,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 13),
+                      decoration: BoxDecoration(
+                        color: _saving ? const Color(0xFF0E8C76).withValues(alpha: 0.6) : _brand600,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: _saving
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                        : const Text('Enrol Child', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
                     ),
-                    child: _saving
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                      : const Text('Enrol Child', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
                   ),
-                ]),
+                ])),
                 const SizedBox(height: 24),
               ]),
                 ),
