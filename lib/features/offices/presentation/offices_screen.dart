@@ -32,11 +32,12 @@ class _OfficesScreenState extends State<OfficesScreen> {
     _Office(id: 'of4', name: 'Delhi Liaison Office', city: 'New Delhi', students: 12),
   ];
 
+  String _searchQuery = '';
+
   void _showSheet({_Office? office}) {
     final nameCtrl = TextEditingController(text: office?.name ?? '');
     final cityCtrl = TextEditingController(text: office?.city ?? '');
     final formKey = GlobalKey<FormState>();
-    bool deleting = false;
 
     showModalBottomSheet(
       context: context,
@@ -134,9 +135,17 @@ class _OfficesScreenState extends State<OfficesScreen> {
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
+    final totalStudents = _offices.fold(0, (s, o) => s + o.students);
+    final filtered = _offices.where((o) =>
+      _searchQuery.isEmpty ||
+      o.name.toLowerCase().contains(_searchQuery) ||
+      o.city.toLowerCase().contains(_searchQuery)
+    ).toList();
+
     return Scaffold(
       backgroundColor: _surface2,
       body: Column(children: [
+        // ── Header ────────────────────────────────────────────────
         Container(
           color: context.headerBg,
           padding: EdgeInsets.fromLTRB(18, top + 14, 18, 16),
@@ -145,7 +154,7 @@ class _OfficesScreenState extends State<OfficesScreen> {
             const SizedBox(width: 10),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Offices', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: context.textPrimary)),
-              Text('${_offices.length} active locations', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
+              Text('${_offices.length} Locations  •  $totalStudents Students Total', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
             ])),
             GestureDetector(
               onTap: () => _showSheet(),
@@ -161,59 +170,115 @@ class _OfficesScreenState extends State<OfficesScreen> {
             ),
           ]),
         ),
-        Expanded(child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
-          child: Center(child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 900),
-            child: Column(children: [
-              ..._offices.map((o) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22), border: Border.all(color: _border),
-                    boxShadow: const [BoxShadow(color: Color(0x0A0D2822), blurRadius: 6, offset: Offset(0, 2))]),
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Container(width: 48, height: 48, decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(14)),
-                      child: const Icon(Icons.business_outlined, color: _brand600, size: 24)),
-                    const SizedBox(width: 13),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(o.name, style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
-                      const SizedBox(height: 5),
-                      Row(children: [
-                        const Icon(Icons.location_on_outlined, size: 14, color: _onSurface3),
-                        const SizedBox(width: 3),
-                        Text(o.city, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _onSurface2)),
-                      ]),
-                    ])),
-                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                      Text('${o.students}', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: _brand600, letterSpacing: -1)),
-                      const Text('students', style: TextStyle(fontSize: 12, color: _onSurface3, fontWeight: FontWeight.w600)),
+        // ── Search bar ────────────────────────────────────────────
+        Container(
+          color: context.headerBg,
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+          child: TextField(
+            onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+            style: TextStyle(fontSize: 14, color: context.textPrimary),
+            decoration: InputDecoration(
+              hintText: 'Search offices by name or city...',
+              hintStyle: TextStyle(fontSize: 13.5, color: context.textHint),
+              prefixIcon: Icon(Icons.search_rounded, size: 20, color: context.textHint),
+              filled: true,
+              fillColor: context.scaffoldBg,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              isDense: true,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.border)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.border)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF0E8C76), width: 1.5)),
+            ),
+          ),
+        ),
+        // ── Content ───────────────────────────────────────────────
+        if (filtered.isEmpty)
+          Expanded(
+            child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Container(width: 80, height: 80, decoration: const BoxDecoration(color: _brand100, shape: BoxShape.circle),
+                child: const Icon(Icons.business_outlined, size: 40, color: _brand600)),
+              const SizedBox(height: 16),
+              Text(_searchQuery.isEmpty ? 'No Offices Added Yet' : 'No results found',
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Color(0xFF15211E))),
+              const SizedBox(height: 6),
+              Text(_searchQuery.isEmpty ? 'Create your first office to start managing students.' : 'Try a different search term.',
+                style: const TextStyle(fontSize: 13.5, color: _onSurface2, fontWeight: FontWeight.w500)),
+              if (_searchQuery.isEmpty) ...[
+                const SizedBox(height: 20),
+                GestureDetector(
+                  onTap: () => _showSheet(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(14)),
+                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.add_rounded, color: Colors.white, size: 18),
+                      SizedBox(width: 6),
+                      Text('Add Office', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
                     ]),
-                    const SizedBox(width: 6),
-                    IconButton(icon: const Icon(Icons.edit_outlined, size: 20, color: _onSurface3), onPressed: () => _showSheet(office: o)),
-                  ]),
-                ),
-              )),
-              // dashed Add tile
-              GestureDetector(
-                onTap: () => _showSheet(),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 22),
-                  decoration: BoxDecoration(
-                    color: Colors.transparent, borderRadius: BorderRadius.circular(22),
-                    border: Border.all(color: _brand600.withValues(alpha: 0.4), width: 2, style: BorderStyle.solid),
                   ),
-                  child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Icon(Icons.add_circle_outline, color: _brand600, size: 22),
-                    SizedBox(width: 10),
-                    Text('Add New Office', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _brand600)),
-                  ]),
                 ),
-              ),
-            ]),
+              ],
+            ])),
+          )
+        else
+          Expanded(child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
+            child: Center(child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 900),
+              child: Column(children: [
+                ...filtered.map((o) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: _border),
+                      boxShadow: const [BoxShadow(color: Color(0x0A0D2822), blurRadius: 6, offset: Offset(0, 2))]),
+                    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Container(width: 48, height: 48, decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(14)),
+                        child: const Icon(Icons.business_outlined, color: _brand600, size: 24)),
+                      const SizedBox(width: 13),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(o.name, style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
+                        const SizedBox(height: 4),
+                        Row(children: [
+                          const Icon(Icons.location_on_outlined, size: 13, color: _onSurface3),
+                          const SizedBox(width: 3),
+                          Text(o.city, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _onSurface2)),
+                        ]),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8)),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            const Icon(Icons.people_outline, size: 13, color: _brand600),
+                            const SizedBox(width: 5),
+                            Text('${o.students} Students', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _brand600)),
+                          ]),
+                        ),
+                      ])),
+                      PopupMenuButton<String>(
+                        onSelected: (v) {
+                          if (v == 'edit') _showSheet(office: o);
+                          if (v == 'delete') _confirmDelete(o, () {});
+                        },
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 4,
+                        itemBuilder: (_) => [
+                          const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 17, color: Color(0xFF0E8C76)), SizedBox(width: 10), Text('Edit', style: TextStyle(fontWeight: FontWeight.w700))])),
+                          const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, size: 17, color: Color(0xFFF2685E)), SizedBox(width: 10), Text('Delete', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFFF2685E)))])),
+                        ],
+                        child: Container(
+                          width: 34, height: 34,
+                          decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(10), border: Border.all(color: _border)),
+                          child: const Icon(Icons.more_vert_rounded, size: 18, color: _onSurface2),
+                        ),
+                      ),
+                    ]),
+                  ),
+                )),
+              ]),
+            )),
           )),
-        )),
       ]),
     );
   }

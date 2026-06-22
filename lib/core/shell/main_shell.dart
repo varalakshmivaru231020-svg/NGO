@@ -221,47 +221,60 @@ class _NavRow extends StatelessWidget {
     return GestureDetector(
       onTap: () => context.go(n.route),
       behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        margin: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
-        padding: ext
-            ? const EdgeInsets.symmetric(horizontal: 10, vertical: 9)
-            : const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: active ? _brand600.withValues(alpha: 0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: ext
-            ? Row(children: [
-                Icon(active ? n.filled : n.icon,
-                    color: active ? _brand600 : context.textSub, size: 19),
-                const SizedBox(width: 10),
-                Expanded(child: Text(n.label,
-                    style: TextStyle(fontSize: 13, fontWeight: active ? FontWeight.w800 : FontWeight.w600,
-                        color: active ? _brand600 : context.textPrimary),
-                    overflow: TextOverflow.ellipsis)),
-                if (n.badge != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: _coral500, borderRadius: BorderRadius.circular(8)),
-                    child: Text('${n.badge}',
-                        style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900))),
-              ])
-            : Center(
-                child: Stack(clipBehavior: Clip.none, children: [
-                  Icon(active ? n.filled : n.icon,
-                      color: active ? _brand600 : context.textSub, size: 22),
-                  if (n.badge != null)
-                    Positioned(
-                      right: -5, top: -3,
-                      child: Container(
-                        width: 13, height: 13,
-                        decoration: const BoxDecoration(color: _coral500, shape: BoxShape.circle),
-                        child: Center(child: Text('${n.badge}',
-                            style: const TextStyle(color: Colors.white, fontSize: 7.5, fontWeight: FontWeight.w900))))),
-                ]),
+      child: Stack(clipBehavior: Clip.none, children: [
+        if (active)
+          Positioned(
+            left: 0, top: 4, bottom: 4,
+            child: Container(
+              width: 3,
+              decoration: BoxDecoration(
+                color: _brand600,
+                borderRadius: const BorderRadius.only(topRight: Radius.circular(3), bottomRight: Radius.circular(3)),
               ),
-      ),
+            ),
+          ),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          margin: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
+          padding: ext
+              ? const EdgeInsets.symmetric(horizontal: 10, vertical: 9)
+              : const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: active ? _brand600.withValues(alpha: 0.12) : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: ext
+              ? Row(children: [
+                  Icon(active ? n.filled : n.icon,
+                      color: active ? _brand600 : context.textSub, size: 19),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(n.label,
+                      style: TextStyle(fontSize: 13, fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                          color: active ? _brand600 : context.textPrimary),
+                      overflow: TextOverflow.ellipsis)),
+                  if (n.badge != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(color: _coral500, borderRadius: BorderRadius.circular(8)),
+                      child: Text('${n.badge}',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900))),
+                ])
+              : Center(
+                  child: Stack(clipBehavior: Clip.none, children: [
+                    Icon(active ? n.filled : n.icon,
+                        color: active ? _brand600 : context.textSub, size: 22),
+                    if (n.badge != null)
+                      Positioned(
+                        right: -5, top: -3,
+                        child: Container(
+                          width: 15, height: 15,
+                          decoration: const BoxDecoration(color: _coral500, shape: BoxShape.circle),
+                          child: Center(child: Text('${n.badge}',
+                              style: const TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.w900))))),
+                  ]),
+                ),
+        ),
+      ]),
     );
   }
 }
