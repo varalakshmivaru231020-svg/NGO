@@ -115,6 +115,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   );
 
   Widget _form() => Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
+    // brand strip — horizontal logo + name + tagline
+    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Container(
+        width: 44, height: 44,
+        decoration: BoxDecoration(color: _bg, borderRadius: BorderRadius.circular(12)),
+        child: const Icon(Icons.volunteer_activism, size: 24, color: Colors.white),
+      ),
+      const SizedBox(width: 12),
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Saksham Foundation',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _text1, letterSpacing: -0.3)),
+        const Text('NGO Management System',
+            style: TextStyle(fontSize: 12, color: _text2, fontWeight: FontWeight.w500)),
+      ]),
+    ]),
+    const SizedBox(height: 28),
+
     const Text('Welcome Back',
         textAlign: TextAlign.center,
         style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: _text1, letterSpacing: -0.3)),
