@@ -159,25 +159,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget _kpiSection(BuildContext ctx) {
     final screenW = MediaQuery.of(ctx).size.width;
     final sidebarW = screenW >= 1060 ? 224.0 : screenW >= 700 ? 68.0 : 0.0;
-    final availW = screenW - sidebarW - 36; // 36 = horizontal padding
-    final cardW = (availW / 4) - 9; // 4 cards, 3 gaps of 12px
-    final fixedW = cardW.clamp(140.0, 220.0);
-    return SizedBox(
-      height: 110,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        physics: const BouncingScrollPhysics(),
-        children: [
-          SizedBox(width: fixedW, child: _KPICard(label: 'Total Offices',  value: '4',      icon: Icons.business_outlined,               fg: _sky500,    bg: _sky100,    delta: null,  onTap: () {})),
-          const SizedBox(width: 12),
-          SizedBox(width: fixedW, child: _KPICard(label: 'Total Donors',   value: '836',    icon: Icons.people_outlined,                 fg: _brand600,  bg: _brand100,  delta: '+12', onTap: () => ctx.go('/donors'))),
-          const SizedBox(width: 12),
-          SizedBox(width: fixedW, child: _KPICard(label: 'Total Students', value: '178',    icon: Icons.school_outlined,                 fg: _violet500, bg: _violet100, delta: '+6',  onTap: () => ctx.go('/students'))),
-          const SizedBox(width: 12),
-          SizedBox(width: fixedW, child: _KPICard(label: 'Total Raised',   value: '₹56.1L', icon: Icons.account_balance_wallet_outlined, fg: _amber600,  bg: _amber100,  delta: '+8%', onTap: () => ctx.go('/donations'))),
-        ],
-      ),
+    final availW = screenW - sidebarW - 36;
+    final cardW = ((availW / 4) - 9).clamp(130.0, 200.0);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      child: Row(children: [
+        _KPICard(width: cardW, label: 'Total Offices',  value: '4',       icon: Icons.business_outlined,               fg: _sky500,    bg: _sky100,    onTap: () {}),
+        const SizedBox(width: 10),
+        _KPICard(width: cardW, label: 'Total Donors',   value: '836',     icon: Icons.people_outlined,                 fg: _brand600,  bg: _brand100,  onTap: () => ctx.go('/donors')),
+        const SizedBox(width: 10),
+        _KPICard(width: cardW, label: 'Total Students', value: '178',     icon: Icons.school_outlined,                 fg: _violet500, bg: _violet100, onTap: () => ctx.go('/students')),
+        const SizedBox(width: 10),
+        _KPICard(width: cardW, label: 'Total Raised',   value: '₹56.1L',  icon: Icons.account_balance_wallet_outlined, fg: _amber600,  bg: _amber100,  onTap: () => ctx.go('/donations')),
+      ]),
     );
   }
 
@@ -417,37 +411,39 @@ class _QA extends StatelessWidget {
 
 // ── KPI Card ──────────────────────────────────────────────────────────
 class _KPICard extends StatelessWidget {
-  const _KPICard({required this.label, required this.value, required this.icon, required this.fg, required this.bg, required this.delta, required this.onTap});
+  const _KPICard({required this.width, required this.label, required this.value, required this.icon, required this.fg, required this.bg, required this.onTap});
+  final double width;
   final String label, value;
   final IconData icon;
   final Color fg, bg;
-  final String? delta;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: context.cardBg, borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: context.border),
-        boxShadow: const [BoxShadow(color: Color(0x0D0D2822), blurRadius: 3, offset: Offset(0, 1))],
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Container(width: 38, height: 38, decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(11)), child: Icon(icon, color: fg, size: 20)),
-          if (delta != null)
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.trending_up, size: 12, color: Color(0xFF1FA971)),
-              const SizedBox(width: 2),
-              Text(delta!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF1FA971))),
-            ]),
+    child: SizedBox(
+      width: width,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+        decoration: BoxDecoration(
+          color: context.cardBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: context.border),
+          boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 6, offset: Offset(0, 2))],
+        ),
+        child: Row(children: [
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+            child: Icon(icon, color: fg, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.5, color: context.textPrimary, height: 1)),
+            const SizedBox(height: 3),
+            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: context.textSub)),
+          ])),
         ]),
-        const SizedBox(height: 10),
-        Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.6, height: 1)),
-        const SizedBox(height: 5),
-        Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.textSub)),
-      ]),
+      ),
     ),
   );
 }
