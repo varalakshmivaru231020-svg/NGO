@@ -74,6 +74,17 @@ class ReportsScreen extends StatefulWidget {
 
 class _ReportsScreenState extends State<ReportsScreen> {
   String _period = 'YTD FY27';
+  DateTimeRange? _dateRange;
+
+  void _showExportToast(String format) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Exporting as $format... (demo)', style: const TextStyle(fontWeight: FontWeight.w700)),
+      backgroundColor: const Color(0xFF0E8C76),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      duration: const Duration(seconds: 2),
+    ));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -131,6 +142,83 @@ class _ReportsScreenState extends State<ReportsScreen> {
           child: Center(child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
             child: Column(children: [
+            // header row with export buttons
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+              child: Row(children: [
+                Expanded(child: Text('Reports & Analytics', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: context.textPrimary))),
+                // Date range button
+                GestureDetector(
+                  onTap: () async {
+                    final range = await showDateRangePicker(
+                      context: context,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                      initialDateRange: _dateRange,
+                      builder: (ctx, child) => Theme(
+                        data: Theme.of(ctx).copyWith(colorScheme: const ColorScheme.light(primary: Color(0xFF0E8C76))),
+                        child: child!,
+                      ),
+                    );
+                    if (range != null) setState(() => _dateRange = range);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _dateRange != null ? const Color(0xFFD6F3EC) : const Color(0xFFF4F7F6),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: _dateRange != null ? const Color(0xFF0E8C76) : const Color(0xFFE5EBE9)),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.date_range_outlined, size: 15, color: _dateRange != null ? const Color(0xFF0E8C76) : const Color(0xFF5A6B67)),
+                      const SizedBox(width: 6),
+                      Text(
+                        _dateRange != null
+                          ? '${_dateRange!.start.day}/${_dateRange!.start.month} – ${_dateRange!.end.day}/${_dateRange!.end.month}'
+                          : 'Date Range',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _dateRange != null ? const Color(0xFF0E8C76) : const Color(0xFF5A6B67)),
+                      ),
+                      if (_dateRange != null) ...[
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () => setState(() => _dateRange = null),
+                          child: const Icon(Icons.close, size: 13, color: Color(0xFF0E8C76)),
+                        ),
+                      ],
+                    ]),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Export PDF
+                GestureDetector(
+                  onTap: () => _showExportToast('PDF'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(color: const Color(0xFFFFE3DF), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFF2685E).withValues(alpha: 0.4))),
+                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.picture_as_pdf_outlined, size: 15, color: Color(0xFFF2685E)),
+                      SizedBox(width: 5),
+                      Text('PDF', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Color(0xFFF2685E))),
+                    ]),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Export Excel
+                GestureDetector(
+                  onTap: () => _showExportToast('Excel'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(color: const Color(0xFFD4F3E7), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFF1FA971).withValues(alpha: 0.4))),
+                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.table_chart_outlined, size: 15, color: Color(0xFF1FA971)),
+                      SizedBox(width: 5),
+                      Text('Excel', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Color(0xFF1FA971))),
+                    ]),
+                  ),
+                ),
+              ]),
+            ),
+
             // period chips
             const SizedBox(height: 14),
             SizedBox(height: 40, child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.fromLTRB(18, 0, 18, 0),

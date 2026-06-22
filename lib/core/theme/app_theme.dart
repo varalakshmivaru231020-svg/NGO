@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   static const _brand = Color(0xFF0E8C76);
@@ -9,6 +10,7 @@ class AppTheme {
 
   static ThemeData get light => ThemeData(
     useMaterial3: true,
+    textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme),
     colorScheme: ColorScheme.fromSeed(
       seedColor: _brand,
       brightness: Brightness.light,
@@ -62,6 +64,7 @@ class AppTheme {
 
   static ThemeData get dark => ThemeData(
     useMaterial3: true,
+    textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
     colorScheme: ColorScheme.fromSeed(seedColor: _brand, brightness: Brightness.dark, primary: Color(0xFF14A98C)),
     scaffoldBackgroundColor: const Color(0xFF0D1A16),
     appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF0D1A16), elevation: 0, scrolledUnderElevation: 0),

@@ -96,7 +96,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 5, vsync: this);
+    _tabs = TabController(length: 6, vsync: this);
   }
 
   @override
@@ -357,6 +357,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             _SponsorTab(data: data),
             _AchievementsTab(name: name),
             const _DocumentsTab(),
+            _ProgressTab(data: data),
           ],
         ),
       ),
@@ -427,6 +428,7 @@ class _AppBarBottom extends StatelessWidget implements PreferredSizeWidget {
         Tab(text: 'Sponsor'),
         Tab(text: 'Achievements'),
         Tab(text: 'Documents'),
+        Tab(text: 'Progress'),
       ],
     ),
   ]);
@@ -1242,6 +1244,58 @@ class _UploadSection extends StatelessWidget {
         decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(10), border: Border.all(color: _border)),
         child: const Text('Upload', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
       ),
+    ]),
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// PROGRESS TAB
+// ══════════════════════════════════════════════════════════════════════
+class _ProgressTab extends StatelessWidget {
+  const _ProgressTab({required this.data});
+  final Map<String, String> data;
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+    physics: const BouncingScrollPhysics(),
+    padding: const EdgeInsets.all(18),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _CardSection(title: 'Academic Performance', icon: Icons.bar_chart_outlined, children: [
+        _InfoRow('Class / Grade',    data['class'] ?? 'Not specified'),
+        _InfoRow('Academic Year',    data['acadYear'] ?? '2025-26'),
+        _InfoRow('Performance',      data['performance'] ?? 'Not specified'),
+        _InfoRow('Admission No.',    data['admNo'] ?? 'Not specified'),
+        _InfoRow('Institution',      data['institution'] ?? 'Not specified', last: true),
+      ]),
+      const SizedBox(height: 14),
+      _CardSection(title: 'Attendance & Engagement', icon: Icons.event_available_outlined, children: [
+        _InfoRow('Attendance',       data['attendance'] ?? '—'),
+        _InfoRow('Achievements',     data['achievementCount'] ?? '0'),
+        _InfoRow('Enrol Date',       data['enrollDate'] ?? '—', last: true),
+      ]),
+      const SizedBox(height: 14),
+      _CardSection(title: 'Health Snapshot', icon: Icons.health_and_safety_outlined, children: [
+        _InfoRow('Height',           data['height'] ?? '—'),
+        _InfoRow('Weight',           data['weight'] ?? '—', last: true),
+      ]),
+      if (data['medHistory'] != null && data['medHistory']!.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(color: _coral100, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Row(children: [
+              Icon(Icons.medication_outlined, size: 16, color: _coral500),
+              SizedBox(width: 7),
+              Text('Medical Notes', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: _coral500)),
+            ]),
+            const SizedBox(height: 8),
+            Text(data['medHistory']!, style: const TextStyle(fontSize: 14, color: _onSurface1, fontWeight: FontWeight.w500, height: 1.5)),
+          ]),
+        ),
+      ],
+      const SizedBox(height: 80),
     ]),
   );
 }

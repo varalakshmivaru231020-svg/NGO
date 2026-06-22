@@ -68,7 +68,7 @@ class _DonorDetailScreenState extends State<DonorDetailScreen> with SingleTicker
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 5, vsync: this);
+    _tabs = TabController(length: 6, vsync: this);
     _load();
   }
 
@@ -272,7 +272,7 @@ class _DonorDetailScreenState extends State<DonorDetailScreen> with SingleTicker
             unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            tabs: const [Tab(text: 'Overview'), Tab(text: 'Donations'), Tab(text: 'Sponsored'), Tab(text: 'Documents'), Tab(text: 'Achievements')],
+            tabs: const [Tab(text: 'Overview'), Tab(text: 'Donations'), Tab(text: 'Sponsored'), Tab(text: 'Documents'), Tab(text: 'Achievements'), Tab(text: 'Timeline')],
           ),
         ),
 
@@ -282,6 +282,7 @@ class _DonorDetailScreenState extends State<DonorDetailScreen> with SingleTicker
           _SponsoredTab(donor: _donor!, donorId: widget.id),
           _DocumentsTab(donorId: widget.id),
           _AchievementsTab(donorId: widget.id),
+          const _TimelineTab(),
         ])),
       ]),
     );
@@ -1184,4 +1185,73 @@ class _SpnDetail extends StatelessWidget {
     const SizedBox(height: 3),
     Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _onSurface1)),
   ]));
+}
+
+// ── timeline tab ──────────────────────────────────────────────────────
+class _TimelineTab extends StatelessWidget {
+  const _TimelineTab();
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.fromLTRB(18, 16, 18, 40),
+    physics: const BouncingScrollPhysics(),
+    children: [
+      Padding(
+        padding: const EdgeInsets.only(left: 2, bottom: 8),
+        child: Text('Communication Timeline',
+          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: _onSurface2, letterSpacing: 0.5)),
+      ),
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _border),
+        ),
+        child: const Column(children: [
+          _TimelineItem(icon: Icons.call_outlined,              color: Color(0xFF0E8C76), title: 'Phone Call',          subtitle: 'Discussed annual donation plan',       date: '04 Jun 2026'),
+          _TimelineDivider(),
+          _TimelineItem(icon: Icons.message_outlined,           color: Color(0xFF25D366), title: 'WhatsApp Message',    subtitle: 'Sent birthday wishes 🎂',              date: '15 May 2026'),
+          _TimelineDivider(),
+          _TimelineItem(icon: Icons.email_outlined,             color: Color(0xFFF2685E), title: 'Email Sent',          subtitle: 'Donation receipt & thank you note',    date: '02 May 2026'),
+          _TimelineDivider(),
+          _TimelineItem(icon: Icons.volunteer_activism_outlined, color: Color(0xFF7C6CF0), title: 'Donation Received',  subtitle: '₹25,000 – Child Sponsorship',          date: '01 May 2026'),
+          _TimelineDivider(),
+          _TimelineItem(icon: Icons.person_add_outlined,        color: Color(0xFF2D9CDB), title: 'Donor Added',         subtitle: 'Profile created by Admin',             date: '15 Mar 2025'),
+        ]),
+      ),
+    ],
+  );
+}
+
+class _TimelineItem extends StatelessWidget {
+  const _TimelineItem({required this.icon, required this.color, required this.title, required this.subtitle, required this.date});
+  final IconData icon;
+  final Color color;
+  final String title, subtitle, date;
+
+  @override
+  Widget build(BuildContext context) => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Container(
+      width: 36, height: 36,
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
+      child: Icon(icon, size: 17, color: color),
+    ),
+    const SizedBox(width: 12),
+    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(title, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 2),
+      Text(subtitle, style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+      const SizedBox(height: 2),
+      Text(date, style: const TextStyle(fontSize: 11.5, color: Color(0xFF93A29F), fontWeight: FontWeight.w500)),
+    ])),
+  ]);
+}
+
+class _TimelineDivider extends StatelessWidget {
+  const _TimelineDivider();
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(left: 17, top: 6, bottom: 6),
+    child: Container(width: 2, height: 20, color: const Color(0xFFE5EBE9)),
+  );
 }

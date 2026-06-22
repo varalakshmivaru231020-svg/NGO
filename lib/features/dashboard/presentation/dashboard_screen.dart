@@ -118,6 +118,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   _quickActionsSection(context),
                   const SizedBox(height: 16),
                   _kpiSection(context),
+                  const SizedBox(height: 14),
+                  _quickActions(context),
                   const SizedBox(height: 18),
                   _TrendCard(period: _period, onPeriodChange: (p) => setState(() => _period = p)),
                   const SizedBox(height: 14),
@@ -195,6 +197,41 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ),
     ),
   );
+
+  // ── Quick Actions (new section below KPIs) ────────────────────────
+  Widget _quickActions(BuildContext ctx) => Padding(
+    padding: const EdgeInsets.fromLTRB(18, 0, 18, 4),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('Quick Actions', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: ctx.textSub, letterSpacing: 0.3)),
+      const SizedBox(height: 10),
+      LayoutBuilder(builder: (_, constraints) {
+        final wide = constraints.maxWidth >= 500;
+        final actions = [
+          _QuickAction(icon: Icons.person_add_outlined, label: 'Add Donor', color: const Color(0xFF0E8C76), bg: const Color(0xFFD6F3EC), onTap: () => ctx.go('/donors/add')),
+          _QuickAction(icon: Icons.receipt_long_outlined, label: 'Record Donation', color: const Color(0xFFE0921A), bg: const Color(0xFFFFF1D6), onTap: () => ctx.go('/donations/add')),
+          _QuickAction(icon: Icons.school_outlined, label: 'Add Student', color: const Color(0xFF7C6CF0), bg: const Color(0xFFE7E3FD), onTap: () => ctx.go('/students/add')),
+          _QuickAction(icon: Icons.campaign_outlined, label: 'New Campaign', color: const Color(0xFF2D9CDB), bg: const Color(0xFFDCEFFB), onTap: () => _showCampaignDialog(ctx)),
+        ];
+        if (wide) {
+          return Row(children: actions.expand((a) => [Expanded(child: a), const SizedBox(width: 10)]).toList()..removeLast());
+        }
+        return Column(children: [
+          Row(children: [Expanded(child: actions[0]), const SizedBox(width: 10), Expanded(child: actions[1])]),
+          const SizedBox(height: 10),
+          Row(children: [Expanded(child: actions[2]), const SizedBox(width: 10), Expanded(child: actions[3])]),
+        ]);
+      }),
+    ]),
+  );
+
+  void _showCampaignDialog(BuildContext ctx) {
+    showDialog(context: ctx, builder: (_) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('Coming Soon', style: TextStyle(fontWeight: FontWeight.w800)),
+      content: const Text('Campaign management will be available in the next update.', style: TextStyle(fontSize: 14)),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+    ));
+  }
 
   // ── Recent Donations ──────────────────────────────────────────────
   Widget _recentSection(BuildContext ctx) => Column(
@@ -697,3 +734,31 @@ Widget _card({required BuildContext ctx, required Widget child, EdgeInsets? padd
   ),
   child: child,
 );
+
+// ── Quick Action card (new) ───────────────────────────────────────────
+class _QuickAction extends StatelessWidget {
+  const _QuickAction({required this.icon, required this.label, required this.color, required this.bg, required this.onTap});
+  final IconData icon;
+  final String label;
+  final Color color, bg;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(children: [
+        Container(width: 36, height: 36, decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, size: 19, color: color)),
+        const SizedBox(width: 10),
+        Flexible(child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color), overflow: TextOverflow.ellipsis)),
+      ]),
+    ),
+  );
+}

@@ -189,7 +189,14 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
       body: donorsAsync.when(
         loading: () => Column(children: [
           Container(color: context.headerBg, height: top + 70),
-          const Expanded(child: Center(child: CircularProgressIndicator())),
+          Expanded(child: Center(child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 40),
+              itemCount: 6,
+              itemBuilder: (_, __) => _skeletonCard(),
+            ),
+          ))),
         ]),
         error: (e, _) => Column(children: [
           Container(color: context.headerBg, height: top + 70),
@@ -369,6 +376,29 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
   }
 }
 
+// ── Skeleton card ─────────────────────────────────────────────────────
+Widget _skeletonCard() => Container(
+  margin: const EdgeInsets.only(bottom: 10),
+  padding: const EdgeInsets.all(16),
+  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE5EBE9))),
+  child: Row(children: [
+    _Shimmer(width: 48, height: 48, radius: 24),
+    const SizedBox(width: 12),
+    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _Shimmer(width: 140, height: 14, radius: 7),
+      const SizedBox(height: 8),
+      _Shimmer(width: 100, height: 11, radius: 5),
+      const SizedBox(height: 6),
+      _Shimmer(width: 80, height: 11, radius: 5),
+    ])),
+    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+      _Shimmer(width: 60, height: 14, radius: 7),
+      const SizedBox(height: 8),
+      _Shimmer(width: 50, height: 22, radius: 11),
+    ]),
+  ]),
+);
+
 // ── Filter chip builder ───────────────────────────────────────────────
 Widget _buildChip(BuildContext ctx, String label, int count, bool active, {Color? activeColor, Color? activeBg}) {
   final fg = active ? (activeColor ?? _brand600) : ctx.textSub;
@@ -403,6 +433,41 @@ class _GenderPill extends StatelessWidget {
       const SizedBox(height: 2),
       Text(label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: fg.withValues(alpha: 0.8))),
     ]),
+  );
+}
+
+// ── Shimmer animation ─────────────────────────────────────────────────
+class _Shimmer extends StatefulWidget {
+  const _Shimmer({required this.width, required this.height, required this.radius});
+  final double width, height, radius;
+  @override
+  State<_Shimmer> createState() => _ShimmerState();
+}
+
+class _ShimmerState extends State<_Shimmer> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat(reverse: true);
+    _anim = Tween<double>(begin: 0.4, end: 1.0).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() { _ctrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _anim,
+    builder: (_, __) => Container(
+      width: widget.width, height: widget.height,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(widget.radius),
+        color: Color.lerp(const Color(0xFFE5EBE9), const Color(0xFFF4F7F6), _anim.value),
+      ),
+    ),
   );
 }
 

@@ -46,6 +46,8 @@ class RolesScreen extends StatefulWidget {
 }
 
 class _RolesScreenState extends State<RolesScreen> {
+  int _tab = 0; // 0=cards, 1=matrix
+
   void _openCreate() => _openSheet(context, null, () => setState(() {}));
   void _openEdit(AppRole r) => _openSheet(context, r, () => setState(() {}));
 
@@ -55,6 +57,84 @@ class _RolesScreenState extends State<RolesScreen> {
       content: Text('Role "${r.name}" deleted'),
       backgroundColor: _coral500,
       duration: const Duration(seconds: 2),
+    ));
+  }
+
+  Widget _cardView() => appRoles.isEmpty
+    ? const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.manage_accounts_outlined, size: 64, color: _onSurface3),
+        SizedBox(height: 12),
+        Text('No roles yet', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _onSurface2)),
+        SizedBox(height: 4),
+        Text('Tap "Create Role" to add one', style: TextStyle(fontSize: 13, color: _onSurface3)),
+      ]))
+    : Center(child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 900),
+        child: ListView.builder(
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 40),
+          itemCount: appRoles.length,
+          itemBuilder: (_, i) => _RoleCard(
+            role: appRoles[i],
+            onEdit: () => _openEdit(appRoles[i]),
+            onDelete: () => _delete(appRoles[i]),
+          ),
+        ),
+      ));
+
+  Widget _matrixView() {
+    if (appRoles.isEmpty) {
+      return const Center(child: Text('No roles to display', style: TextStyle(color: _onSurface3)));
+    }
+    return Center(child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 900),
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 40),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Container(
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: _border)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              // Header row
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: _border))),
+                child: Row(children: [
+                  SizedBox(width: 130, child: Text('Module', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _onSurface2))),
+                  ...appRoles.map((r) => SizedBox(width: 100, child: Text(r.name, textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis))),
+                ]),
+              ),
+              // Module rows
+              ..._kMods.map((m) {
+                return Container(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: _border))),
+                  child: Row(children: [
+                    SizedBox(width: 130, child: Row(children: [
+                      Icon(m.icon, size: 15, color: m.color),
+                      const SizedBox(width: 8),
+                      Flexible(child: Text(m.label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                    ])),
+                    ...appRoles.map((r) {
+                      final has = r.modules.contains(m.key);
+                      return SizedBox(width: 100, child: Center(child: Container(
+                        width: 28, height: 28,
+                        decoration: BoxDecoration(
+                          color: has ? m.color.withValues(alpha: 0.12) : const Color(0xFFF4F7F6),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: has ? m.color.withValues(alpha: 0.4) : const Color(0xFFE5EBE9)),
+                        ),
+                        child: Icon(has ? Icons.check_rounded : Icons.remove, size: 14, color: has ? m.color : const Color(0xFFD0D8D5)),
+                      )));
+                    }),
+                  ]),
+                );
+              }),
+            ]),
+          ),
+        ),
+      ),
     ));
   }
 
@@ -109,29 +189,22 @@ class _RolesScreenState extends State<RolesScreen> {
           ),
         )),
 
-        // ── Role cards ───────────────────────────────────────────────
-        Expanded(
-          child: appRoles.isEmpty
-              ? const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.manage_accounts_outlined, size: 64, color: _onSurface3),
-                  SizedBox(height: 12),
-                  Text('No roles yet', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _onSurface2)),
-                  SizedBox(height: 4),
-                  Text('Tap "Create Role" to add one', style: TextStyle(fontSize: 13, color: _onSurface3)),
-                ]))
-              : Center(child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 900),
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(18, 14, 18, 40),
-                    itemCount: appRoles.length,
-                    itemBuilder: (_, i) => _RoleCard(
-                      role: appRoles[i],
-                      onEdit: () => _openEdit(appRoles[i]),
-                      onDelete: () => _delete(appRoles[i]),
-                    ),
-                  ),
-                )),
-        ),
+        // ── Tab buttons ──────────────────────────────────────────────
+        Center(child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
+            child: Row(children: [
+              _TabBtn(label: 'Role Cards', icon: Icons.badge_outlined, active: _tab == 0, onTap: () => setState(() => _tab = 0)),
+              const SizedBox(width: 10),
+              _TabBtn(label: 'Permission Matrix', icon: Icons.grid_view_rounded, active: _tab == 1, onTap: () => setState(() => _tab = 1)),
+            ]),
+          ),
+        )),
+        const SizedBox(height: 4),
+
+        // ── Role cards / matrix ──────────────────────────────────────
+        Expanded(child: _tab == 0 ? _cardView() : _matrixView()),
       ]),
     );
   }
@@ -255,6 +328,37 @@ class _RoleCard extends StatelessWidget {
       ]),
     );
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// CREATE / EDIT DIALOG
+// ══════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════
+// TAB BUTTON
+// ══════════════════════════════════════════════════════════════════════
+class _TabBtn extends StatelessWidget {
+  const _TabBtn({required this.label, required this.icon, required this.active, required this.onTap});
+  final String label;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+      decoration: BoxDecoration(
+        color: active ? const Color(0xFF0E8C76) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: active ? const Color(0xFF0E8C76) : const Color(0xFFE5EBE9)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 15, color: active ? Colors.white : const Color(0xFF5A6B67)),
+        const SizedBox(width: 7),
+        Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : const Color(0xFF5A6B67))),
+      ]),
+    ),
+  );
 }
 
 // ══════════════════════════════════════════════════════════════════════
