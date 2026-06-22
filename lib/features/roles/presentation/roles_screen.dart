@@ -49,7 +49,7 @@ class _RolesScreenState extends State<RolesScreen> {
   void _openEdit(AppRole r) => _openSheet(context, r, () => setState(() {}));
 
   void _delete(AppRole r) {
-    setState(() => appRoles.remove(r));
+    setState(() { appRoles.remove(r); saveRoles(); });
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('Role "${r.name}" deleted'),
       backgroundColor: _coral500,
@@ -397,6 +397,7 @@ void _openSheet(BuildContext context, AppRole? existing, VoidCallback onSaved) {
                       existing.password = pass;
                       existing.modules  = Set.from(selected);
                     }
+                    saveRoles();
                     Navigator.pop(ctx);
                     onSaved();
                   },
