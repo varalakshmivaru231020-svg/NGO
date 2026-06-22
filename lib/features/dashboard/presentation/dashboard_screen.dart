@@ -116,10 +116,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 children: [
                   const SizedBox(height: 18),
                   _quickActionsSection(context),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
                   _kpiSection(context),
-                  const SizedBox(height: 14),
-                  _remindersStrip(context),
                   const SizedBox(height: 18),
                   _TrendCard(period: _period, onPeriodChange: (p) => setState(() => _period = p)),
                   const SizedBox(height: 14),
@@ -156,24 +154,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   );
 
   // ── KPI single row ───────────────────────────────────────────────
-  Widget _kpiSection(BuildContext ctx) {
-    final screenW = MediaQuery.of(ctx).size.width;
-    final sidebarW = screenW >= 1060 ? 224.0 : screenW >= 700 ? 68.0 : 0.0;
-    final availW = screenW - sidebarW - 36;
-    final cardW = ((availW / 4) - 9).clamp(130.0, 200.0);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      child: Row(children: [
-        _KPICard(width: cardW, label: 'Total Offices',  value: '4',       icon: Icons.business_outlined,               fg: _sky500,    bg: _sky100,    onTap: () {}),
-        const SizedBox(width: 10),
-        _KPICard(width: cardW, label: 'Total Donors',   value: '836',     icon: Icons.people_outlined,                 fg: _brand600,  bg: _brand100,  onTap: () => ctx.go('/donors')),
-        const SizedBox(width: 10),
-        _KPICard(width: cardW, label: 'Total Students', value: '178',     icon: Icons.school_outlined,                 fg: _violet500, bg: _violet100, onTap: () => ctx.go('/students')),
-        const SizedBox(width: 10),
-        _KPICard(width: cardW, label: 'Total Raised',   value: '₹56.1L',  icon: Icons.account_balance_wallet_outlined, fg: _amber600,  bg: _amber100,  onTap: () => ctx.go('/donations')),
-      ]),
-    );
-  }
+  Widget _kpiSection(BuildContext ctx) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 18),
+    child: Row(children: [
+      Expanded(child: _KPICard(label: 'Total Offices',  value: '4',       icon: Icons.business_outlined,               fg: _sky500,    bg: _sky100,    onTap: () {})),
+      const SizedBox(width: 10),
+      Expanded(child: _KPICard(label: 'Total Donors',   value: '836',     icon: Icons.people_outlined,                 fg: _brand600,  bg: _brand100,  onTap: () => ctx.go('/donors'))),
+      const SizedBox(width: 10),
+      Expanded(child: _KPICard(label: 'Total Students', value: '178',     icon: Icons.school_outlined,                 fg: _violet500, bg: _violet100, onTap: () => ctx.go('/students'))),
+      const SizedBox(width: 10),
+      Expanded(child: _KPICard(label: 'Total Raised',   value: '₹56.1L',  icon: Icons.account_balance_wallet_outlined, fg: _amber600,  bg: _amber100,  onTap: () => ctx.go('/donations'))),
+    ]),
+  );
 
   // ── Reminders strip ───────────────────────────────────────────────
   Widget _remindersStrip(BuildContext ctx) => GestureDetector(
@@ -411,8 +403,7 @@ class _QA extends StatelessWidget {
 
 // ── KPI Card ──────────────────────────────────────────────────────────
 class _KPICard extends StatelessWidget {
-  const _KPICard({required this.width, required this.label, required this.value, required this.icon, required this.fg, required this.bg, required this.onTap});
-  final double width;
+  const _KPICard({required this.label, required this.value, required this.icon, required this.fg, required this.bg, required this.onTap});
   final String label, value;
   final IconData icon;
   final Color fg, bg;
@@ -420,30 +411,25 @@ class _KPICard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
-    child: SizedBox(
-      width: width,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-        decoration: BoxDecoration(
-          color: context.cardBg,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: context.border),
-          boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 6, offset: Offset(0, 2))],
-        ),
-        child: Row(children: [
-          Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
-            child: Icon(icon, color: fg, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.5, color: context.textPrimary, height: 1)),
-            const SizedBox(height: 3),
-            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: context.textSub)),
-          ])),
-        ]),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+      decoration: BoxDecoration(
+        color: context.cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.border),
+        boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 6, offset: Offset(0, 2))],
       ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(11)),
+          child: Icon(icon, color: fg, size: 20),
+        ),
+        const SizedBox(height: 10),
+        Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5, color: context.textPrimary, height: 1)),
+        const SizedBox(height: 4),
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.textSub)),
+      ]),
     ),
   );
 }
