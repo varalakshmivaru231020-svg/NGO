@@ -107,28 +107,31 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         return (id: m['id'] as String? ?? '', name: m['name'] as String? ?? '', city: m['city'] as String? ?? '');
       }).toList();
 
+      final fallback = [
+        (id: 'sulibele',   name: 'Sulibele'),
+        (id: 'bangalore',  name: 'Bangalore'),
+        (id: 'hosur',      name: 'Hosur'),
+        (id: 'mysore',     name: 'Mysore'),
+      ];
       if (mounted) setState(() {
-        _centres    = centres;
+        _centres    = centres.isNotEmpty ? centres : fallback;
         _apiDonors  = donors;
-        if (centres.isNotEmpty) {
-          _centreName = centres.first.name;
-          _centreId   = centres.first.id;
-        }
+        _centreName = _centres.first.name;
+        _centreId   = _centres.first.id;
         _loadingForm = false;
       });
     } catch (_) {
+      final fallback = [
+        (id: 'sulibele',   name: 'Sulibele'),
+        (id: 'bangalore',  name: 'Bangalore'),
+        (id: 'hosur',      name: 'Hosur'),
+        (id: 'mysore',     name: 'Mysore'),
+      ];
       if (mounted) setState(() {
         _loadingForm = false;
-        if (_centres.isEmpty) {
-          _centres = [
-            (id: 'sulibele', name: 'Sulibele'),
-            (id: 'bangalore', name: 'Bangalore'),
-            (id: 'hosur', name: 'Hosur'),
-            (id: 'mysore', name: 'Mysore'),
-          ];
-          _centreName = _centres.first.name;
-          _centreId   = _centres.first.id;
-        }
+        _centres    = fallback;
+        _centreName = fallback.first.name;
+        _centreId   = fallback.first.id;
       });
     }
   }

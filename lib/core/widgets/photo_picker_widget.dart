@@ -1,5 +1,6 @@
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 import 'dart:typed_data';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 const _brand600   = Color(0xFF0E8C76);
@@ -32,14 +33,20 @@ class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
   Future<void> _pickImage() async {
     setState(() => _loading = true);
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: false,
-        withData: true,
-      );
-      if (result != null && result.files.isNotEmpty && mounted) {
-        final bytes = result.files.single.bytes;
-        if (bytes != null) {
+      // capture="user" — opens front camera on mobile, file picker on desktop
+      final input = html.FileUploadInputElement()
+        ..accept = 'image/*';
+      input.setAttribute('capture', 'user');
+      input.click();
+      await input.onChange.first;
+      final files = input.files;
+      if (files != null && files.isNotEmpty && mounted) {
+        final reader = html.FileReader();
+        reader.readAsArrayBuffer(files[0]);
+        await reader.onLoadEnd.first;
+        final buffer = reader.result;
+        if (buffer is ByteBuffer && mounted) {
+          final bytes = buffer.asUint8List();
           setState(() => _bytes = bytes);
           widget.onImageChanged?.call(bytes);
         }
@@ -87,4 +94,3 @@ class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
     Text(widget.label, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: _onSurface3)),
   ]);
 }
-
