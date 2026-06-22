@@ -117,7 +117,19 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         _loadingForm = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _loadingForm = false);
+      if (mounted) setState(() {
+        _loadingForm = false;
+        if (_centres.isEmpty) {
+          _centres = [
+            (id: 'sulibele', name: 'Sulibele'),
+            (id: 'bangalore', name: 'Bangalore'),
+            (id: 'hosur', name: 'Hosur'),
+            (id: 'mysore', name: 'Mysore'),
+          ];
+          _centreName = _centres.first.name;
+          _centreId   = _centres.first.id;
+        }
+      });
     }
   }
 
@@ -728,10 +740,12 @@ class _DocUploadRowState extends State<_DocUploadRow> {
 
   void _view() {
     if (_bytes == null) return;
-    final blob = html.Blob([_bytes!]);
+    final name = _filename ?? 'document';
+    final mimeType = name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg';
+    final blob = html.Blob([_bytes!], mimeType);
     final url = html.Url.createObjectUrlFromBlob(blob);
     html.window.open(url, '_blank');
-    html.Url.revokeObjectUrl(url);
+    // URL is intentionally kept alive so the opened tab can load the file
   }
 
   @override

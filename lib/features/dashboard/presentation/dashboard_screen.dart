@@ -155,20 +155,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ),
   );
 
-  // ── KPI 2×2 ──────────────────────────────────────────────────────
-  Widget _kpiSection(BuildContext ctx) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 18),
-    child: GridView.count(
-      crossAxisCount: 2, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.28,
-      children: [
-        _KPICard(label: 'Total Offices',  value: '4',      icon: Icons.business_outlined,              fg: _sky500,    bg: _sky100,    delta: null,   onTap: () {}),
-        _KPICard(label: 'Total Donors',   value: '836',    icon: Icons.people_outlined,                fg: _brand600,  bg: _brand100,  delta: '+12',  onTap: () => ctx.go('/donors')),
-        _KPICard(label: 'Total Students', value: '178',    icon: Icons.school_outlined,                fg: _violet500, bg: _violet100, delta: '+6',   onTap: () => ctx.go('/students')),
-        _KPICard(label: 'Total Raised',   value: '₹56.1L', icon: Icons.account_balance_wallet_outlined, fg: _amber600,  bg: _amber100,  delta: '+8%',  onTap: () => ctx.go('/donations')),
-      ],
-    ),
-  );
+  // ── KPI single row ───────────────────────────────────────────────
+  Widget _kpiSection(BuildContext ctx) {
+    final screenW = MediaQuery.of(ctx).size.width;
+    final sidebarW = screenW >= 1060 ? 224.0 : screenW >= 700 ? 68.0 : 0.0;
+    final availW = screenW - sidebarW - 36; // 36 = horizontal padding
+    final cardW = (availW / 4) - 9; // 4 cards, 3 gaps of 12px
+    final fixedW = cardW.clamp(140.0, 220.0);
+    return SizedBox(
+      height: 110,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        physics: const BouncingScrollPhysics(),
+        children: [
+          SizedBox(width: fixedW, child: _KPICard(label: 'Total Offices',  value: '4',      icon: Icons.business_outlined,               fg: _sky500,    bg: _sky100,    delta: null,  onTap: () {})),
+          const SizedBox(width: 12),
+          SizedBox(width: fixedW, child: _KPICard(label: 'Total Donors',   value: '836',    icon: Icons.people_outlined,                 fg: _brand600,  bg: _brand100,  delta: '+12', onTap: () => ctx.go('/donors'))),
+          const SizedBox(width: 12),
+          SizedBox(width: fixedW, child: _KPICard(label: 'Total Students', value: '178',    icon: Icons.school_outlined,                 fg: _violet500, bg: _violet100, delta: '+6',  onTap: () => ctx.go('/students'))),
+          const SizedBox(width: 12),
+          SizedBox(width: fixedW, child: _KPICard(label: 'Total Raised',   value: '₹56.1L', icon: Icons.account_balance_wallet_outlined, fg: _amber600,  bg: _amber100,  delta: '+8%', onTap: () => ctx.go('/donations'))),
+        ],
+      ),
+    );
+  }
 
   // ── Reminders strip ───────────────────────────────────────────────
   Widget _remindersStrip(BuildContext ctx) => GestureDetector(

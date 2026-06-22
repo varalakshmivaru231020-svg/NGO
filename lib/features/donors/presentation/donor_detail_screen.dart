@@ -278,8 +278,8 @@ class _DonorDetailScreenState extends State<DonorDetailScreen> with SingleTicker
 
         Expanded(child: TabBarView(controller: _tabs, children: [
           _OverviewTab(donor: _donor!),
-          _DonationsTab(donations: _donations),
-          _SponsoredTab(donor: _donor!),
+          _DonationsTab(donations: _donations, donorId: widget.id),
+          _SponsoredTab(donor: _donor!, donorId: widget.id),
           _DocumentsTab(donorId: widget.id),
           _AchievementsTab(donorId: widget.id),
         ])),
@@ -430,10 +430,20 @@ class _OverviewTab extends StatelessWidget {
   }
 }
 
+// ── global donation + sponsor store (keyed by donor id) ──────────────
+final _donorLocalDonations = <String, List<Map<String, dynamic>>>{};
+final _donorLocalSponsors  = <String, List<Map<String, dynamic>>>{};
+
 // ── donations tab ─────────────────────────────────────────────────────
-class _DonationsTab extends StatelessWidget {
-  const _DonationsTab({required this.donations});
+class _DonationsTab extends StatefulWidget {
+  const _DonationsTab({required this.donations, required this.donorId});
   final List<Map<String, dynamic>> donations;
+  final String donorId;
+  @override
+  State<_DonationsTab> createState() => _DonationsTabState();
+}
+
+class _DonationsTabState extends State<_DonationsTab> {
 
   Color _typeColor(String t) {
     if (t.contains('Education') || t.contains('School')) return _violet500;
@@ -443,18 +453,112 @@ class _DonationsTab extends StatelessWidget {
     return _sky500;
   }
 
+  void _openAddDonation() {
+    final amountCtrl = TextEditingController();
+    String type = 'Education Fund';
+    String method = 'UPI';
+    const types = ['Education Fund', 'Child Sponsorship', 'Healthcare', 'General Donation', 'Food & Nutrition'];
+    const methods = ['UPI', 'Bank Transfer', 'Cheque', 'Cash'];
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Padding(
+            padding: const EdgeInsets.all(22),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Add Donation', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _onSurface1)),
+              const SizedBox(height: 16),
+              const Text('Amount (₹)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _onSurface2)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: amountCtrl, keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  hintText: 'e.g. 5000', prefixText: '₹ ',
+                  filled: true, fillColor: const Color(0xFFF4F7F6),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE5EBE9))),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE5EBE9))),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text('Donation Type', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _onSurface2)),
+              const SizedBox(height: 6),
+              Wrap(spacing: 6, runSpacing: 6, children: types.map((t) => GestureDetector(
+                onTap: () => setSt(() => type = t),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: type == t ? _brand600 : const Color(0xFFF4F7F6),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: type == t ? _brand600 : const Color(0xFFE5EBE9)),
+                  ),
+                  child: Text(t, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: type == t ? Colors.white : _onSurface2)),
+                ),
+              )).toList()),
+              const SizedBox(height: 14),
+              const Text('Payment Method', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _onSurface2)),
+              const SizedBox(height: 6),
+              Wrap(spacing: 6, children: methods.map((m) => GestureDetector(
+                onTap: () => setSt(() => method = m),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: method == m ? _brand600 : const Color(0xFFF4F7F6),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: method == m ? _brand600 : const Color(0xFFE5EBE9)),
+                  ),
+                  child: Text(m, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: method == m ? Colors.white : _onSurface2)),
+                ),
+              )).toList()),
+              const SizedBox(height: 20),
+              Row(children: [
+                Expanded(child: OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: OutlinedButton.styleFrom(foregroundColor: _onSurface2, side: const BorderSide(color: Color(0xFFE5EBE9)), padding: const EdgeInsets.symmetric(vertical: 13), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),
+                )),
+                const SizedBox(width: 12),
+                Expanded(child: ElevatedButton(
+                  onPressed: () {
+                    final amt = int.tryParse(amountCtrl.text.trim()) ?? 0;
+                    if (amt <= 0) return;
+                    final now = DateTime.now();
+                    _donorLocalDonations.putIfAbsent(widget.donorId, () => []).insert(0, {
+                      'amount': amt, 'donationType': type, 'paymentMethod': method,
+                      'date': '${now.day.toString().padLeft(2,'0')}-${now.month.toString().padLeft(2,'0')}-${now.year}',
+                      'receiptNo': 'SF/${now.year % 100}-${(now.year%100)+1}/${(1000 + (_donorLocalDonations[widget.donorId]?.length ?? 0))}',
+                    });
+                    Navigator.pop(ctx);
+                    setState(() {});
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 13), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
+                  child: const Text('Save Donation', style: TextStyle(fontWeight: FontWeight.w700)),
+                )),
+              ]),
+            ]),
+          ),
+        ),
+      )),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final allDonations = [...(_donorLocalDonations[widget.donorId] ?? []), ...widget.donations];
     return Column(children: [
       // header with + button
       Padding(
         padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
         child: Row(children: [
-          Text('${donations.length} Donation${donations.length == 1 ? '' : 's'}',
+          Text('${allDonations.length} Donation${allDonations.length == 1 ? '' : 's'}',
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _onSurface2)),
           const Spacer(),
           GestureDetector(
-            onTap: () {},
+            onTap: _openAddDonation,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(10)),
@@ -467,7 +571,7 @@ class _DonationsTab extends StatelessWidget {
           ),
         ]),
       ),
-      if (donations.isEmpty)
+      if (allDonations.isEmpty)
         const Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
           Text('💸', style: TextStyle(fontSize: 44)),
           SizedBox(height: 12),
@@ -477,10 +581,10 @@ class _DonationsTab extends StatelessWidget {
       Expanded(child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(18, 4, 18, 40),
         physics: const BouncingScrollPhysics(),
-        itemCount: donations.length,
+        itemCount: allDonations.length,
         separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (_, i) {
-        final d = donations[i];
+        final d = allDonations[i];
         final typeMap = d['type'] as Map<String, dynamic>?;
         final label = typeMap?['label'] as String? ?? d['donationType'] as String? ?? 'Donation';
         final amount = d['amount'] as int? ?? 0;
@@ -723,30 +827,101 @@ class _DocumentsTabState extends State<_DocumentsTab> {
 }
 
 // ── sponsored children tab ────────────────────────────────────────────
-class _SponsoredTab extends StatelessWidget {
-  const _SponsoredTab({required this.donor});
+class _SponsoredTab extends StatefulWidget {
+  const _SponsoredTab({required this.donor, required this.donorId});
   final Map<String, dynamic> donor;
+  final String donorId;
+  @override
+  State<_SponsoredTab> createState() => _SponsoredTabState();
+}
 
+class _SponsoredTabState extends State<_SponsoredTab> {
   bool get _isChildSponsor {
-    final cats = donor['categories'] as List<dynamic>? ?? [];
+    final cats = widget.donor['categories'] as List<dynamic>? ?? [];
     return cats.any((c) {
       final name = ((c as Map<String, dynamic>?)?['category'] as Map<String, dynamic>?)?['name'] as String? ?? '';
       return name.toLowerCase().contains('sponsor');
     });
   }
 
+  void _openAddSponsor(List<Map<String, dynamic>> allChildren) {
+    final nameCtrl   = TextEditingController();
+    final idCtrl     = TextEditingController(text: 'SKT-C-${(1000 + allChildren.length + 1).toString().padLeft(4,'0')}');
+    final amtCtrl    = TextEditingController();
+    final centreCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Padding(
+            padding: const EdgeInsets.all(22),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Add Sponsored Child', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _onSurface1)),
+              const SizedBox(height: 16),
+              _SponsorField(ctrl: nameCtrl,   label: 'Child Name',   hint: 'e.g. Aarav Kumar'),
+              const SizedBox(height: 10),
+              _SponsorField(ctrl: idCtrl,     label: 'Child ID',     hint: 'SKT-C-0001'),
+              const SizedBox(height: 10),
+              _SponsorField(ctrl: amtCtrl,    label: 'Amount / year (₹)', hint: 'e.g. 18000', keyboard: TextInputType.number),
+              const SizedBox(height: 10),
+              _SponsorField(ctrl: centreCtrl, label: 'Centre',       hint: 'e.g. Sulibele'),
+              const SizedBox(height: 20),
+              Row(children: [
+                Expanded(child: OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: OutlinedButton.styleFrom(foregroundColor: _onSurface2, side: const BorderSide(color: _border), padding: const EdgeInsets.symmetric(vertical: 13), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),
+                )),
+                const SizedBox(width: 12),
+                Expanded(child: ElevatedButton(
+                  onPressed: () {
+                    final name = nameCtrl.text.trim();
+                    if (name.isEmpty) return;
+                    final amt = amtCtrl.text.trim();
+                    final now = DateTime.now();
+                    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                    _donorLocalSponsors.putIfAbsent(widget.donorId, () => []).add({
+                      'name':    name,
+                      'childId': idCtrl.text.trim(),
+                      'age':     0,
+                      'centre':  centreCtrl.text.trim().isNotEmpty ? centreCtrl.text.trim() : 'Main',
+                      'since':   '${months[now.month - 1]} ${now.year}',
+                      'amount':  amt.isNotEmpty ? '₹${int.tryParse(amt) != null ? _fmtAmt(int.parse(amt)) : amt} / yr' : '—',
+                      'status':  'Active',
+                    });
+                    Navigator.pop(ctx);
+                    setState(() {});
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 13), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
+                  child: const Text('Add Child', style: TextStyle(fontWeight: FontWeight.w700)),
+                )),
+              ]),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _fmtAmt(int v) {
+    if (v >= 100000) return '${(v / 100000).toStringAsFixed(1)}L';
+    if (v >= 1000)   return '${(v / 1000).toStringAsFixed(0)}K';
+    return v.toString();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final id = donor['id'] as String? ?? '';
+    final id = widget.donor['id'] as String? ?? '';
     final showMock = _isChildSponsor || id == 'd1' || id == 'd7' || id == 'd11';
-
-    final children = showMock
-        ? [
-            {'name': 'Aarav Kumar',  'childId': 'SKT-C-0001', 'age': 12, 'centre': 'Sulibele',  'since': 'Jul 2022', 'amount': '₹18,000 / yr', 'status': 'Active'},
-          ]
+    final mockList = showMock
+        ? [{'name': 'Aarav Kumar', 'childId': 'SKT-C-0001', 'age': 12, 'centre': 'Sulibele', 'since': 'Jul 2022', 'amount': '₹18,000 / yr', 'status': 'Active'}]
         : <Map<String, dynamic>>[];
+    final allChildren = <Map<String, dynamic>>[...mockList, ...(_donorLocalSponsors[widget.donorId] ?? [])];
 
-    if (children.isEmpty) {
+    if (allChildren.isEmpty) {
       return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         const Icon(Icons.child_care_outlined, size: 44, color: _onSurface3),
         const SizedBox(height: 12),
@@ -754,14 +929,17 @@ class _SponsoredTab extends StatelessWidget {
         const SizedBox(height: 6),
         const Text('This donor has not sponsored any child yet.', style: TextStyle(fontSize: 13, color: _onSurface3)),
         const SizedBox(height: 20),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(14)),
-          child: const Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.add, color: Colors.white, size: 18),
-            SizedBox(width: 6),
-            Text('Add Sponsor', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
-          ]),
+        GestureDetector(
+          onTap: () => _openAddSponsor(allChildren),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(14)),
+            child: const Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.add, color: Colors.white, size: 18),
+              SizedBox(width: 6),
+              Text('Add Sponsor', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
+            ]),
+          ),
         ),
       ]));
     }
@@ -776,12 +954,12 @@ class _SponsoredTab extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
             decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8)),
-            child: Text('${children.length} active', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _brand600)),
+            child: Text('${allChildren.length} active', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _brand600)),
           ),
         ]),
         const SizedBox(height: 10),
         GestureDetector(
-          onTap: () {},
+          onTap: () => _openAddSponsor(allChildren),
           child: Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 13),
@@ -794,7 +972,7 @@ class _SponsoredTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        ...children.map((child) {
+        ...allChildren.map((child) {
           final name = child['name'] as String;
           final initials = name.split(' ').map((p) => p[0]).take(2).join();
           return Container(
@@ -839,6 +1017,24 @@ class _SponsoredTab extends StatelessWidget {
       ],
     );
   }
+}
+
+// ── sponsor field helper ──────────────────────────────────────────────
+class _SponsorField extends StatelessWidget {
+  const _SponsorField({required this.ctrl, required this.label, required this.hint, this.keyboard = TextInputType.text});
+  final TextEditingController ctrl;
+  final String label, hint;
+  final TextInputType keyboard;
+  @override
+  Widget build(BuildContext context) => TextField(
+    controller: ctrl,
+    keyboardType: keyboard,
+    decoration: InputDecoration(
+      labelText: label, hintText: hint, isDense: true,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    ),
+  );
 }
 
 // ── achievements tab ──────────────────────────────────────────────────

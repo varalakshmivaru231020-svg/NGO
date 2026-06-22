@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/api_client.dart';
-import '../../../core/utils/native_file_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../donors/presentation/donors_screen.dart' show demoLocalDonors, mockDonorData;
 import 'receipt_generator.dart';
@@ -444,8 +444,12 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
               GestureDetector(
                 onTap: _pickingFile ? null : () async {
                   setState(() => _pickingFile = true);
-                  final result = await NativeFilePicker.pickAny();
-                  if (result != null && mounted) setState(() => _attachments.add(result.name));
+                  try {
+                    final result = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
+                    if (result != null && result.files.isNotEmpty && mounted) {
+                      setState(() => _attachments.add(result.files.single.name));
+                    }
+                  } catch (_) {}
                   if (mounted) setState(() => _pickingFile = false);
                 },
                 child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 20),
