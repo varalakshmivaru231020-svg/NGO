@@ -225,189 +225,149 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
             key: _form,
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 680),
+                  constraints: const BoxConstraints(maxWidth: 720),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-                // Basic Information
-                _SectionCard(title: 'Basic Information', children: [
-                  _FieldLabel('Full Name'),
-                  _textField(context, _name, hint: 'e.g. Rajesh Khanna', validator: (v) => v!.isEmpty ? 'Required' : null),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Gender'),
-                  _GenderToggle(value: _gender, onChanged: (v) => setState(() => _gender = v)),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Mobile'),
-                  PhoneFieldWithCode(ctrl: _mobile, required: true),
-                  const SizedBox(height: 14),
-                  _FieldLabel('WhatsApp'),
-                  PhoneFieldWithCode(ctrl: _whatsapp),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Email'),
-                  _textField(context, _email, hint: 'name@email.com', keyboardType: TextInputType.emailAddress),
-                ]),
-                const SizedBox(height: 14),
-
-                // Categorization
-                _SectionCard(title: 'Categorization', children: [
-                  _FieldLabel('Donor Category'),
-                  _CategoryDropdown(value: _category, onChanged: (v) => setState(() => _category = v)),
-                ]),
-                const SizedBox(height: 14),
-
-                // Identity
-                _SectionCard(title: 'Identity', children: [
-                  _FieldLabel('PAN Number'),
-                  _textField(context, _pan, hint: 'ABCDE1234F',
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')), LengthLimitingTextInputFormatter(10)],
-                    textCapitalization: TextCapitalization.characters,
+                // ── Basic Information ─────────────────────────────────
+                _Section(title: 'Basic Information', children: [
+                  _Row2(
+                    left:  _Field(label: 'Full Name *',  child: _textField(context, _name,  hint: 'e.g. Rajesh Khanna', validator: (v) => v!.isEmpty ? 'Required' : null)),
+                    right: _Field(label: 'Gender',        child: _GenderToggle(value: _gender, onChanged: (v) => setState(() => _gender = v))),
                   ),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Aadhaar (optional)'),
-                  _textField(context, _aadhaar, hint: '0000 0000 0000', keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(12)]),
+                  _Row2(
+                    left:  _Field(label: 'Mobile *',     child: PhoneFieldWithCode(ctrl: _mobile, required: true)),
+                    right: _Field(label: 'WhatsApp',     child: PhoneFieldWithCode(ctrl: _whatsapp)),
+                  ),
+                  _Row2(
+                    left:  _Field(label: 'Email',        child: _textField(context, _email, hint: 'name@email.com', keyboardType: TextInputType.emailAddress)),
+                    right: _Field(label: 'Donor Category', child: _CategoryDropdown(value: _category, onChanged: (v) => setState(() => _category = v))),
+                  ),
                 ]),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
 
-                // Address
-                _SectionCard(title: 'Address', children: [
-                  _FieldLabel('Street Address'),
-                  _textField(context, _street, hint: 'House / Street / Area', maxLines: 2),
-                  const SizedBox(height: 14),
-                  Row(children: [
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _FieldLabel('City'),
-                      _textField(context, _city, hint: 'City'),
-                    ])),
-                    const SizedBox(width: 12),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _FieldLabel('State'),
-                      _textField(context, _state, hint: 'State'),
-                    ])),
-                  ]),
-                  const SizedBox(height: 14),
-                  Row(children: [
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _FieldLabel('Country'),
-                      _textField(context, _country, hint: 'Country'),
-                    ])),
-                    const SizedBox(width: 12),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _FieldLabel('Pincode'),
-                      _textField(context, _pincode, hint: '000000', keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)]),
-                    ])),
-                  ]),
+                // ── Identity ──────────────────────────────────────────
+                _Section(title: 'Identity', children: [
+                  _Row2(
+                    left:  _Field(label: 'PAN Number', child: _textField(context, _pan, hint: 'ABCDE1234F',
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')), LengthLimitingTextInputFormatter(10)],
+                      textCapitalization: TextCapitalization.characters)),
+                    right: _Field(label: 'Aadhaar', child: _textField(context, _aadhaar, hint: '0000 0000 0000',
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(12)])),
+                  ),
                 ]),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
 
-                // Personal & Professional
-                _SectionCard(title: 'Personal & Professional', children: [
-                  _FieldLabel('Date of Birth'),
-                  _DateField(ctrl: _dob, hint: 'DD / MM / YYYY', onTap: () => _pickDate(_dob)),
+                // ── Address ───────────────────────────────────────────
+                _Section(title: 'Address', children: [
+                  _Field(label: 'Street Address', child: _textField(context, _street, hint: 'House / Street / Area', maxLines: 2)),
                   const SizedBox(height: 14),
-                  _FieldLabel('Anniversary'),
-                  _DateField(ctrl: _anniv, hint: 'DD / MM / YYYY', onTap: () => _pickDate(_anniv)),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Occupation / Designation'),
-                  _textField(context, _occupation, hint: 'e.g. Business Owner'),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Organisation Name'),
-                  _textField(context, _org, hint: 'Company / Trust / Employer'),
+                  _Row2(
+                    left:  _Field(label: 'City',    child: _textField(context, _city,    hint: 'City')),
+                    right: _Field(label: 'State',   child: _textField(context, _state,   hint: 'State')),
+                  ),
+                  _Row2(
+                    left:  _Field(label: 'Country', child: _textField(context, _country, hint: 'Country')),
+                    right: _Field(label: 'Pincode', child: _textField(context, _pincode, hint: '000000',
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)])),
+                  ),
                 ]),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
 
-                // Communication Preferences
-                _SectionCard(title: 'Communication Preferences', children: [
-                  _FieldLabel('Preferred Method'),
-                  const SizedBox(height: 8),
-                  StatefulBuilder(builder: (ctx, ss) => Wrap(spacing: 8, children: _preferredMethods.map((m) {
-                    final active = _commPref.contains(m);
-                    return GestureDetector(
-                      onTap: () { ss(() { setState(() { active ? _commPref.remove(m) : _commPref.add(m); }); }); },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-                        decoration: BoxDecoration(
-                          color: active ? _brand600 : ctx.cardBg,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: active ? _brand600 : ctx.border, width: 1.5),
-                        ),
-                        child: Text(m, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: active ? Colors.white : ctx.textSub)),
-                      ),
-                    );
-                  }).toList())),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Preferred Language'),
-                  _textField(context, _lang, hint: 'e.g. English, Hindi'),
+                // ── Personal & Professional ───────────────────────────
+                _Section(title: 'Personal & Professional', children: [
+                  _Row2(
+                    left:  _Field(label: 'Date of Birth',   child: _DateField(ctrl: _dob,   hint: 'DD / MM / YYYY', onTap: () => _pickDate(_dob))),
+                    right: _Field(label: 'Anniversary',     child: _DateField(ctrl: _anniv, hint: 'DD / MM / YYYY', onTap: () => _pickDate(_anniv))),
+                  ),
+                  _Row2(
+                    left:  _Field(label: 'Occupation',      child: _textField(context, _occupation, hint: 'e.g. Business Owner')),
+                    right: _Field(label: 'Organisation',    child: _textField(context, _org,        hint: 'Company / Trust')),
+                  ),
                 ]),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
 
-                // Notes
-                _SectionCard(title: 'Notes', children: [
-                  _textField(context, _notes, hint: 'Preferences, giving history, context…', maxLines: 4),
+                // ── Communication ─────────────────────────────────────
+                _Section(title: 'Communication Preferences', children: [
+                  _Row2(
+                    left: _Field(label: 'Preferred Language', child: _textField(context, _lang, hint: 'e.g. English, Hindi')),
+                    right: _Field(label: 'Preferred Method', child: StatefulBuilder(builder: (ctx, ss) =>
+                      Wrap(spacing: 8, children: _preferredMethods.map((m) {
+                        final active = _commPref.contains(m);
+                        return GestureDetector(
+                          onTap: () => ss(() => setState(() => active ? _commPref.remove(m) : _commPref.add(m))),
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: active ? _brand600 : Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: active ? _brand600 : ctx.border, width: 1.5),
+                            ),
+                            child: Text(m, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : ctx.textSub)),
+                          ),
+                        );
+                      }).toList()),
+                    )),
+                  ),
                 ]),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
 
-                // Attachments
-                _SectionCard(title: 'Attachments', children: [
+                // ── Notes ─────────────────────────────────────────────
+                _Section(title: 'Notes', children: [
+                  _Field(label: 'Additional Notes', child: _textField(context, _notes, hint: 'Preferences, giving history, context…', maxLines: 4)),
+                ]),
+                const SizedBox(height: 16),
+
+                // ── Attachments ───────────────────────────────────────
+                _Section(title: 'Attachments', children: [
                   GestureDetector(
                     onTap: _addingFile ? null : () async {
                       setState(() => _addingFile = true);
                       try {
-                        final result = await FilePicker.platform.pickFiles(
-                          allowMultiple: false,
-                          withData: true,
-                        );
+                        final result = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
                         if (result != null && result.files.isNotEmpty && mounted) {
                           final name = result.files.single.name;
-                          if (name.isNotEmpty) {
-                            setState(() => _attachments.add(name));
-                          }
+                          if (name.isNotEmpty) setState(() => _attachments.add(name));
                         }
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Could not pick file: $e'), backgroundColor: _errorColor),
-                          );
-                        }
-                      }
+                      } catch (_) {}
                       if (mounted) setState(() => _addingFile = false);
                     },
                     child: Container(
-                      width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.border, width: 1.5)),
+                      width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF7FAF9), borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFD8E5E0), width: 1.5),
+                      ),
                       child: _addingFile
                         ? const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600)))
                         : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            Icon(Icons.attach_file_rounded, size: 18, color: context.textHint),
+                            const Icon(Icons.attach_file_rounded, size: 18, color: _brand600),
                             const SizedBox(width: 8),
-                            Text('Select File (PDF, Image, Doc — any type)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.textHint)),
+                            const Text('Select File', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _brand600)),
                           ]),
                     ),
                   ),
                   if (_attachments.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    ..._attachments.asMap().entries.map((e) => Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                        decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(10)),
-                        child: Row(children: [
-                          const Icon(Icons.insert_drive_file_outlined, size: 16, color: _brand600),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(e.value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _brand600), overflow: TextOverflow.ellipsis)),
-                          GestureDetector(
-                            onTap: () => setState(() => _attachments.removeAt(e.key)),
-                            child: const Icon(Icons.close, size: 16, color: _brand600),
-                          ),
-                        ]),
-                      ),
+                    ..._attachments.asMap().entries.map((e) => Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                      decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(10)),
+                      child: Row(children: [
+                        const Icon(Icons.insert_drive_file_outlined, size: 16, color: _brand600),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(e.value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _brand600), overflow: TextOverflow.ellipsis)),
+                        GestureDetector(onTap: () => setState(() => _attachments.removeAt(e.key)), child: const Icon(Icons.close, size: 16, color: _brand600)),
+                      ]),
                     )),
                   ],
                 ]),
-                const SizedBox(height: 24),
+                const SizedBox(height: 28),
               ]),
                 ),
               ),
@@ -478,6 +438,59 @@ class _SectionCard extends StatelessWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
     ),
+  ]);
+}
+
+// ── Section (replaces SectionCard for new grid layout) ───────────────
+class _Section extends StatelessWidget {
+  const _Section({required this.title, required this.children});
+  final String title;
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Padding(
+      padding: const EdgeInsets.only(left: 2, bottom: 10),
+      child: Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF0E8C76), letterSpacing: 0.3)),
+    ),
+    Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE5EBE9)),
+        boxShadow: const [BoxShadow(color: Color(0x060D2822), blurRadius: 8, offset: Offset(0, 2))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+    ),
+  ]);
+}
+
+// ── Two-column row ────────────────────────────────────────────────────
+class _Row2 extends StatelessWidget {
+  const _Row2({required this.left, required this.right});
+  final Widget left, right;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(child: left),
+      const SizedBox(width: 14),
+      Expanded(child: right),
+    ]),
+  );
+}
+
+// ── Labelled field wrapper ─────────────────────────────────────────────
+class _Field extends StatelessWidget {
+  const _Field({required this.label, required this.child});
+  final String label;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Color(0xFF5A6B67))),
+    const SizedBox(height: 6),
+    child,
   ]);
 }
 
