@@ -249,9 +249,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
-    // 2. Role credentials (case-insensitive name)
+    // 2. Role credentials (by name or email, case-insensitive)
     final role = appRoles.where(
-      (r) => r.name.toLowerCase() == name.toLowerCase() && r.password == password,
+      (r) => (r.name.toLowerCase() == name.toLowerCase() || r.email.toLowerCase() == name.toLowerCase()) && r.password == password,
     ).firstOrNull;
 
     if (role != null) {

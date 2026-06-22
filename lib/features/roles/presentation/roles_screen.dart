@@ -102,7 +102,7 @@ class _RolesScreenState extends State<RolesScreen> {
               Icon(Icons.info_outline_rounded, color: _brand600, size: 18),
               SizedBox(width: 10),
               Expanded(child: Text(
-                'Create a role with a name, password, and select which modules they can manage. They log in using the role name and password.',
+                'Create a role with a name, email, password, and select which modules they can manage. They can log in using their role name or email with password.',
                 style: TextStyle(fontSize: 12.5, color: _brand700, fontWeight: FontWeight.w500),
               )),
             ]),
@@ -175,11 +175,12 @@ class _RoleCard extends StatelessWidget {
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(role.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _onSurface1)),
               const SizedBox(height: 2),
-              Row(children: [
-                const Icon(Icons.lock_outline_rounded, size: 12, color: _onSurface3),
-                const SizedBox(width: 4),
-                Text('Password: ${role.password}', style: const TextStyle(fontSize: 12, color: _onSurface3, fontWeight: FontWeight.w500)),
-              ]),
+              if (role.email.isNotEmpty)
+                Row(children: [
+                  const Icon(Icons.email_outlined, size: 12, color: _onSurface3),
+                  const SizedBox(width: 4),
+                  Text(role.email, style: const TextStyle(fontSize: 12, color: _onSurface3, fontWeight: FontWeight.w500)),
+                ]),
             ])),
             IconButton(
               onPressed: onEdit,
@@ -195,21 +196,35 @@ class _RoleCard extends StatelessWidget {
           ]),
         ),
         const Divider(height: 1, color: _border),
-        // Login info row
+        // Login credentials row
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
             decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(10)),
-            child: Row(children: [
-              const Icon(Icons.login_rounded, size: 14, color: _onSurface3),
-              const SizedBox(width: 8),
-              Text('Login: ', style: const TextStyle(fontSize: 12, color: _onSurface3)),
-              Expanded(child: Text(
-                '"${role.name}"  /  "${role.password}"',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _onSurface2),
-                overflow: TextOverflow.ellipsis,
-              )),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Icon(Icons.badge_outlined, size: 13, color: _onSurface3),
+                const SizedBox(width: 6),
+                const Text('Role Name  ', style: TextStyle(fontSize: 11.5, color: _onSurface3)),
+                Expanded(child: Text(role.name, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _onSurface2), overflow: TextOverflow.ellipsis)),
+              ]),
+              if (role.email.isNotEmpty) ...[
+                const SizedBox(height: 5),
+                Row(children: [
+                  const Icon(Icons.email_outlined, size: 13, color: _onSurface3),
+                  const SizedBox(width: 6),
+                  const Text('Email  ', style: TextStyle(fontSize: 11.5, color: _onSurface3)),
+                  Expanded(child: Text(role.email, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _onSurface2), overflow: TextOverflow.ellipsis)),
+                ]),
+              ],
+              const SizedBox(height: 5),
+              Row(children: [
+                const Icon(Icons.lock_outline_rounded, size: 13, color: _onSurface3),
+                const SizedBox(width: 6),
+                const Text('Password  ', style: TextStyle(fontSize: 11.5, color: _onSurface3)),
+                Expanded(child: Text(role.password, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _onSurface2), overflow: TextOverflow.ellipsis)),
+              ]),
             ]),
           ),
         ),
@@ -246,9 +261,10 @@ class _RoleCard extends StatelessWidget {
 // CREATE / EDIT DIALOG
 // ══════════════════════════════════════════════════════════════════════
 void _openSheet(BuildContext context, AppRole? existing, VoidCallback onSaved) {
-  final nameCtrl = TextEditingController(text: existing?.name ?? '');
-  final passCtrl = TextEditingController(text: existing?.password ?? '');
-  final selected = <String>{...existing?.modules ?? {}};
+  final nameCtrl  = TextEditingController(text: existing?.name ?? '');
+  final emailCtrl = TextEditingController(text: existing?.email ?? '');
+  final passCtrl  = TextEditingController(text: existing?.password ?? '');
+  final selected  = <String>{...existing?.modules ?? {}};
   bool obscure = true;
 
   showDialog(
@@ -291,6 +307,25 @@ void _openSheet(BuildContext context, AppRole? existing, VoidCallback onSaved) {
                     hintText: 'e.g. Donations Manager',
                     hintStyle: const TextStyle(color: _onSurface3),
                     prefixIcon: const Icon(Icons.badge_outlined, size: 19),
+                    filled: true, fillColor: _surface2,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _border)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _border)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Email
+                const Text('Email', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _onSurface2)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. donations@saksham.org',
+                    hintStyle: const TextStyle(color: _onSurface3),
+                    prefixIcon: const Icon(Icons.email_outlined, size: 19),
                     filled: true, fillColor: _surface2,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _border)),
                     enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _border)),
@@ -390,13 +425,15 @@ void _openSheet(BuildContext context, AppRole? existing, VoidCallback onSaved) {
                 const SizedBox(width: 12),
                 Expanded(child: ElevatedButton(
                   onPressed: () {
-                    final name = nameCtrl.text.trim();
-                    final pass = passCtrl.text.trim();
+                    final name  = nameCtrl.text.trim();
+                    final email = emailCtrl.text.trim();
+                    final pass  = passCtrl.text.trim();
                     if (name.isEmpty || pass.isEmpty) return;
                     if (existing == null) {
-                      appRoles.add(AppRole(name: name, password: pass, modules: Set.from(selected)));
+                      appRoles.add(AppRole(name: name, email: email, password: pass, modules: Set.from(selected)));
                     } else {
                       existing.name     = name;
+                      existing.email    = email;
                       existing.password = pass;
                       existing.modules  = Set.from(selected);
                     }
