@@ -294,10 +294,10 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     final top = MediaQuery.of(context).padding.top;
     return Scaffold(
       body: Column(children: [
-        // compact white header with inline action buttons
+        // compact white header (back + title only)
         Container(
           color: Colors.white,
-          padding: EdgeInsets.fromLTRB(4, top + 6, 12, 10),
+          padding: EdgeInsets.fromLTRB(4, top + 6, 16, 10),
           decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE5EBE9)))),
           child: Row(children: [
             IconButton(
@@ -306,7 +306,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
               padding: EdgeInsets.zero, constraints: const BoxConstraints(),
             ),
             const SizedBox(width: 6),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text('Add Donation', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF15211E))),
               Container(
                 margin: const EdgeInsets.only(top: 3),
@@ -314,32 +314,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                 decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(6)),
                 child: Text(_receipt, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _brand700, letterSpacing: 0.2)),
               ),
-            ])),
-            OutlinedButton(
-              onPressed: () => context.go('/donations'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF5A6B67),
-                side: const BorderSide(color: Color(0xFFE5EBE9), width: 1.5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: const Text('Cancel', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: _saving ? null : _save,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _brand600, foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                elevation: 0,
-              ),
-              child: _saving
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : const Text('Save Donation', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-            ),
+            ]),
           ]),
         ),
 
@@ -523,6 +498,48 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
             ])),
           )),
         )),
+
+        // ── Bottom action bar ──────────────────────────────────────
+        Container(
+          padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 14),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: Color(0xFFE5EBE9))),
+            boxShadow: [BoxShadow(color: Color(0x140D2822), blurRadius: 12, offset: Offset(0, -4))],
+          ),
+          child: Row(children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => context.go('/donations'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF5A6B67),
+                  side: const BorderSide(color: Color(0xFFD8E5E0), width: 1.5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: const Text('Cancel', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _brand600,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: _brand600.withValues(alpha: 0.6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  elevation: 0,
+                ),
+                child: _saving
+                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                  : const Text('Save Donation', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              ),
+            ),
+          ]),
+        ),
       ]),
     );
   }
