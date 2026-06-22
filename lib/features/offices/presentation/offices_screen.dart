@@ -147,9 +147,18 @@ class _OfficesScreenState extends State<OfficesScreen> {
               Text('Offices', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: context.textPrimary)),
               Text('${_offices.length} active locations', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
             ])),
-            GestureDetector(onTap: () => _showSheet(),
-              child: Container(width: 40, height: 40, decoration: const BoxDecoration(color: _brand600, shape: BoxShape.circle),
-                child: const Icon(Icons.add, color: Colors.white, size: 22))),
+            GestureDetector(
+              onTap: () => _showSheet(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(12)),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.add_rounded, color: Colors.white, size: 17),
+                  SizedBox(width: 5),
+                  Text('Add Office', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+                ]),
+              ),
+            ),
           ]),
         ),
         Expanded(child: SingleChildScrollView(

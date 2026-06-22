@@ -485,7 +485,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                 const SizedBox(height: 20),
 
                 // ── Inline action buttons ──────────────────────────
-                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
                   OutlinedButton(
                     onPressed: () => context.go('/students'),
                     style: OutlinedButton.styleFrom(
@@ -493,7 +493,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                       backgroundColor: Colors.white,
                       side: const BorderSide(color: Color(0xFFD8E5E0), width: 1.5),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
                       minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     child: const Text('Cancel', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
@@ -506,7 +506,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                       foregroundColor: Colors.white,
                       disabledBackgroundColor: Color(0xFF0E8C76).withValues(alpha: 0.6),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 13),
                       minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       elevation: 0,
                     ),

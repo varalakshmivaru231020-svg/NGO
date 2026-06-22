@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../core/utils/app_launcher.dart';
+import '../../../core/theme/app_theme.dart';
 
 const _brand700 = Color(0xFF0B6E5D);
 const _brand600 = Color(0xFF0E8C76);
@@ -88,13 +89,13 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
     return Scaffold(
       backgroundColor: _surface2,
       body: Column(children: [
-        Container(color: Colors.white, padding: EdgeInsets.fromLTRB(18, top + 14, 18, 16),
+        Container(color: context.headerBg, padding: EdgeInsets.fromLTRB(18, top + 14, 18, 16),
           child: Row(children: [
             IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20), onPressed: () => context.go('/more'), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
             const SizedBox(width: 10),
-            const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Payment Links', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-              Text('Generate & track donation links', style: TextStyle(fontSize: 13, color: _onSurface2, fontWeight: FontWeight.w600)),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Payment Links', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: context.textPrimary)),
+              Text('Generate & track donation links', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
             ])),
           ])),
 

@@ -30,13 +30,43 @@ class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
   Uint8List? _bytes;
   bool _loading = false;
 
-  Future<void> _pickImage() async {
+  void _showOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 8),
+          Container(width: 40, height: 4, decoration: BoxDecoration(color: const Color(0xFFE5EBE9), borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 18),
+          const Text('Add Photo', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF15211E))),
+          const SizedBox(height: 16),
+          ListTile(
+            leading: Container(width: 44, height: 44, decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.camera_alt_outlined, color: _brand600, size: 22)),
+            title: const Text('Take Photo', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            subtitle: const Text('Open camera', style: TextStyle(fontSize: 12.5, color: _onSurface3)),
+            onTap: () { Navigator.pop(context); _pickImage(camera: true); },
+          ),
+          ListTile(
+            leading: Container(width: 44, height: 44, decoration: BoxDecoration(color: const Color(0xFFE7E3FD), borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.photo_library_outlined, color: Color(0xFF7C6CF0), size: 22)),
+            title: const Text('Choose from Gallery', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            subtitle: const Text('Pick an existing photo', style: TextStyle(fontSize: 12.5, color: _onSurface3)),
+            onTap: () { Navigator.pop(context); _pickImage(camera: false); },
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _pickImage({required bool camera}) async {
     setState(() => _loading = true);
     try {
-      // capture="user" — opens front camera on mobile, file picker on desktop
-      final input = html.FileUploadInputElement()
-        ..accept = 'image/*';
-      input.setAttribute('capture', 'user');
+      final input = html.FileUploadInputElement()..accept = 'image/*';
+      if (camera) input.setAttribute('capture', 'environment');
       input.click();
       await input.onChange.first;
       final files = input.files;
@@ -58,7 +88,7 @@ class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
   @override
   Widget build(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, children: [
     GestureDetector(
-      onTap: _pickImage,
+      onTap: _showOptions,
       child: Stack(children: [
         Container(
           width: widget.size, height: widget.size,
