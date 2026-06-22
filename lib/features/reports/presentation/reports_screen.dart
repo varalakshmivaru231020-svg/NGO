@@ -145,16 +145,27 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
             const SizedBox(height: 16),
 
-            // KPI single row of 4
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: Row(children: [
-              Expanded(child: _KPICard(label: 'Total Raised', value: _inrC(2860000), sub: '+18% vs last period', subColor: _green500, icon: Icons.account_balance_wallet_outlined, iconBg: _brand100, iconFg: _brand600)),
-              const SizedBox(width: 10),
-              Expanded(child: _KPICard(label: 'Unique Donors', value: '836', sub: '↑ 42 new this period', subColor: _brand600, icon: Icons.people_outlined, iconBg: _brand100, iconFg: _brand600)),
-              const SizedBox(width: 10),
-              Expanded(child: _KPICard(label: 'Avg Gift', value: '₹3,421', sub: '↑ ₹280 vs last period', subColor: _green500, icon: Icons.trending_up_rounded, iconBg: const Color(0xFFE7E3FD), iconFg: _violet500)),
-              const SizedBox(width: 10),
-              Expanded(child: _KPICard(label: 'Children Supported', value: '178', sub: '12 graduated this period', subColor: _onSurface3, icon: Icons.child_care_outlined, iconBg: const Color(0xFFFFF1D6), iconFg: _amber600)),
-            ])),
+            // KPI — 4 cards: single row on wide, 2×2 on narrow
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: LayoutBuilder(builder: (_, constraints) {
+              final wide = constraints.maxWidth > 580;
+              final card1 = _KPICard(label: 'Total Raised', value: _inrC(2860000), sub: '+18% vs last period', subColor: _green500, icon: Icons.account_balance_wallet_outlined, iconBg: _brand100, iconFg: _brand600);
+              final card2 = _KPICard(label: 'Unique Donors', value: '836', sub: '↑ 42 new this period', subColor: _brand600, icon: Icons.people_outlined, iconBg: _brand100, iconFg: _brand600);
+              final card3 = _KPICard(label: 'Avg Gift', value: '₹3,421', sub: '↑ ₹280 vs last period', subColor: _green500, icon: Icons.trending_up_rounded, iconBg: const Color(0xFFE7E3FD), iconFg: _violet500);
+              final card4 = _KPICard(label: 'Children Supported', value: '178', sub: '12 graduated this period', subColor: _onSurface3, icon: Icons.child_care_outlined, iconBg: const Color(0xFFFFF1D6), iconFg: _amber600);
+              if (wide) {
+                return Row(children: [
+                  Expanded(child: card1), const SizedBox(width: 10),
+                  Expanded(child: card2), const SizedBox(width: 10),
+                  Expanded(child: card3), const SizedBox(width: 10),
+                  Expanded(child: card4),
+                ]);
+              }
+              return Column(children: [
+                Row(children: [Expanded(child: card1), const SizedBox(width: 10), Expanded(child: card2)]),
+                const SizedBox(height: 10),
+                Row(children: [Expanded(child: card3), const SizedBox(width: 10), Expanded(child: card4)]),
+              ]);
+            })),
 
             const SizedBox(height: 20),
 

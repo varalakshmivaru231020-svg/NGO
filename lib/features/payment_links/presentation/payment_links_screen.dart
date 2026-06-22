@@ -116,14 +116,14 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
               _tf(_purposeCtrl, 'e.g. Education Fund'),
               const SizedBox(height: 12),
               _lbl('Validity'),
-              Row(children: ['3 days', '7 days', '30 days'].map((v) {
+              Wrap(spacing: 8, runSpacing: 8, children: ['3 days', '7 days', '30 days'].map((v) {
                 final active = _validity == v;
-                return Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(
+                return GestureDetector(
                   onTap: () => setState(() => _validity = v),
                   child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(color: active ? _brand600 : Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: active ? _brand600 : _border, width: 1.5)),
                     child: Text(v, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : _onSurface2))),
-                ));
+                );
               }).toList()),
               const SizedBox(height: 16),
               SizedBox(width: double.infinity, child: ElevatedButton.icon(
@@ -189,16 +189,35 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
             // ── Funnel ────────────────────────────────────────────
             const Text('Link Performance', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800)),
             const SizedBox(height: 10),
-            Row(children: _funnel.map((f) => Expanded(child: Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Container(padding: const EdgeInsets.all(14),
+            LayoutBuilder(builder: (_, constraints) {
+              final wide = constraints.maxWidth > 480;
+              Widget funnelCard((String, int, Color, Color) f) => Container(
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(color: f.$4, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
                 child: Column(children: [
                   Text('${f.$2}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: f.$3)),
                   const SizedBox(height: 3),
                   Text(f.$1, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _onSurface2)),
-                ])),
-            ))).toList()),
+                ]),
+              );
+              if (wide) {
+                return Row(children: _funnel.map((f) => Expanded(child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: funnelCard(f),
+                ))).toList());
+              }
+              return Column(children: [
+                Row(children: [
+                  Expanded(child: Padding(padding: const EdgeInsets.only(right: 4), child: funnelCard(_funnel[0]))),
+                  Expanded(child: Padding(padding: const EdgeInsets.only(left: 4), child: funnelCard(_funnel[1]))),
+                ]),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: Padding(padding: const EdgeInsets.only(right: 4), child: funnelCard(_funnel[2]))),
+                  Expanded(child: Padding(padding: const EdgeInsets.only(left: 4), child: funnelCard(_funnel[3]))),
+                ]),
+              ]);
+            }),
 
             const SizedBox(height: 18),
 

@@ -450,13 +450,13 @@ class _DonorCard extends StatelessWidget {
               if (donor.city.isNotEmpty) ...[
                 Icon(Icons.location_on_outlined, size: 13, color: context.textHint),
                 const SizedBox(width: 3),
-                Text('${donor.city} · ', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.textSub)),
+                Flexible(child: Text('${donor.city} · ', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.textSub), overflow: TextOverflow.ellipsis)),
               ],
               Text('${donor.donationCount} donations', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.textSub)),
             ]),
           ])),
           const SizedBox(width: 10),
-          Text(donor.mobile, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _brand700)),
+          Flexible(child: Text(donor.mobile, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _brand700), overflow: TextOverflow.ellipsis, textAlign: TextAlign.end)),
         ]),
       ),
     );

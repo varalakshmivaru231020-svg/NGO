@@ -310,11 +310,11 @@ class _DonationCard extends StatelessWidget {
             Text(d.name, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, height: 1, color: context.textPrimary)),
             const SizedBox(height: 4),
             Row(children: [
-              Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              Flexible(child: Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(color: typeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
-                child: Text(d.type, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: typeColor))),
+                child: Text(d.type, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: typeColor), overflow: TextOverflow.ellipsis))),
               const SizedBox(width: 6),
-              Text(d.method, style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w500)),
+              Flexible(child: Text(d.method, style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
             ]),
           ])),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -326,9 +326,11 @@ class _DonationCard extends StatelessWidget {
         Padding(padding: const EdgeInsets.fromLTRB(14, 0, 14, 10), child: Column(children: [
           _DashedDivider(borderColor: context.border),
           const SizedBox(height: 8),
-          Row(children: [
-            Expanded(child: Text(d.receipt, style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w600, letterSpacing: 0.2), overflow: TextOverflow.ellipsis)),
-            const SizedBox(width: 6),
+          LayoutBuilder(builder: (_, constraints) {
+            final narrow = constraints.maxWidth < 320;
+            return Row(children: [
+            if (!narrow) Expanded(child: Text(d.receipt, style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w600, letterSpacing: 0.2), overflow: TextOverflow.ellipsis)),
+            if (!narrow) const SizedBox(width: 6),
             // View Invoice button
             GestureDetector(
               onTap: () => showReceiptSheet(context, DonationReceipt(
@@ -365,7 +367,8 @@ class _DonationCard extends StatelessWidget {
                 const SizedBox(width: 4),
                 Text(d.status, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: d.status == 'Received' ? _green500 : _amber600)),
               ])),
-          ]),
+          ]);
+          }),
         ])),
       ]),
     );

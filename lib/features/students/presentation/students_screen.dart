@@ -285,16 +285,16 @@ class _StudentsScreenState extends State<StudentsScreen> {
           Container(
             color: context.headerBg,
             padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(14), border: Border.all(color: context.border)),
-              child: Row(children: centreTabs.map((c) {
+            child: LayoutBuilder(builder: (_, constraints) {
+              // If all tabs fit (≤4 tabs at ~80px each), use a Row; otherwise scroll
+              final fitsInRow = centreTabs.length * 80.0 <= constraints.maxWidth;
+              final tabWidgets = centreTabs.map((c) {
                 final active = _centre == c;
-                return Expanded(child: GestureDetector(
+                return GestureDetector(
                   onTap: () => setState(() => _centre = c),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
                       color: active ? context.cardBg : Colors.transparent,
                       borderRadius: BorderRadius.circular(11),
@@ -304,9 +304,40 @@ class _StudentsScreenState extends State<StudentsScreen> {
                       style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? _brand600 : context.textHint),
                       overflow: TextOverflow.ellipsis),
                   ),
-                ));
-              }).toList()),
-            ),
+                );
+              }).toList();
+              if (fitsInRow) {
+                return Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(14), border: Border.all(color: context.border)),
+                  child: Row(children: centreTabs.map((c) {
+                    final active = _centre == c;
+                    return Expanded(child: GestureDetector(
+                      onTap: () => setState(() => _centre = c),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: active ? context.cardBg : Colors.transparent,
+                          borderRadius: BorderRadius.circular(11),
+                          boxShadow: active ? const [BoxShadow(color: Color(0x150D2822), blurRadius: 3, offset: Offset(0, 1))] : [],
+                        ),
+                        child: Text(c, textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? _brand600 : context.textHint),
+                          overflow: TextOverflow.ellipsis),
+                      ),
+                    ));
+                  }).toList()),
+                );
+              }
+              return SizedBox(
+                height: 44,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: tabWidgets,
+                ),
+              );
+            }),
           ),
 
           // ── search ───────────────────────────────────────────────────
@@ -466,11 +497,9 @@ class _ChildCard extends StatelessWidget {
               if (student.centreName.isNotEmpty) ...[
                 Icon(Icons.location_on_outlined, size: 13, color: context.textHint),
                 const SizedBox(width: 3),
-                Text('${student.centreName} · ', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textSub)),
+                Flexible(child: Text('${student.centreName} · ', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textSub), overflow: TextOverflow.ellipsis)),
               ],
-              Text('Age ${student.age}', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textSub)),
-              if (student.classGrade.isNotEmpty)
-                Text(' · Class ${student.classGrade}', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textSub)),
+              Flexible(child: Text('Age ${student.age}${student.classGrade.isNotEmpty ? " · ${student.classGrade}" : ""}', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textSub), overflow: TextOverflow.ellipsis)),
             ]),
             if (student.isSponsored) ...[
               const SizedBox(height: 3),

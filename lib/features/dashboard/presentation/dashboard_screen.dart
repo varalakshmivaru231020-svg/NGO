@@ -630,12 +630,11 @@ class _DonutCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: _typeSplit.map((t) => Padding(
               padding: const EdgeInsets.only(bottom: 9),
-              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Row(children: [
-                  Container(width: 10, height: 10, decoration: BoxDecoration(color: t.color, borderRadius: BorderRadius.circular(3))),
-                  const SizedBox(width: 8),
-                  Text(t.label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
-                ]),
+              child: Row(children: [
+                Container(width: 10, height: 10, decoration: BoxDecoration(color: t.color, borderRadius: BorderRadius.circular(3))),
+                const SizedBox(width: 8),
+                Expanded(child: Text(t.label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis)),
+                const SizedBox(width: 4),
                 Text('${t.value}%', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: context.textSub)),
               ]),
             )).toList(),
@@ -665,12 +664,12 @@ class _DonationTile extends StatelessWidget {
           _Avatar(name: donation.name, size: 42),
           const SizedBox(width: 13),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(donation.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: -0.1, height: 1)),
+            Text(donation.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: -0.1, height: 1), overflow: TextOverflow.ellipsis),
             const SizedBox(height: 2),
             Row(children: [
               Container(width: 7, height: 7, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
               const SizedBox(width: 6),
-              Text('${donation.type} · ${donation.method}', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: context.textSub)),
+              Flexible(child: Text('${donation.type} · ${donation.method}', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: context.textSub), overflow: TextOverflow.ellipsis)),
             ]),
           ])),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [

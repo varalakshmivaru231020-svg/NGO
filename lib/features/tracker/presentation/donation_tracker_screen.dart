@@ -230,14 +230,14 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
                             child: Center(child: Text(_initials(d.donor), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)))),
                           const SizedBox(width: 12),
                           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(d.donor, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, height: 1, color: context.textPrimary)),
+                            Text(d.donor, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, height: 1, color: context.textPrimary), overflow: TextOverflow.ellipsis),
                             const SizedBox(height: 3),
                             Row(children: [
                               Container(width: 8, height: 8, decoration: BoxDecoration(color: typeColor, borderRadius: BorderRadius.circular(2))),
                               const SizedBox(width: 6),
-                              Text('${d.type} · ${d.method}', style: TextStyle(fontSize: 12.5, color: context.textSub, fontWeight: FontWeight.w500)),
+                              Flexible(child: Text('${d.type} · ${d.method}', style: TextStyle(fontSize: 12.5, color: context.textSub, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
                             ]),
-                            Text(d.receipt, style: TextStyle(fontSize: 11, color: context.textHint, fontWeight: FontWeight.w500)),
+                            Text(d.receipt, style: TextStyle(fontSize: 11, color: context.textHint, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
                           ])),
                           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                             Text(_inr(d.amount), style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: _brand700)),
