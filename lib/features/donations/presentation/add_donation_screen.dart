@@ -496,27 +496,28 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
               ])),
 
             // ── Inline action buttons ──────────────────────────────
-            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               OutlinedButton(
                 onPressed: () => context.go('/donations'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF5A6B67),
+                  backgroundColor: Colors.white,
                   side: const BorderSide(color: Color(0xFFD8E5E0), width: 1.5),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
                   minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 child: const Text('Cancel', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               ElevatedButton(
                 onPressed: _saving ? null : _save,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _brand600,
                   foregroundColor: Colors.white,
                   disabledBackgroundColor: _brand600.withValues(alpha: 0.6),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                   minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   elevation: 0,
                 ),
