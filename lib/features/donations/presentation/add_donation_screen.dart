@@ -495,51 +495,40 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                 ],
               ])),
 
-            ])),
-          )),
-        )),
-
-        // ── Bottom action bar ──────────────────────────────────────
-        Container(
-          padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 14),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border(top: BorderSide(color: Color(0xFFE5EBE9))),
-            boxShadow: [BoxShadow(color: Color(0x140D2822), blurRadius: 12, offset: Offset(0, -4))],
-          ),
-          child: Row(children: [
-            Expanded(
-              child: OutlinedButton(
+            // ── Inline action buttons ──────────────────────────────
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              OutlinedButton(
                 onPressed: () => context.go('/donations'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF5A6B67),
                   side: const BorderSide(color: Color(0xFFD8E5E0), width: 1.5),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: const Text('Cancel', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                child: const Text('Cancel', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              flex: 2,
-              child: ElevatedButton(
+              const SizedBox(width: 10),
+              ElevatedButton(
                 onPressed: _saving ? null : _save,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _brand600,
                   foregroundColor: Colors.white,
                   disabledBackgroundColor: _brand600.withValues(alpha: 0.6),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                  minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   elevation: 0,
                 ),
                 child: _saving
-                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                  : const Text('Save Donation', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                  : const Text('Save Donation', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
               ),
-            ),
-          ]),
-        ),
+            ]),
+
+            ])),
+          )),
+        )),
       ]),
     );
   }
