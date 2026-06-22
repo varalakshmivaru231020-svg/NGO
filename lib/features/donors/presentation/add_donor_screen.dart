@@ -226,7 +226,10 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 680),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
                 // Basic Information
                 _SectionCard(title: 'Basic Information', children: [
@@ -406,6 +409,8 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
                 ]),
                 const SizedBox(height: 24),
               ]),
+                ),
+              ),
             ),
           ),
         ),

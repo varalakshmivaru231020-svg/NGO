@@ -297,7 +297,10 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 680),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
                 // ── Profile Photo ─────────────────────────────────────
                 const Center(child: PhotoPickerCircle(label: 'Child Photo', size: 88)),
@@ -493,6 +496,8 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                 ]),
                 const SizedBox(height: 24),
               ]),
+                ),
+              ),
             ),
           ),
         ),
