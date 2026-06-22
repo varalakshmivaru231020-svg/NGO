@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/auth/role_auth.dart';
+import '../../../core/theme/app_theme.dart';
 
 const _brand600 = Color(0xFF0E8C76);
 const _brand700 = Color(0xFF0B6E5D);
@@ -65,25 +66,21 @@ class _RolesScreenState extends State<RolesScreen> {
       body: Column(children: [
         // ── Header ──────────────────────────────────────────────────
         Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(colors: [Color(0xFF0B6E5D), _brand600],
-                begin: Alignment.topLeft, end: Alignment.bottomRight),
-          ),
-          padding: EdgeInsets.fromLTRB(16, top + 14, 16, 20),
+          color: context.headerBg,
+          padding: EdgeInsets.fromLTRB(18, top + 14, 18, 20),
           child: Row(children: [
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Roles & Access', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
+              Text('Roles & Access', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: context.textPrimary)),
               Text('${appRoles.length} role${appRoles.length == 1 ? '' : 's'} · each role has its own login',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  style: TextStyle(fontSize: 13, color: context.textSub)),
             ])),
             GestureDetector(
               onTap: _openCreate,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                 decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.4))),
+                    color: _brand600,
+                    borderRadius: BorderRadius.circular(12)),
                 child: const Row(mainAxisSize: MainAxisSize.min, children: [
                   Icon(Icons.add_rounded, color: Colors.white, size: 18),
                   SizedBox(width: 5),
@@ -95,19 +92,22 @@ class _RolesScreenState extends State<RolesScreen> {
         ),
 
         // ── Info banner ──────────────────────────────────────────────
-        Container(
-          margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)),
-          child: const Row(children: [
-            Icon(Icons.info_outline_rounded, color: _brand600, size: 18),
-            SizedBox(width: 10),
-            Expanded(child: Text(
-              'Create a role with a name, password, and select which modules they can manage. They log in using the role name and password.',
-              style: TextStyle(fontSize: 12.5, color: _brand700, fontWeight: FontWeight.w500),
-            )),
-          ]),
-        ),
+        Center(child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)),
+            child: const Row(children: [
+              Icon(Icons.info_outline_rounded, color: _brand600, size: 18),
+              SizedBox(width: 10),
+              Expanded(child: Text(
+                'Create a role with a name, password, and select which modules they can manage. They log in using the role name and password.',
+                style: TextStyle(fontSize: 12.5, color: _brand700, fontWeight: FontWeight.w500),
+              )),
+            ]),
+          ),
+        )),
 
         // ── Role cards ───────────────────────────────────────────────
         Expanded(
@@ -119,15 +119,18 @@ class _RolesScreenState extends State<RolesScreen> {
                   SizedBox(height: 4),
                   Text('Tap "Create Role" to add one', style: TextStyle(fontSize: 13, color: _onSurface3)),
                 ]))
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 40),
-                  itemCount: appRoles.length,
-                  itemBuilder: (_, i) => _RoleCard(
-                    role: appRoles[i],
-                    onEdit: () => _openEdit(appRoles[i]),
-                    onDelete: () => _delete(appRoles[i]),
+              : Center(child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 900),
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(18, 14, 18, 40),
+                    itemCount: appRoles.length,
+                    itemBuilder: (_, i) => _RoleCard(
+                      role: appRoles[i],
+                      onEdit: () => _openEdit(appRoles[i]),
+                      onDelete: () => _delete(appRoles[i]),
+                    ),
                   ),
-                ),
+                )),
         ),
       ]),
     );
@@ -154,7 +157,7 @@ class _RoleCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: _border),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 2))],
       ),

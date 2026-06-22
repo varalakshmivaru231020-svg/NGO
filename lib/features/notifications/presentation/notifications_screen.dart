@@ -79,20 +79,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ),
           ]),
         ),
-        Expanded(child: ListView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(0, 12, 0, 100),
-          children: groups.expand((g) {
-            final items = _notifs.where((n) => n.group == g).toList();
-            if (items.isEmpty) return <Widget>[];
-            return [
-              Padding(padding: const EdgeInsets.fromLTRB(18, 6, 18, 8),
-                child: Text(g, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: context.textHint, letterSpacing: 0.5))),
-              ...items.map((n) => _NotifCard(notif: n, onTap: () => setState(() => n.unread = false))),
-              const SizedBox(height: 8),
-            ];
-          }).toList(),
-        )),
+        Expanded(child: Center(child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: ListView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(0, 12, 0, 100),
+            children: groups.expand((g) {
+              final items = _notifs.where((n) => n.group == g).toList();
+              if (items.isEmpty) return <Widget>[];
+              return [
+                Padding(padding: const EdgeInsets.fromLTRB(18, 6, 18, 8),
+                  child: Text(g, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: context.textHint, letterSpacing: 0.5))),
+                ...items.map((n) => _NotifCard(notif: n, onTap: () => setState(() => n.unread = false))),
+                const SizedBox(height: 8),
+              ];
+            }).toList(),
+          ),
+        ))),
       ]),
     );
   }

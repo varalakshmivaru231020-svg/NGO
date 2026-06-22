@@ -128,7 +128,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
         Expanded(child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          child: Column(children: [
+          child: Center(child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: Column(children: [
             // period chips
             const SizedBox(height: 14),
             SizedBox(height: 40, child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.fromLTRB(18, 0, 18, 0),
@@ -143,16 +145,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
             const SizedBox(height: 16),
 
-            // KPI 2×2 grid
+            // KPI single row of 4
             Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: Row(children: [
               Expanded(child: _KPICard(label: 'Total Raised', value: _inrC(2860000), sub: '+18% vs last period', subColor: _green500, icon: Icons.account_balance_wallet_outlined, iconBg: _brand100, iconFg: _brand600)),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(child: _KPICard(label: 'Unique Donors', value: '836', sub: '↑ 42 new this period', subColor: _brand600, icon: Icons.people_outlined, iconBg: _brand100, iconFg: _brand600)),
-            ])),
-            const SizedBox(height: 12),
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: Row(children: [
+              const SizedBox(width: 10),
               Expanded(child: _KPICard(label: 'Avg Gift', value: '₹3,421', sub: '↑ ₹280 vs last period', subColor: _green500, icon: Icons.trending_up_rounded, iconBg: const Color(0xFFE7E3FD), iconFg: _violet500)),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(child: _KPICard(label: 'Children Supported', value: '178', sub: '12 graduated this period', subColor: _onSurface3, icon: Icons.child_care_outlined, iconBg: const Color(0xFFFFF1D6), iconFg: _amber600)),
             ])),
 
@@ -178,7 +178,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
             const SizedBox(height: 96),
           ]),
-        )),
+            )))),
       ]),
     );
   }

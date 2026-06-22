@@ -101,7 +101,9 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
         Expanded(child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child: Center(child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // ── Create card ────────────────────────────────────────
             _card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text('Create a Link', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800)),
@@ -228,7 +230,7 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
               );
             }).toList())),
           ]),
-        )),
+            )))),
       ]),
     );
   }

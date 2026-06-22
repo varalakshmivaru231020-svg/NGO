@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../core/theme/app_theme.dart';
 
 const _brand600 = Color(0xFF0E8C76);
 const _brand100 = Color(0xFFD6F3EC);
@@ -103,7 +104,7 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
       body: Column(children: [
         // header
         Container(
-          color: Colors.white,
+          color: context.headerBg,
           padding: EdgeInsets.fromLTRB(18, top + 14, 18, 0),
           child: Column(children: [
             Row(children: [
@@ -198,12 +199,16 @@ class _ReminderList extends StatelessWidget {
         const SizedBox(height: 12),
         const Text('Nothing in this range', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _onSurface3)),
       ]))
-    : ListView.separated(
-        padding: const EdgeInsets.fromLTRB(18, 14, 18, 100),
+    : SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
-        itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (_, i) => _ReminderCard(item: items[i], isBday: isBday, onCall: onCall, onWhatsApp: onWhatsApp),
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 100),
+        child: Center(child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: Column(children: items.asMap().entries.map((e) => Padding(
+            padding: EdgeInsets.only(bottom: e.key < items.length - 1 ? 10 : 0),
+            child: _ReminderCard(item: e.value, isBday: isBday, onCall: onCall, onWhatsApp: onWhatsApp),
+          )).toList()),
+        )),
       );
 }
 

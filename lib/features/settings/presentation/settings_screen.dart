@@ -36,13 +36,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // header
+          // header (full-width)
           Container(color: context.headerBg, padding: EdgeInsets.fromLTRB(18, top + 14, 18, 16),
             child: Row(children: [
               IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20), onPressed: () => context.go('/more'), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
               const SizedBox(width: 10),
               Text('Settings', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: context.textPrimary)),
             ])),
+
+          // constrained content
+          Center(child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
           const SizedBox(height: 16),
 
@@ -166,6 +171,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 14),
           Center(child: Text('Saksham Foundation · v2.4.0', style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w600))),
           const SizedBox(height: 96),
+            ]))),
         ]),
       ),
     );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/theme/app_theme.dart';
 
 const _brand600 = Color(0xFF0E8C76);
 const _brand100 = Color(0xFFD6F3EC);
@@ -137,69 +138,72 @@ class _OfficesScreenState extends State<OfficesScreen> {
       backgroundColor: _surface2,
       body: Column(children: [
         Container(
-          color: Colors.white,
+          color: context.headerBg,
           padding: EdgeInsets.fromLTRB(18, top + 14, 18, 16),
           child: Row(children: [
             IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20), onPressed: () => context.go('/more'), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
             const SizedBox(width: 10),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Offices', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-              Text('${_offices.length} active locations', style: const TextStyle(fontSize: 13, color: _onSurface2, fontWeight: FontWeight.w600)),
+              Text('Offices', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: context.textPrimary)),
+              Text('${_offices.length} active locations', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
             ])),
             GestureDetector(onTap: () => _showSheet(),
               child: Container(width: 40, height: 40, decoration: const BoxDecoration(color: _brand600, shape: BoxShape.circle),
                 child: const Icon(Icons.add, color: Colors.white, size: 22))),
           ]),
         ),
-        Expanded(child: ListView(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
+        Expanded(child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          children: [
-            ..._offices.map((o) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22), border: Border.all(color: _border),
-                  boxShadow: const [BoxShadow(color: Color(0x0A0D2822), blurRadius: 6, offset: Offset(0, 2))]),
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Container(width: 48, height: 48, decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(14)),
-                    child: const Icon(Icons.business_outlined, color: _brand600, size: 24)),
-                  const SizedBox(width: 13),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(o.name, style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
-                    const SizedBox(height: 5),
-                    Row(children: [
-                      const Icon(Icons.location_on_outlined, size: 14, color: _onSurface3),
-                      const SizedBox(width: 3),
-                      Text(o.city, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _onSurface2)),
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
+          child: Center(child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: Column(children: [
+              ..._offices.map((o) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22), border: Border.all(color: _border),
+                    boxShadow: const [BoxShadow(color: Color(0x0A0D2822), blurRadius: 6, offset: Offset(0, 2))]),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Container(width: 48, height: 48, decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(14)),
+                      child: const Icon(Icons.business_outlined, color: _brand600, size: 24)),
+                    const SizedBox(width: 13),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(o.name, style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
+                      const SizedBox(height: 5),
+                      Row(children: [
+                        const Icon(Icons.location_on_outlined, size: 14, color: _onSurface3),
+                        const SizedBox(width: 3),
+                        Text(o.city, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _onSurface2)),
+                      ]),
+                    ])),
+                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      Text('${o.students}', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: _brand600, letterSpacing: -1)),
+                      const Text('students', style: TextStyle(fontSize: 12, color: _onSurface3, fontWeight: FontWeight.w600)),
                     ]),
-                  ])),
-                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                    Text('${o.students}', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: _brand600, letterSpacing: -1)),
-                    const Text('students', style: TextStyle(fontSize: 12, color: _onSurface3, fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 6),
+                    IconButton(icon: const Icon(Icons.edit_outlined, size: 20, color: _onSurface3), onPressed: () => _showSheet(office: o)),
                   ]),
-                  const SizedBox(width: 6),
-                  IconButton(icon: const Icon(Icons.edit_outlined, size: 20, color: _onSurface3), onPressed: () => _showSheet(office: o)),
-                ]),
-              ),
-            )),
-            // dashed Add tile
-            GestureDetector(
-              onTap: () => _showSheet(),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 22),
-                decoration: BoxDecoration(
-                  color: Colors.transparent, borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: _brand600.withValues(alpha: 0.4), width: 2, style: BorderStyle.solid),
                 ),
-                child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(Icons.add_circle_outline, color: _brand600, size: 22),
-                  SizedBox(width: 10),
-                  Text('Add New Office', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _brand600)),
-                ]),
+              )),
+              // dashed Add tile
+              GestureDetector(
+                onTap: () => _showSheet(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 22),
+                  decoration: BoxDecoration(
+                    color: Colors.transparent, borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: _brand600.withValues(alpha: 0.4), width: 2, style: BorderStyle.solid),
+                  ),
+                  child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(Icons.add_circle_outline, color: _brand600, size: 22),
+                    SizedBox(width: 10),
+                    Text('Add New Office', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _brand600)),
+                  ]),
+                ),
               ),
-            ),
-          ],
+            ]),
+          )),
         )),
       ]),
     );
