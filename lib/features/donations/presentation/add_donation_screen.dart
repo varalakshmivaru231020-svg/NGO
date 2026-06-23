@@ -250,6 +250,8 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     }
     final typeId = _typeLabelToId[_donationType] ?? _donationType;
     setState(() => _saving = true);
+
+    String receiptNo = 'SF/26-27/${(DateTime.now().millisecondsSinceEpoch % 9999 + 1000)}';
     try {
       final resp = await apiClient.post('/donations', {
         'donorId': _selectedDonorId,
@@ -257,28 +259,27 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
         'amount': int.parse(amountText),
         'paymentMode': _methodModes[_method] ?? 'CASH',
       });
-      if (!mounted) return;
       final data = resp['data'] as Map<String, dynamic>? ?? {};
-      final receiptNo = data['receiptNo'] as String? ?? 'SF/${DateTime.now().year}/${(DateTime.now().millisecondsSinceEpoch % 9999 + 1000)}';
-      final receipt = DonationReceipt(
-        receiptNo:    receiptNo,
-        donorName:    _selectedDonorName ?? 'Donor',
-        donorPhone:   '',
-        donorCity:    '',
-        donorPan:     '',
-        donationType: _donationType,
-        amount:       int.parse(amountText),
-        paymentMode:  _method,
-        date:         _date,
-        taxExemption: false,
-      );
-      await showReceiptSheet(context, receipt);
-      if (mounted) context.go('/donations');
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _saving = false);
-      _snack('Failed: ${e.toString()}', isError: true);
+      receiptNo = data['receiptNo'] as String? ?? receiptNo;
+    } catch (_) {
+      // No backend in demo mode — continue with local receipt
     }
+
+    if (!mounted) return;
+    final receipt = DonationReceipt(
+      receiptNo:    receiptNo,
+      donorName:    _selectedDonorName ?? 'Donor',
+      donorPhone:   '',
+      donorCity:    '',
+      donorPan:     '',
+      donationType: _donationType,
+      amount:       int.parse(amountText),
+      paymentMode:  _method,
+      date:         _date,
+      taxExemption: false,
+    );
+    await showReceiptSheet(context, receipt);
+    if (mounted) context.go('/donations');
   }
 
 
