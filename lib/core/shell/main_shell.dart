@@ -37,7 +37,6 @@ const _mgmt = [
 
 const _acct = [
   _N(Icons.notifications_outlined,     Icons.notifications,       'Notifications',   '/notifications',    badge: 3),
-  _N(Icons.manage_accounts_outlined,   Icons.manage_accounts,     'Roles',           '/roles'),
   _N(Icons.settings_outlined,          Icons.settings,            'Settings',        '/settings'),
   _N(Icons.help_outline_rounded,       Icons.help_rounded,        'Help',            '/help'),
 ];
@@ -138,8 +137,7 @@ class _Sidebar extends StatelessWidget {
               ..._mgmt.where((n) => n.visible()).map((n) => _NavRow(n: n, loc: loc, ext: extended)),
             ],
             _Divider(label: 'Account', ext: extended),
-            // Roles option only for admin
-            ..._acct.where((n) => n.route != '/roles' || isAdmin).map((n) => _NavRow(n: n, loc: loc, ext: extended)),
+            ..._acct.map((n) => _NavRow(n: n, loc: loc, ext: extended)),
           ]),
         )),
         // ── profile footer ──────────────────────────────────────

@@ -1350,6 +1350,161 @@ class _LegalScreen extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════
+// Razorpay Credentials Screen
+// ════════════════════════════════════════════════════════════════
+class RazorpayCredentialsScreen extends StatefulWidget {
+  const RazorpayCredentialsScreen({super.key});
+  @override
+  State<RazorpayCredentialsScreen> createState() => _RazorpayCredentialsState();
+}
+
+class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
+  static const _keyIdKey     = 'rzp_key_id';
+  static const _keySecretKey = 'rzp_key_secret';
+
+  final _keyIdCtrl     = TextEditingController();
+  final _keySecretCtrl = TextEditingController();
+  bool _loading = true;
+  bool _saving  = false;
+  bool _obscureSecret = true;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  @override
+  void dispose() { _keyIdCtrl.dispose(); _keySecretCtrl.dispose(); super.dispose(); }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _keyIdCtrl.text     = prefs.getString(_keyIdKey)     ?? '';
+      _keySecretCtrl.text = prefs.getString(_keySecretKey) ?? '';
+      _loading = false;
+    });
+  }
+
+  Future<void> _save() async {
+    final keyId     = _keyIdCtrl.text.trim();
+    final keySecret = _keySecretCtrl.text.trim();
+    if (keyId.isEmpty || keySecret.isEmpty) {
+      _snack(context, 'Both Key ID and Key Secret are required');
+      return;
+    }
+    setState(() => _saving = true);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyIdKey,     keyId);
+    await prefs.setString(_keySecretKey, keySecret);
+    setState(() => _saving = false);
+    if (mounted) _snack(context, '✓ Razorpay credentials saved');
+  }
+
+  Future<void> _clear() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyIdKey);
+    await prefs.remove(_keySecretKey);
+    setState(() { _keyIdCtrl.clear(); _keySecretCtrl.clear(); });
+    if (mounted) _snack(context, 'Credentials cleared');
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: Column(children: [
+      _buildHeader(context, 'Razorpay Credentials', sub: 'Payment gateway configuration'),
+      if (_loading)
+        const Expanded(child: Center(child: CircularProgressIndicator()))
+      else
+        Expanded(child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(18, 20, 18, 40),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+            // Info banner
+            Container(
+              padding: const EdgeInsets.all(14),
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: _brand100, borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _brand600.withValues(alpha: 0.3))),
+              child: const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Icon(Icons.info_outline, color: _brand600, size: 18),
+                SizedBox(width: 10),
+                Expanded(child: Text(
+                  'Get your API keys from the Razorpay Dashboard → Settings → API Keys.\nNever share your Key Secret publicly.',
+                  style: TextStyle(fontSize: 12.5, color: _brand600, fontWeight: FontWeight.w600, height: 1.4))),
+              ]),
+            ),
+
+            _buildSectionLabel(context, 'Key ID (Public)'),
+            _buildCard(context, child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: TextField(
+                controller: _keyIdCtrl,
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.vpn_key_outlined, size: 18, color: _brand600),
+                  hintText: 'rzp_test_XXXXXXXXXXXXXXXXXX',
+                  hintStyle: TextStyle(fontSize: 12, color: context.textHint),
+                  filled: true, fillColor: context.surface2,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12)),
+              ),
+            )),
+
+            const SizedBox(height: 16),
+            _buildSectionLabel(context, 'Key Secret (Private)'),
+            _buildCard(context, child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: TextField(
+                controller: _keySecretCtrl,
+                obscureText: _obscureSecret,
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.lock_outline, size: 18, color: _brand600),
+                  hintText: '••••••••••••••••••••',
+                  hintStyle: TextStyle(fontSize: 12, color: context.textHint),
+                  filled: true, fillColor: context.surface2,
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureSecret ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: context.textHint),
+                    onPressed: () => setState(() => _obscureSecret = !_obscureSecret)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12)),
+              ),
+            )),
+
+            const SizedBox(height: 24),
+            Row(children: [
+              Expanded(child: OutlinedButton.icon(
+                onPressed: _saving ? null : _clear,
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label: const Text('Clear'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _coral500,
+                  side: const BorderSide(color: _coral500),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              )),
+              const SizedBox(width: 12),
+              Expanded(flex: 2, child: ElevatedButton.icon(
+                onPressed: _saving ? null : _save,
+                icon: _saving
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Icon(Icons.save_outlined, size: 16),
+                label: const Text('Save Credentials'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _brand600, foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              )),
+            ]),
+          ]),
+        )),
+    ]),
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
 // Server URL Screen — update backend URL without rebuilding APK
 // ════════════════════════════════════════════════════════════════
 class ServerUrlScreen extends StatefulWidget {

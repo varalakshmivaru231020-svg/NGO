@@ -277,6 +277,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
         _settingsItem(Icons.download_outlined, 'Export Data', 'Download reports & records', onTap: () => context.go('/settings/export-data')),
         _settingsItem(Icons.cloud_sync_outlined, 'Backup & Sync', 'Last synced today', onTap: () => context.go('/settings/backup-sync')),
         _settingsItem(Icons.router_outlined, 'Server URL', 'Update backend connection', onTap: () => context.go('/settings/server-url')),
+        _settingsItem(Icons.payment_outlined, 'Razorpay Credentials', 'Add payment gateway keys', onTap: () => context.go('/settings/razorpay')),
       ]),
       const SizedBox(height: 16),
       _settingsSection('About', [

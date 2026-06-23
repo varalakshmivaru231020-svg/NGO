@@ -54,10 +54,10 @@ final _kChildren = {
     'schoolAddr': 'Medahalli Main Road, Bengaluru 560049',
     'height': '157 cm', 'weight': '44 kg',
     'medHistory': 'Mild asthma (controlled). Uses inhaler as needed.',
-    'sponsor': 'Priya Sharma', 'sponsorId': 'd2', 'sponsorDonorId': 'SF-D-0002',
-    'sponsorCategory': 'Child Sponsor', 'sponsorCity': 'Delhi',
-    'sponsorAmt': '₹18,000 / year', 'sponsorSince': '01 Jan 2022', 'enrollDate': '12 Jul 2018',
-    'attendance': '88%', 'achievementCount': '6', 'sponsorshipAmt': '₹18K',
+    'sponsor': '', 'sponsorId': '', 'sponsorDonorId': '',
+    'sponsorCategory': '', 'sponsorCity': '',
+    'sponsorAmt': '', 'sponsorSince': '', 'enrollDate': '12 Jul 2018',
+    'attendance': '88%', 'achievementCount': '6', 'sponsorshipAmt': '—',
   },
 };
 
@@ -90,14 +90,80 @@ class StudentDetailScreen extends StatefulWidget {
   State<StudentDetailScreen> createState() => _StudentDetailScreenState();
 }
 
+// mock donor list for sponsor picker
+final _kDonors = [
+  {'id': 'd1', 'donorId': 'SF-D-0001', 'name': 'Rajesh Mehta',   'category': 'Child Sponsor', 'city': 'Mumbai',    'amt': '₹18,000 / year'},
+  {'id': 'd2', 'donorId': 'SF-D-0002', 'name': 'Priya Sharma',   'category': 'Child Sponsor', 'city': 'Delhi',     'amt': '₹18,000 / year'},
+  {'id': 'd3', 'donorId': 'SF-D-0003', 'name': 'Ananya Iyer',    'category': 'Child Sponsor', 'city': 'Chennai',   'amt': '₹24,000 / year'},
+  {'id': 'd4', 'donorId': 'SF-D-0004', 'name': 'Vikram Singh',   'category': 'General Donor', 'city': 'Bengaluru', 'amt': '₹12,000 / year'},
+  {'id': 'd5', 'donorId': 'SF-D-0005', 'name': 'Sunita Kapoor',  'category': 'Child Sponsor', 'city': 'Pune',      'amt': '₹18,000 / year'},
+];
+
 class _StudentDetailScreenState extends State<StudentDetailScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
+  late Map<String, String> _data;
 
   @override
   void initState() {
     super.initState();
     _tabs = TabController(length: 6, vsync: this);
+    _data = Map<String, String>.from(_kChildren[widget.id] ?? _kChildren['s1']!);
+  }
+
+  void _showSponsorPicker(BuildContext context) {
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        height: MediaQuery.of(ctx).size.height * 0.6,
+        decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        child: Column(children: [
+          Padding(padding: const EdgeInsets.fromLTRB(20, 14, 20, 10), child: Row(children: [
+            Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(2)))),
+            const Spacer(),
+            const Text('Select Sponsor', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+            const Spacer(),
+            IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+          ])),
+          Expanded(child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+            itemCount: _kDonors.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (_, i) {
+              final d = _kDonors[i];
+              return ListTile(
+                contentPadding: const EdgeInsets.symmetric(vertical: 6),
+                leading: Container(width: 44, height: 44,
+                  decoration: const BoxDecoration(color: _brand100, shape: BoxShape.circle),
+                  child: Center(child: Text(_initials(d['name']!), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _brand600)))),
+                title: Text(d['name']!, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
+                subtitle: Text('${d['category']} · ${d['city']}', style: const TextStyle(fontSize: 12.5, color: _onSurface3)),
+                trailing: Text(d['amt']!, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand600)),
+                onTap: () {
+                  final now = DateTime.now();
+                  final dateStr = '${now.day.toString().padLeft(2,'0')} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][now.month-1]} ${now.year}';
+                  setState(() {
+                    _data['sponsor']          = d['name']!;
+                    _data['sponsorId']        = d['id']!;
+                    _data['sponsorDonorId']   = d['donorId']!;
+                    _data['sponsorCategory']  = d['category']!;
+                    _data['sponsorCity']      = d['city']!;
+                    _data['sponsorAmt']       = d['amt']!;
+                    _data['sponsorSince']     = dateStr;
+                    _data['sponsorshipAmt']   = d['amt']!.split(' ').first;
+                  });
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text('${d['name']} assigned as sponsor', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+                },
+              );
+            },
+          )),
+        ]),
+      ),
+    );
   }
 
   @override
@@ -261,7 +327,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
 
   @override
   Widget build(BuildContext context) {
-    final data = _kChildren[widget.id] ?? _kChildren['s1']!;
+    final data = _data;
     final name = data['name']!;
     final color = _avColor(name);
 
@@ -353,7 +419,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
           children: [
             _ProfileTab(data: data),
             _EducationTab(data: data),
-            _SponsorTab(data: data),
+            _SponsorTab(data: data, onAssign: () => _showSponsorPicker(context)),
             _ActivitiesTab(studentId: name),
             const _DocumentsTab(),
             _ProgressTab(data: data),
@@ -549,8 +615,9 @@ class _EducationTab extends StatelessWidget {
 // SPONSOR TAB
 // ══════════════════════════════════════════════════════════════════════
 class _SponsorTab extends StatelessWidget {
-  const _SponsorTab({required this.data});
+  const _SponsorTab({required this.data, required this.onAssign});
   final Map<String, String> data;
+  final VoidCallback onAssign;
 
   @override
   Widget build(BuildContext context) {
@@ -646,7 +713,7 @@ class _SponsorTab extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
-            onPressed: () {},
+            onPressed: onAssign,
             icon: const Icon(Icons.swap_horiz_rounded, size: 18),
             label: const Text('Change Sponsor', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
             style: OutlinedButton.styleFrom(
@@ -696,11 +763,11 @@ class _SponsorTab extends StatelessWidget {
             textAlign: TextAlign.center, style: TextStyle(color: _onSurface2, fontSize: 13.5, fontWeight: FontWeight.w500)),
           const SizedBox(height: 20),
           ElevatedButton.icon(
-            onPressed: () => context.go('/donors'),
+            onPressed: onAssign,
             style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14), elevation: 0),
-            icon: const Icon(Icons.link, size: 18),
+            icon: const Icon(Icons.person_search_outlined, size: 18),
             label: const Text('Assign Sponsor from Donors', style: TextStyle(fontWeight: FontWeight.w800)),
           ),
         ]),
