@@ -41,49 +41,43 @@ class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
   }
 
   void _showOptions() {
-    final box = context.findRenderObject() as RenderBox;
-    final offset = box.localToGlobal(Offset.zero);
-    final size = box.size;
-
-    OverlayEntry? entry;
-    entry = OverlayEntry(builder: (_) => Stack(children: [
-      // tap-outside to dismiss
-      Positioned.fill(child: GestureDetector(
-        onTap: () => entry?.remove(),
-        child: Container(color: Colors.transparent),
-      )),
-      // popup card directly below the photo circle
-      Positioned(
-        left: (offset.dx + size.width / 2 - 120).clamp(8.0, double.infinity),
-        top: offset.dy + size.height + 6,
+    showDialog(
+      context: context,
+      barrierColor: Colors.black26,
+      builder: (ctx) => Center(
         child: Material(
           color: Colors.transparent,
           child: Container(
-            width: 240,
+            width: 280,
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(20),
               boxShadow: const [
-                BoxShadow(color: Color(0x22000000), blurRadius: 20, offset: Offset(0, 6)),
+                BoxShadow(color: Color(0x28000000), blurRadius: 24, offset: Offset(0, 8)),
               ],
             ),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(18, 18, 18, 10),
+                child: Text('Upload Photo',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF15211E))),
+              ),
+              const Divider(height: 1, color: Color(0xFFE5EBE9)),
               // Take Photo
               InkWell(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                onTap: () { entry?.remove(); _pickImage(camera: true); },
+                onTap: () { Navigator.pop(ctx); _pickImage(camera: true); },
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                   child: Row(children: [
                     Container(
-                      width: 38, height: 38,
-                      decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(10)),
-                      child: const Icon(Icons.camera_alt_outlined, color: _brand600, size: 19),
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.camera_alt_outlined, color: _brand600, size: 20),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 14),
                     const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Take Photo', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: Color(0xFF15211E))),
-                      Text('Open camera', style: TextStyle(fontSize: 11.5, color: _onSurface3)),
+                      Text('Take Photo', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF15211E))),
+                      Text('Open camera', style: TextStyle(fontSize: 12, color: _onSurface3)),
                     ]),
                   ]),
                 ),
@@ -91,20 +85,20 @@ class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
               const Divider(height: 1, color: Color(0xFFE5EBE9)),
               // Choose from Gallery
               InkWell(
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
-                onTap: () { entry?.remove(); _pickImage(camera: false); },
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+                onTap: () { Navigator.pop(ctx); _pickImage(camera: false); },
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                   child: Row(children: [
                     Container(
-                      width: 38, height: 38,
-                      decoration: BoxDecoration(color: const Color(0xFFE7E3FD), borderRadius: BorderRadius.circular(10)),
-                      child: const Icon(Icons.photo_library_outlined, color: Color(0xFF7C6CF0), size: 19),
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(color: const Color(0xFFE7E3FD), borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.photo_library_outlined, color: Color(0xFF7C6CF0), size: 20),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 14),
                     const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Choose from Gallery', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: Color(0xFF15211E))),
-                      Text('Pick an existing photo', style: TextStyle(fontSize: 11.5, color: _onSurface3)),
+                      Text('Choose from Gallery', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF15211E))),
+                      Text('Pick an existing photo', style: TextStyle(fontSize: 12, color: _onSurface3)),
                     ]),
                   ]),
                 ),
@@ -113,9 +107,7 @@ class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
           ),
         ),
       ),
-    ]));
-
-    Overlay.of(context).insert(entry);
+    );
   }
 
   Future<void> _pickImage({required bool camera}) async {
