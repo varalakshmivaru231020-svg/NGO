@@ -160,13 +160,14 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
       // Increment refresh counter → donorsProvider re-runs and picks up new donor
       ref.read(donorRefreshProvider.notifier).state++;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Row(children: [
-          Icon(Icons.check_circle_outline, color: Colors.white),
-          SizedBox(width: 10),
+        content: const Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+          SizedBox(width: 8),
           Text('Donor saved successfully!', style: TextStyle(fontWeight: FontWeight.w700)),
         ]),
         backgroundColor: _brand600,
         behavior: SnackBarBehavior.floating,
+        width: 280,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ));
       context.go('/donors');

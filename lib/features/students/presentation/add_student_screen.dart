@@ -264,13 +264,14 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Row(children: [
-            Icon(Icons.check_circle_outline, color: Colors.white),
-            SizedBox(width: 10),
+          content: const Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+            SizedBox(width: 8),
             Text('Child enrolled successfully!', style: TextStyle(fontWeight: FontWeight.w700)),
           ]),
           backgroundColor: _brand600,
           behavior: SnackBarBehavior.floating,
+          width: 280,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ));
         context.go('/students');
