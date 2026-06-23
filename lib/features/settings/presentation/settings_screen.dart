@@ -25,6 +25,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   bool _notifStudent      = false;
   bool _notifAchievements = false;
 
+  // Editable org/registration fields
+  String _orgName    = 'Saksham Foundation';
+  String _orgWebsite = 'www.saksham.org';
+  String _orgAddress = 'Mumbai, Maharashtra';
+  String _orgPhone   = '+91 98765 43210';
+  String _regNo      = 'NGO-2019-MH-00123';
+  String _pan        = 'AABCS1234D';
+  String _fcraSt     = 'Active';
+
+  void _editField(String label, String current, void Function(String) onSave) {
+    final ctrl = TextEditingController(text: current);
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      title: Text('Edit $label', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+      content: TextField(
+        controller: ctrl, autofocus: true,
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        decoration: InputDecoration(
+          filled: true, fillColor: const Color(0xFFF4F7F6),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12)),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: () { if (ctrl.text.trim().isNotEmpty) { setState(() => onSave(ctrl.text.trim())); } Navigator.pop(ctx); },
+          style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+          child: const Text('Save'),
+        ),
+      ],
+    ));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -113,16 +147,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
       constraints: const BoxConstraints(maxWidth: 700),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _settingsSection('Organization Details', [
-          _settingsItem(Icons.business_outlined, 'Organization Name', 'Saksham Foundation', onTap: () {}),
-          _settingsItem(Icons.language_outlined, 'Website', 'www.saksham.org', onTap: () {}),
-          _settingsItem(Icons.location_on_outlined, 'Address', 'Mumbai, Maharashtra', onTap: () {}),
-          _settingsItem(Icons.phone_outlined, 'Contact Number', '+91 98765 43210', onTap: () {}),
+          _settingsItem(Icons.business_outlined, 'Organization Name', _orgName, onTap: () => _editField('Organization Name', _orgName, (v) => _orgName = v)),
+          _settingsItem(Icons.language_outlined, 'Website', _orgWebsite, onTap: () => _editField('Website', _orgWebsite, (v) => _orgWebsite = v)),
+          _settingsItem(Icons.location_on_outlined, 'Address', _orgAddress, onTap: () => _editField('Address', _orgAddress, (v) => _orgAddress = v)),
+          _settingsItem(Icons.phone_outlined, 'Contact Number', _orgPhone, onTap: () => _editField('Contact Number', _orgPhone, (v) => _orgPhone = v)),
         ]),
         const SizedBox(height: 16),
         _settingsSection('Registration', [
-          _settingsItem(Icons.article_outlined, 'Registration Number', 'NGO-2019-MH-00123', onTap: () {}),
-          _settingsItem(Icons.account_balance_outlined, 'PAN / Tax ID', 'AABCS1234D', onTap: () {}),
-          _settingsItem(Icons.verified_outlined, 'FCRA Status', 'Active', onTap: () {}),
+          _settingsItem(Icons.article_outlined, 'Registration Number', _regNo, onTap: () => _editField('Registration Number', _regNo, (v) => _regNo = v)),
+          _settingsItem(Icons.account_balance_outlined, 'PAN / Tax ID', _pan, onTap: () => _editField('PAN / Tax ID', _pan, (v) => _pan = v)),
+          _settingsItem(Icons.verified_outlined, 'FCRA Status', _fcraSt, onTap: () => _editField('FCRA Status', _fcraSt, (v) => _fcraSt = v)),
         ]),
         const SizedBox(height: 16),
         _settingsSection('Administration', [
@@ -234,11 +268,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
           _settingsItem(Icons.lock_outline, 'Security & PIN', 'Protect your account',
             onTap: () => context.go('/settings/security-pin')),
         ]),
-        const SizedBox(height: 16),
-        _settingsSection('Danger Zone', [
-          _settingsItem(Icons.delete_outline, 'Delete Account', 'Permanently remove all data',
-            onTap: () {}, isDestructive: true),
-        ]),
       ]),
     )),
   );
@@ -252,8 +281,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _settingsSection('Visual Identity', [
           _settingsItem(Icons.image_outlined, 'Organization Logo', 'Upload PNG or SVG', onTap: () {}),
-          _settingsItem(Icons.color_lens_outlined, 'Primary Color', '#0F9D7A', onTap: () {}),
-          _settingsItem(Icons.font_download_outlined, 'Font Family', 'Inter (current)', onTap: null),
         ]),
         const SizedBox(height: 16),
         _settingsSection('App Appearance', [
@@ -263,7 +290,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
               isDark ? ThemeMode.light : ThemeMode.dark;
             _toast(isDark ? 'Light mode on' : 'Dark mode on');
           }),
-          _settingsItem(Icons.language_outlined, 'Language', 'English', onTap: () {}),
         ]),
       ]),
     )),

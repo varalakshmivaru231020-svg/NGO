@@ -72,7 +72,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
   bool _pickingFile = false;
 
   // Loaded from API
-  List<({String id, String name, String city, String tier})> _donors = [];
+  List<({String id, String name, String city, String tier, String mobile, String email})> _donors = [];
   Map<String, String> _typeLabelToId = {};
   List<String> _typeLabels = [];
   bool _loadingData = false;
@@ -90,13 +90,15 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     _loadFormData();
   }
 
-  List<({String id, String name, String city, String tier})> _fallbackDonors() {
+  List<({String id, String name, String city, String tier, String mobile, String email})> _fallbackDonors() {
     final all = [...demoLocalDonors, ...mockDonorData];
-    return all.map<({String id, String name, String city, String tier})>((d) => (
-      id:   d['id']   as String? ?? '',
-      name: d['name'] as String? ?? '',
-      city: d['city'] as String? ?? '',
-      tier: d['tier'] as String? ?? 'SILVER',
+    return all.map<({String id, String name, String city, String tier, String mobile, String email})>((d) => (
+      id:     d['id']     as String? ?? '',
+      name:   d['name']   as String? ?? '',
+      city:   d['city']   as String? ?? '',
+      tier:   d['tier']   as String? ?? 'SILVER',
+      mobile: d['mobile'] as String? ?? d['phone'] as String? ?? '',
+      email:  d['email']  as String? ?? '',
     )).toList();
   }
 
@@ -111,9 +113,9 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       final dRes = results[0];
       final dInner = dRes['data'];
       List<dynamic> dList = dInner is Map ? (dInner['data'] as List? ?? []) : (dInner as List? ?? []);
-      var donors = dList.map<({String id, String name, String city, String tier})>((d) {
+      var donors = dList.map<({String id, String name, String city, String tier, String mobile, String email})>((d) {
         final m = d as Map<String, dynamic>;
-        return (id: m['id'] as String? ?? '', name: m['name'] as String? ?? '', city: m['city'] as String? ?? '', tier: m['tier'] as String? ?? 'SILVER');
+        return (id: m['id'] as String? ?? '', name: m['name'] as String? ?? '', city: m['city'] as String? ?? '', tier: m['tier'] as String? ?? 'SILVER', mobile: m['mobile'] as String? ?? m['phone'] as String? ?? '', email: m['email'] as String? ?? '');
       }).toList();
 
       // Always include demo/local donors
@@ -176,9 +178,15 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       context: context, isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) {
-        final filtered = search.isEmpty
+        final q = search.toLowerCase();
+        final filtered = q.isEmpty
           ? _donors
-          : _donors.where((d) => d.name.toLowerCase().contains(search.toLowerCase())).toList();
+          : _donors.where((d) =>
+              d.name.toLowerCase().contains(q) ||
+              d.mobile.toLowerCase().contains(q) ||
+              d.email.toLowerCase().contains(q) ||
+              d.city.toLowerCase().contains(q) ||
+              d.id.toLowerCase().contains(q)).toList();
         final kb = MediaQuery.of(ctx).viewInsets.bottom;
         return Padding(
           padding: EdgeInsets.only(bottom: kb),
@@ -196,7 +204,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
               decoration: BoxDecoration(color: ctx.scaffoldBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: ctx.border)),
               child: TextField(
                 onChanged: (v) => setSt(() => search = v),
-                decoration: InputDecoration(hintText: 'Search donor…', hintStyle: TextStyle(fontSize: 14, color: ctx.textHint),
+                decoration: InputDecoration(hintText: 'Search by name, mobile, email, city, ID…', hintStyle: TextStyle(fontSize: 13, color: ctx.textHint),
                   prefixIcon: Icon(Icons.search, color: ctx.textHint, size: 20), border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(vertical: 12)),
               ))),
             if (_loadingData)
@@ -226,7 +234,9 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                           const SizedBox(width: 11),
                           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Text(d.name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: ctx.textPrimary)),
-                            if (d.city.isNotEmpty) Text(d.city, style: TextStyle(fontSize: 12, color: ctx.textSub, fontWeight: FontWeight.w500)),
+                            if (d.mobile.isNotEmpty || d.city.isNotEmpty)
+                              Text([if (d.mobile.isNotEmpty) d.mobile, if (d.city.isNotEmpty) d.city].join(' · '), style: TextStyle(fontSize: 12, color: ctx.textSub, fontWeight: FontWeight.w500)),
+                            if (d.id.isNotEmpty) Text(d.id, style: TextStyle(fontSize: 11, color: ctx.textHint, fontWeight: FontWeight.w500)),
                           ])),
                           if (isSelected) const Icon(Icons.check_circle_rounded, color: _brand600, size: 22),
                         ]),
@@ -500,35 +510,33 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
               ])),
 
             // ── Inline action buttons ──────────────────────────────
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              OutlinedButton(
+            Row(children: [
+              Expanded(child: OutlinedButton(
                 onPressed: () => context.go('/donations'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF5A6B67),
                   backgroundColor: Colors.white,
                   side: const BorderSide(color: Color(0xFFD8E5E0), width: 1.5),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
-                  minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-                child: const Text('Cancel', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton(
+                child: const Text('Cancel', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              )),
+              const SizedBox(width: 14),
+              Expanded(flex: 2, child: ElevatedButton(
                 onPressed: _saving ? null : _save,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _brand600,
                   foregroundColor: Colors.white,
                   disabledBackgroundColor: _brand600.withValues(alpha: 0.6),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                  minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
                   elevation: 0,
                 ),
                 child: _saving
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                  : const Text('Save Donation', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-              ),
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                  : const Text('Save Donation', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              )),
             ]),
 
             ])),

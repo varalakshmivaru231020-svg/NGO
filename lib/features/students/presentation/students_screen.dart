@@ -375,22 +375,39 @@ class _StudentsScreenState extends State<StudentsScreen> {
           Container(
             color: context.headerBg,
             child: Column(children: [
-              SizedBox(height: 38, child: ListView(
+              SizedBox(height: 42, child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.fromLTRB(18, 0, 18, 0),
                 children: _statusFilters.map((s) {
+                  final centreFiltered = _centre == 'All Centres'
+                    ? _all
+                    : _all.where((st) => st.centreName == _centre).toList();
+                  final count = s == 'All'
+                    ? centreFiltered.length
+                    : centreFiltered.where((st) => st.displayStatus == s).length;
                   final active = _statusFilter == s;
                   final col = s == 'All' ? _brand600 : _statusColor(s);
                   return Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(
                     onTap: () => setState(() => _statusFilter = s),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                       decoration: BoxDecoration(
                         color: active ? col : context.cardBg,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: active ? col : context.border, width: 1.5),
                       ),
-                      child: Text(s, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Text(s, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub)),
+                        const SizedBox(width: 5),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: active ? Colors.white.withValues(alpha: 0.3) : col.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text('$count', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: active ? Colors.white : col)),
+                        ),
+                      ]),
                     ),
                   ));
                 }).toList(),

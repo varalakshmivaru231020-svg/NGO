@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
@@ -330,9 +331,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
                         child: Row(children: [
-                          _StudentStat(label: 'Attendance',    value: data['attendance'] ?? '—'),
-                          _vDivider,
-                          _StudentStat(label: 'Achievements',  value: data['achievementCount'] ?? '—'),
+                          _StudentStat(label: 'Activities',    value: data['achievementCount'] ?? '—'),
                           _vDivider,
                           _StudentStat(label: 'Sponsorship',   value: data['sponsorshipAmt'] ?? '—'),
                         ]),
@@ -355,7 +354,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             _ProfileTab(data: data),
             _EducationTab(data: data),
             _SponsorTab(data: data),
-            _AchievementsTab(name: name),
+            _ActivitiesTab(studentId: name),
             const _DocumentsTab(),
             _ProgressTab(data: data),
           ],
@@ -426,7 +425,7 @@ class _AppBarBottom extends StatelessWidget implements PreferredSizeWidget {
         Tab(text: 'Profile'),
         Tab(text: 'Education'),
         Tab(text: 'Sponsor'),
-        Tab(text: 'Achievements'),
+        Tab(text: 'Activities'),
         Tab(text: 'Documents'),
         Tab(text: 'Progress'),
       ],
@@ -758,135 +757,35 @@ class _TimelineEvent extends StatelessWidget {
 // ══════════════════════════════════════════════════════════════════════
 // ACHIEVEMENTS TAB
 // ══════════════════════════════════════════════════════════════════════
-class _Ach {
-  _Ach({required this.category, required this.title, required this.date, required this.desc,
-    required this.icon, required this.fg, required this.bg, this.certCount = 0});
-  final String category, title, date, desc;
-  final IconData icon;
-  final Color fg, bg;
-  final int certCount;
+// ── student activity model ────────────────────────────────────────────
+class _StudentActivity {
+  String title;
+  String category;
+  String description;
+  final String date;
+  final List<Uint8List> imageBytes;
+  final List<String> videoNames;
+  _StudentActivity({
+    required this.title, required this.category,
+    this.description = '', required this.date,
+    List<Uint8List>? imageBytes, List<String>? videoNames,
+  }) : imageBytes = imageBytes ?? [], videoNames = videoNames ?? [];
 }
 
-class _AchievementsTab extends StatefulWidget {
-  const _AchievementsTab({required this.name});
-  final String name;
+final _studentActivities = <String, List<_StudentActivity>>{};
+
+class _ActivitiesTab extends StatefulWidget {
+  const _ActivitiesTab({required this.studentId});
+  final String studentId;
   @override
-  State<_AchievementsTab> createState() => _AchievementsTabState();
+  State<_ActivitiesTab> createState() => _ActivitiesTabState();
 }
 
-class _AchievementsTabState extends State<_AchievementsTab> {
-  late final List<_Ach> _list = [
-    _Ach(category: 'Arts', icon: Icons.palette_outlined, fg: _amber600, bg: _amber100, certCount: 1,
-      title: 'State Drawing Competition — Finalist',
-      date: '15 Mar',
-      desc: 'Selected as a top-10 finalist among 4,000+ entries in the "My City" themed state drawing contest.'),
-    _Ach(category: 'Sports', icon: Icons.sports_cricket_outlined, fg: _sky500, bg: _sky100,
-      title: 'District Cricket Championship — 2nd Place',
-      date: 'Jun 2024',
-      desc: 'Runner-up in the district-level cricket championship representing Sulibele centre against 16 teams.'),
-    _Ach(category: 'Academics', icon: Icons.emoji_events_outlined, fg: _violet500, bg: _violet100, certCount: 1,
-      title: 'Annual Exam — First in Class (89.5%)',
-      date: 'Mar 2024',
-      desc: 'Ranked first in class with 89.5% in the annual examinations for the academic year 2023-24.'),
-    _Ach(category: 'Discipline', icon: Icons.star_outline_rounded, fg: _brand600, bg: _brand100,
-      title: 'Best Behaviour Award — 3 consecutive months',
-      date: 'Sep 2023',
-      desc: 'Awarded for exemplary conduct and positive attitude in class for 3 consecutive months.'),
-  ];
+class _ActivitiesTabState extends State<_ActivitiesTab> {
+  List<_StudentActivity> get _list => _studentActivities.putIfAbsent(widget.studentId, () => []);
 
-  final _titleCtrl = TextEditingController();
-  final _descCtrl  = TextEditingController();
-  String _newCat   = 'Arts';
+  static const _cats = ['Arts', 'Sports', 'Academics', 'Community', 'Leadership', 'Other'];
 
-  @override
-  void dispose() { _titleCtrl.dispose(); _descCtrl.dispose(); super.dispose(); }
-
-  void _showAdd() {
-    _titleCtrl.clear(); _descCtrl.clear(); _newCat = 'Arts';
-    showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, ss) {
-        const cats = ['Arts','Sports','Academics','Discipline','Community','Leadership'];
-        return Container(
-          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-          padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(ctx).viewInsets.bottom + 28),
-          child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(2)))),
-            const Text('Add Achievement', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 16),
-            const Text('Category', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
-            const SizedBox(height: 8),
-            Wrap(spacing: 8, runSpacing: 8, children: cats.map((c) {
-              final sel = _newCat == c;
-              return GestureDetector(
-                onTap: () => ss(() => _newCat = c),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(color: sel ? _brand600 : _surface2, borderRadius: BorderRadius.circular(10)),
-                  child: Text(c, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: sel ? Colors.white : _onSurface2)),
-                ),
-              );
-            }).toList()),
-            const SizedBox(height: 14),
-            const Text('Title', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
-            const SizedBox(height: 6),
-            TextField(controller: _titleCtrl,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-              decoration: InputDecoration(
-                hintText: 'e.g. State Drawing Competition — Finalist',
-                hintStyle: const TextStyle(color: _onSurface3, fontWeight: FontWeight.w400),
-                filled: true, fillColor: _surface2,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12))),
-            const SizedBox(height: 14),
-            const Text('Description', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
-            const SizedBox(height: 6),
-            TextField(controller: _descCtrl, maxLines: 3,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-              decoration: InputDecoration(
-                hintText: 'Brief description of the achievement…',
-                hintStyle: const TextStyle(color: _onSurface3, fontWeight: FontWeight.w400),
-                filled: true, fillColor: _surface2,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
-                contentPadding: const EdgeInsets.all(14))),
-            const SizedBox(height: 20),
-            SizedBox(width: double.infinity, child: ElevatedButton(
-              onPressed: () {
-                if (_titleCtrl.text.trim().isEmpty) return;
-                setState(() {
-                  _list.insert(0, _Ach(
-                    category: _newCat, title: _titleCtrl.text.trim(),
-                    date: 'Just now', desc: _descCtrl.text.trim().isNotEmpty ? _descCtrl.text.trim() : 'Achievement added.',
-                    icon: _catIcon(_newCat), fg: _catFg(_newCat), bg: _catBg(_newCat),
-                  ));
-                });
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: const Text('Achievement logged!', style: TextStyle(fontWeight: FontWeight.w700)),
-                  backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                padding: const EdgeInsets.symmetric(vertical: 15)),
-              child: const Text('Log Achievement', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-            )),
-          ])),
-        );
-      }),
-    );
-  }
-
-  static IconData _catIcon(String c) => switch (c) {
-    'Arts'       => Icons.palette_outlined,
-    'Sports'     => Icons.sports_cricket_outlined,
-    'Academics'  => Icons.emoji_events_outlined,
-    'Community'  => Icons.groups_outlined,
-    'Leadership' => Icons.military_tech_outlined,
-    _            => Icons.star_outline_rounded,
-  };
   static Color _catFg(String c) => switch (c) {
     'Arts'       => _amber600,
     'Sports'     => _sky500,
@@ -894,100 +793,311 @@ class _AchievementsTabState extends State<_AchievementsTab> {
     'Community'  => _brand600,
     _            => _coral500,
   };
-  static Color _catBg(String c) => switch (c) {
-    'Arts'       => _amber100,
-    'Sports'     => _sky100,
-    'Academics'  => _violet100,
-    'Community'  => _brand100,
-    _            => _coral100,
-  };
 
-  @override
-  Widget build(BuildContext context) => Stack(children: [
-    SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 100),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Count
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(color: _amber100, borderRadius: BorderRadius.circular(12)),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.emoji_events_outlined, color: _amber600, size: 16),
-            const SizedBox(width: 6),
-            Text('${_list.length} logged', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _amber600)),
+  void _openSheet({_StudentActivity? editing}) {
+    final titleCtrl = TextEditingController(text: editing?.title ?? '');
+    final descCtrl  = TextEditingController(text: editing?.description ?? '');
+    String cat = editing?.category ?? 'Arts';
+    final images = <Uint8List>[...?editing?.imageBytes];
+    final videos = <String>[...?editing?.videoNames];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480, maxHeight: 620),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 12, 0),
+              child: Row(children: [
+                Expanded(child: Text(editing == null ? 'Add Activity' : 'Edit Activity',
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: _onSurface1))),
+                IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close_rounded, size: 22, color: _onSurface2)),
+              ]),
+            ),
+            const Divider(height: 1, color: _border),
+            Expanded(child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Category', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+                const SizedBox(height: 8),
+                Wrap(spacing: 8, runSpacing: 6, children: _cats.map((c) {
+                  final sel = cat == c;
+                  return GestureDetector(
+                    onTap: () => ss(() => cat = c),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: sel ? _brand600 : _surface2,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: sel ? _brand600 : _border),
+                      ),
+                      child: Text(c, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: sel ? Colors.white : _onSurface2)),
+                    ),
+                  );
+                }).toList()),
+                const SizedBox(height: 14),
+                const Text('Title *', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: titleCtrl,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Annual Sports Day',
+                    hintStyle: const TextStyle(color: _onSurface3, fontWeight: FontWeight.w400),
+                    filled: true, fillColor: _surface2,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12)),
+                ),
+                const SizedBox(height: 14),
+                const Text('Description', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: descCtrl, maxLines: 3,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  decoration: InputDecoration(
+                    hintText: 'Brief description…',
+                    hintStyle: const TextStyle(color: _onSurface3, fontWeight: FontWeight.w400),
+                    filled: true, fillColor: _surface2,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+                    contentPadding: const EdgeInsets.all(14)),
+                ),
+                const SizedBox(height: 14),
+                Row(children: [
+                  Expanded(child: GestureDetector(
+                    onTap: () async {
+                      final r = await FilePicker.platform.pickFiles(allowMultiple: true, type: FileType.image, withData: true);
+                      if (r != null && mounted) {
+                        ss(() => images.addAll(r.files.where((f) => f.bytes != null).map((f) => f.bytes!)));
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12), border: Border.all(color: _brand600.withValues(alpha: 0.3))),
+                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        const Icon(Icons.add_photo_alternate_outlined, color: _brand600, size: 18),
+                        const SizedBox(width: 6),
+                        Text('Images${images.isNotEmpty ? ' (${images.length})' : ''}',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _brand600)),
+                      ]),
+                    ),
+                  )),
+                  const SizedBox(width: 10),
+                  Expanded(child: GestureDetector(
+                    onTap: () async {
+                      final r = await FilePicker.platform.pickFiles(allowMultiple: true, type: FileType.video, withData: false);
+                      if (r != null && mounted) {
+                        ss(() => videos.addAll(r.files.map((f) => f.name)));
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(color: _violet100, borderRadius: BorderRadius.circular(12), border: Border.all(color: _violet500.withValues(alpha: 0.3))),
+                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        const Icon(Icons.video_call_outlined, color: _violet500, size: 18),
+                        const SizedBox(width: 6),
+                        Text('Videos${videos.isNotEmpty ? ' (${videos.length})' : ''}',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _violet500)),
+                      ]),
+                    ),
+                  )),
+                ]),
+                if (images.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(height: 70, child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: images.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (_, i) => Stack(children: [
+                      ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.memory(images[i], width: 70, height: 70, fit: BoxFit.cover)),
+                      Positioned(top: 2, right: 2, child: GestureDetector(
+                        onTap: () => ss(() => images.removeAt(i)),
+                        child: Container(width: 18, height: 18, decoration: const BoxDecoration(color: _coral500, shape: BoxShape.circle),
+                          child: const Icon(Icons.close, size: 12, color: Colors.white)),
+                      )),
+                    ]),
+                  )),
+                ],
+                if (videos.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  ...videos.asMap().entries.map((e) => Padding(
+                    padding: const EdgeInsets.only(bottom: 5),
+                    child: Row(children: [
+                      const Icon(Icons.videocam_outlined, color: _violet500, size: 15),
+                      const SizedBox(width: 6),
+                      Expanded(child: Text(e.value, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _onSurface2), overflow: TextOverflow.ellipsis)),
+                      GestureDetector(onTap: () => ss(() => videos.removeAt(e.key)), child: const Icon(Icons.close, size: 15, color: _onSurface3)),
+                    ]),
+                  )),
+                ],
+              ]),
+            )),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+              child: Row(children: [
+                Expanded(child: OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: OutlinedButton.styleFrom(foregroundColor: _onSurface2, side: const BorderSide(color: _border),
+                    padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),
+                )),
+                const SizedBox(width: 12),
+                Expanded(flex: 2, child: ElevatedButton(
+                  onPressed: () {
+                    if (titleCtrl.text.trim().isEmpty) return;
+                    setState(() {
+                      if (editing == null) {
+                        _list.insert(0, _StudentActivity(
+                          title: titleCtrl.text.trim(), category: cat,
+                          description: descCtrl.text.trim(),
+                          date: _fmtDate(DateTime.now()),
+                          imageBytes: List.from(images), videoNames: List.from(videos),
+                        ));
+                      } else {
+                        editing.title = titleCtrl.text.trim();
+                        editing.category = cat;
+                        editing.description = descCtrl.text.trim();
+                      }
+                    });
+                    Navigator.pop(ctx);
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  child: Text(editing == null ? 'Save Activity' : 'Update', style: const TextStyle(fontWeight: FontWeight.w800)),
+                )),
+              ]),
+            ),
           ]),
         ),
-        const SizedBox(height: 14),
-        ..._list.map((a) => Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Container(width: 42, height: 42, decoration: BoxDecoration(color: a.bg, borderRadius: BorderRadius.circular(12)),
-                  child: Icon(a.icon, color: a.fg, size: 20)),
-                const SizedBox(width: 12),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: a.bg, borderRadius: BorderRadius.circular(6)),
-                    child: Text(a.category, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: a.fg))),
-                  const SizedBox(height: 5),
-                  Text(a.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, height: 1.35)),
-                  const SizedBox(height: 3),
-                  Text(a.date, style: const TextStyle(fontSize: 12, color: _onSurface3, fontWeight: FontWeight.w600)),
-                ])),
+      )),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final list = _list;
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
+        child: Row(children: [
+          Text('${list.length} Activit${list.length == 1 ? 'y' : 'ies'}',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _onSurface2)),
+          const Spacer(),
+          GestureDetector(
+            onTap: () => _openSheet(),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(10)),
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.add, color: Colors.white, size: 16),
+                SizedBox(width: 4),
+                Text('Add Activity', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
               ]),
-              if (a.desc.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Text(a.desc, style: const TextStyle(fontSize: 13, color: _onSurface2, fontWeight: FontWeight.w500, height: 1.5)),
-              ],
-              if (a.certCount > 0) ...[
-                const SizedBox(height: 10),
+            ),
+          ),
+        ]),
+      ),
+      if (list.isEmpty)
+        Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.photo_library_outlined, size: 44, color: _onSurface3),
+          const SizedBox(height: 12),
+          const Text('No activities yet', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _onSurface3)),
+          const SizedBox(height: 6),
+          const Text('Tap + to add an activity', style: TextStyle(fontSize: 13, color: _onSurface3)),
+        ])))
+      else
+        Expanded(child: ListView.separated(
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 40),
+          physics: const BouncingScrollPhysics(),
+          itemCount: list.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (_, i) {
+            final a = list[i];
+            final fg = _catFg(a.category);
+            return Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white, borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _border),
+                boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 6, offset: Offset(0, 2))],
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(color: _violet100, borderRadius: BorderRadius.circular(8)),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.workspace_premium_outlined, color: _violet500, size: 14),
-                      const SizedBox(width: 5),
-                      Text('+${a.certCount} Certificate attached', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _violet500)),
-                    ]),
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(color: fg.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+                    child: Text(a.category, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: fg)),
                   ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () {},
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                      decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(8), border: Border.all(color: _border)),
-                      child: const Text('View', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _onSurface2)),
-                    ),
-                  ),
+                  const Spacer(),
+                  Text(a.date, style: const TextStyle(fontSize: 12, color: _onSurface3, fontWeight: FontWeight.w500)),
                 ]),
-              ],
-            ]),
-          ),
+                const SizedBox(height: 8),
+                Text(a.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _onSurface1)),
+                if (a.description.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(a.description, style: const TextStyle(fontSize: 13, color: _onSurface2, height: 1.45)),
+                ],
+                if (a.imageBytes.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(height: 72, child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: a.imageBytes.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (_, j) => ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.memory(a.imageBytes[j], width: 72, height: 72, fit: BoxFit.cover),
+                    ),
+                  )),
+                ],
+                if (a.videoNames.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    const Icon(Icons.videocam_outlined, size: 15, color: _violet500),
+                    const SizedBox(width: 5),
+                    Text('${a.videoNames.length} video${a.videoNames.length == 1 ? '' : 's'}',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _violet500)),
+                  ]),
+                ],
+                const SizedBox(height: 10),
+                Row(children: [
+                  _SActBtn(label: 'Edit', icon: Icons.edit_outlined, onTap: () => _openSheet(editing: a)),
+                  const SizedBox(width: 8),
+                  _SActBtn(label: 'Delete', icon: Icons.delete_outline, color: _coral500,
+                    onTap: () => setState(() => _list.removeAt(i))),
+                ]),
+              ]),
+            );
+          },
         )),
+    ]);
+  }
+}
+
+String _fmtDate(DateTime d) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return '${d.day.toString().padLeft(2,'0')} ${months[d.month - 1]} ${d.year}';
+}
+
+class _SActBtn extends StatelessWidget {
+  const _SActBtn({required this.label, required this.icon, required this.onTap, this.color = _brand600});
+  final String label; final IconData icon; final VoidCallback onTap; final Color color;
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: color.withValues(alpha: 0.3))),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 5),
+        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
       ]),
     ),
-    Positioned(
-      bottom: 20, left: 18, right: 18,
-      child: SizedBox(
-        height: 50,
-        child: ElevatedButton.icon(
-          onPressed: _showAdd,
-          icon: const Icon(Icons.add, size: 20),
-          label: const Text('Add Achievement', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 4,
-            shadowColor: _brand600.withValues(alpha: 0.4),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-        ),
-      ),
-    ),
-  ]);
+  );
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1251,34 +1361,77 @@ class _UploadSection extends StatelessWidget {
 // ══════════════════════════════════════════════════════════════════════
 // PROGRESS TAB
 // ══════════════════════════════════════════════════════════════════════
-class _ProgressTab extends StatelessWidget {
+class _ProgressTab extends StatefulWidget {
   const _ProgressTab({required this.data});
   final Map<String, String> data;
+  @override
+  State<_ProgressTab> createState() => _ProgressTabState();
+}
+
+class _ProgressTabState extends State<_ProgressTab> {
+  late String _performance = widget.data['performance'] ?? 'Not specified';
+  late String _height      = widget.data['height']      ?? '—';
+  late String _weight      = widget.data['weight']      ?? '—';
+  bool _editing = false;
+
+  late final _perfCtrl   = TextEditingController(text: _performance);
+  late final _heightCtrl = TextEditingController(text: _height);
+  late final _weightCtrl = TextEditingController(text: _weight);
+
+  @override
+  void dispose() { _perfCtrl.dispose(); _heightCtrl.dispose(); _weightCtrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
     physics: const BouncingScrollPhysics(),
     padding: const EdgeInsets.all(18),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _CardSection(title: 'Academic Performance', icon: Icons.bar_chart_outlined, children: [
-        _InfoRow('Class / Grade',    data['class'] ?? 'Not specified'),
-        _InfoRow('Academic Year',    data['acadYear'] ?? '2025-26'),
-        _InfoRow('Performance',      data['performance'] ?? 'Not specified'),
-        _InfoRow('Admission No.',    data['admNo'] ?? 'Not specified'),
-        _InfoRow('Institution',      data['institution'] ?? 'Not specified', last: true),
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        const Text('Progress Overview', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _onSurface1)),
+        GestureDetector(
+          onTap: () {
+            if (_editing) {
+              setState(() {
+                _performance = _perfCtrl.text.trim().isNotEmpty ? _perfCtrl.text.trim() : _performance;
+                _height      = _heightCtrl.text.trim().isNotEmpty ? _heightCtrl.text.trim() : _height;
+                _weight      = _weightCtrl.text.trim().isNotEmpty ? _weightCtrl.text.trim() : _weight;
+                _editing = false;
+              });
+            } else {
+              setState(() => _editing = true);
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: _editing ? _brand600 : _surface2,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _editing ? _brand600 : _border),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(_editing ? Icons.check_rounded : Icons.edit_outlined, size: 15, color: _editing ? Colors.white : _onSurface2),
+              const SizedBox(width: 5),
+              Text(_editing ? 'Save' : 'Edit', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _editing ? Colors.white : _onSurface2)),
+            ]),
+          ),
+        ),
       ]),
       const SizedBox(height: 14),
-      _CardSection(title: 'Attendance & Engagement', icon: Icons.event_available_outlined, children: [
-        _InfoRow('Attendance',       data['attendance'] ?? '—'),
-        _InfoRow('Achievements',     data['achievementCount'] ?? '0'),
-        _InfoRow('Enrol Date',       data['enrollDate'] ?? '—', last: true),
+      _CardSection(title: 'Academic Performance', icon: Icons.bar_chart_outlined, children: [
+        _InfoRow('Class / Grade',    widget.data['class'] ?? 'Not specified'),
+        _InfoRow('Academic Year',    widget.data['acadYear'] ?? '2025-26'),
+        _editing
+          ? _EditableRow('Performance', _perfCtrl)
+          : _InfoRow('Performance', _performance),
+        _InfoRow('Admission No.',    widget.data['admNo'] ?? 'Not specified'),
+        _InfoRow('Institution',      widget.data['institution'] ?? 'Not specified', last: true),
       ]),
       const SizedBox(height: 14),
       _CardSection(title: 'Health Snapshot', icon: Icons.health_and_safety_outlined, children: [
-        _InfoRow('Height',           data['height'] ?? '—'),
-        _InfoRow('Weight',           data['weight'] ?? '—', last: true),
+        _editing ? _EditableRow('Height', _heightCtrl) : _InfoRow('Height', _height),
+        _editing ? _EditableRow('Weight', _weightCtrl, last: true) : _InfoRow('Weight', _weight, last: true),
       ]),
-      if (data['medHistory'] != null && data['medHistory']!.isNotEmpty) ...[
+      if (widget.data['medHistory'] != null && widget.data['medHistory']!.isNotEmpty) ...[
         const SizedBox(height: 10),
         Container(
           width: double.infinity,
@@ -1291,11 +1444,36 @@ class _ProgressTab extends StatelessWidget {
               Text('Medical Notes', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: _coral500)),
             ]),
             const SizedBox(height: 8),
-            Text(data['medHistory']!, style: const TextStyle(fontSize: 14, color: _onSurface1, fontWeight: FontWeight.w500, height: 1.5)),
+            Text(widget.data['medHistory']!, style: const TextStyle(fontSize: 14, color: _onSurface1, fontWeight: FontWeight.w500, height: 1.5)),
           ]),
         ),
       ],
       const SizedBox(height: 80),
+    ]),
+  );
+}
+
+class _EditableRow extends StatelessWidget {
+  const _EditableRow(this.label, this.ctrl, {this.last = false});
+  final String label;
+  final TextEditingController ctrl;
+  final bool last;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.only(bottom: last ? 0 : 12),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+      SizedBox(width: 130, child: Text(label, style: const TextStyle(fontSize: 13, color: _onSurface3, fontWeight: FontWeight.w600))),
+      Expanded(child: TextField(
+        controller: ctrl,
+        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _onSurface1),
+        decoration: InputDecoration(
+          isDense: true,
+          filled: true, fillColor: _surface2,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+        ),
+      )),
     ]),
   );
 }

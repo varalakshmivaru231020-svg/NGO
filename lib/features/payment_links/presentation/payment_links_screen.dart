@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:math' as math;
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../core/utils/app_launcher.dart';
@@ -44,7 +43,6 @@ const _recentLinks = [
   _Link(id:'p5', donor:'Deepak Nair',    amount:5000,   purpose:'Ramzan Ration Kit',status:'Expired', via:'SMS',      created:'12 May 2026'),
 ];
 
-const _funnel = [('Sent', 5, _sky500, _sky100), ('Viewed', 4, _amber600, _amber100), ('Paid', 2, _green600, _green100), ('Expired', 1, _coral500, _coral100)];
 
 Color _statusColor(String s) => switch (s) { 'Paid' => _green600, 'Viewed' => _amber600, 'Sent' => _sky500, 'Expired' => _coral500, _ => _onSurface3 };
 Color _statusBg(String s) => switch (s) { 'Paid' => _green100, 'Viewed' => _amber100, 'Sent' => _sky100, 'Expired' => _coral100, _ => _surface2 };
@@ -67,15 +65,19 @@ class PaymentLinksScreen extends StatefulWidget {
   State<PaymentLinksScreen> createState() => _PaymentLinksScreenState();
 }
 
+// Shared donation purpose categories — also updated by DonationTypesScreen
+final paymentLinkCategories = <String>[
+  'Education Fund', 'Child Sponsorship', 'General Fund', 'Food & Nutrition', 'Zakat',
+];
+
 class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
   final _amountCtrl = TextEditingController();
-  final _purposeCtrl = TextEditingController();
-  String _validity = '7 days';
+  String _purpose = paymentLinkCategories.first;
   bool _linkGenerated = false;
   String _generatedUrl = 'pay.saksham.org/d/8Kd2Qm';
 
   @override
-  void dispose() { _amountCtrl.dispose(); _purposeCtrl.dispose(); super.dispose(); }
+  void dispose() { _amountCtrl.dispose(); super.dispose(); }
 
   void _toast(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
     content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
@@ -113,21 +115,23 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
               _tf(_amountCtrl, 'e.g. 25000', keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
               const SizedBox(height: 12),
               _lbl('Purpose'),
-              _tf(_purposeCtrl, 'e.g. Education Fund'),
-              const SizedBox(height: 12),
-              _lbl('Validity'),
-              Wrap(spacing: 8, runSpacing: 8, children: ['3 days', '7 days', '30 days'].map((v) {
-                final active = _validity == v;
-                return GestureDetector(
-                  onTap: () => setState(() => _validity = v),
-                  child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(color: active ? _brand600 : Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: active ? _brand600 : _border, width: 1.5)),
-                    child: Text(v, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : _onSurface2))),
-                );
-              }).toList()),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                decoration: BoxDecoration(
+                  color: context.scaffoldBg, borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.border)),
+                child: DropdownButton<String>(
+                  value: _purpose,
+                  isExpanded: true,
+                  underline: const SizedBox.shrink(),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.textPrimary),
+                  items: paymentLinkCategories.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
+                  onChanged: (v) { if (v != null) setState(() => _purpose = v); },
+                ),
+              ),
               const SizedBox(height: 16),
               SizedBox(width: double.infinity, child: ElevatedButton.icon(
-                onPressed: () { setState(() { _linkGenerated = true; _generatedUrl = 'pay.saksham.org/d/${_purposeCtrl.text.isEmpty ? "8Kd2Qm" : _purposeCtrl.text.hashCode.toRadixString(36).substring(0, 6)}'; }); },
+                onPressed: () { setState(() { _linkGenerated = true; _generatedUrl = 'pay.saksham.org/d/${_purpose.hashCode.toRadixString(36).substring(0, 6)}'; }); },
                 style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: const EdgeInsets.symmetric(vertical: 14), elevation: 0),
                 icon: const Icon(Icons.link, size: 18),
                 label: const Text('Generate Link', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
@@ -141,7 +145,7 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
                 Row(children: [
                   Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(color: _green100, borderRadius: BorderRadius.circular(10)),
-                    child: const Row(children: [Icon(Icons.circle, size: 8, color: _green600), SizedBox(width: 6), Text('Link Active · expires in 7d', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: _green600))])),
+                    child: const Row(children: [Icon(Icons.circle, size: 8, color: _green600), SizedBox(width: 6), Text('Link Active', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: _green600))])),
                 ]),
                 const SizedBox(height: 16),
                 Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -153,8 +157,7 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
                     Text('₹${_amountCtrl.text.isEmpty ? "25,000" : NumberFormat("#,##,###","en_IN").format(int.tryParse(_amountCtrl.text) ?? 0)}',
                       style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: _brand700, letterSpacing: -1)),
                     const SizedBox(height: 4),
-                    Text(_purposeCtrl.text.isEmpty ? 'Education Fund' : _purposeCtrl.text,
-                      style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: _onSurface2)),
+                    Text(_purpose, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: _onSurface2)),
                     const SizedBox(height: 12),
                     GestureDetector(
                       onTap: () { Clipboard.setData(ClipboardData(text: _generatedUrl)); _toast('Link copied!'); },
@@ -183,41 +186,6 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
                 ]),
               ]))),
             ],
-
-            const SizedBox(height: 18),
-
-            // ── Funnel ────────────────────────────────────────────
-            const Text('Link Performance', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 10),
-            LayoutBuilder(builder: (_, constraints) {
-              final wide = constraints.maxWidth > 480;
-              Widget funnelCard((String, int, Color, Color) f) => Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(color: f.$4, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
-                child: Column(children: [
-                  Text('${f.$2}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: f.$3)),
-                  const SizedBox(height: 3),
-                  Text(f.$1, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _onSurface2)),
-                ]),
-              );
-              if (wide) {
-                return Row(children: _funnel.map((f) => Expanded(child: Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: funnelCard(f),
-                ))).toList());
-              }
-              return Column(children: [
-                Row(children: [
-                  Expanded(child: Padding(padding: const EdgeInsets.only(right: 4), child: funnelCard(_funnel[0]))),
-                  Expanded(child: Padding(padding: const EdgeInsets.only(left: 4), child: funnelCard(_funnel[1]))),
-                ]),
-                const SizedBox(height: 8),
-                Row(children: [
-                  Expanded(child: Padding(padding: const EdgeInsets.only(right: 4), child: funnelCard(_funnel[2]))),
-                  Expanded(child: Padding(padding: const EdgeInsets.only(left: 4), child: funnelCard(_funnel[3]))),
-                ]),
-              ]);
-            }),
 
             const SizedBox(height: 18),
 

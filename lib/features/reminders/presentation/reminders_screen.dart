@@ -149,7 +149,7 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
           ]),
         ),
 
-        // range chips
+        // range chips with counts
         Container(
           color: Colors.white,
           child: Column(children: [
@@ -158,13 +158,29 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
               padding: const EdgeInsets.fromLTRB(18, 6, 18, 6),
               children: _ranges.map((r) {
                 final active = _range == r;
+                final bdayCount = _birthdays.where((b) => b.when == r).length;
+                final annivCount = _anniversaries.where((a) => a.when == r).length;
+                final total = bdayCount + annivCount;
                 return Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(
                   onTap: () => setState(() => _range = r),
                   behavior: HitTestBehavior.opaque,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(color: active ? _brand600 : Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: active ? _brand600 : _border, width: 1.5)),
-                    child: Text(r, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : _onSurface2)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Text(r, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : _onSurface2)),
+                      if (total > 0) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: active ? Colors.white.withValues(alpha: 0.3) : _amber600.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text('$total', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: active ? Colors.white : _amber600)),
+                        ),
+                      ],
+                    ]),
                   ),
                 ));
               }).toList(),
