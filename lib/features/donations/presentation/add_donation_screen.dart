@@ -226,7 +226,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                           const SizedBox(width: 11),
                           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Text(d.name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: ctx.textPrimary)),
-                            Text('${d.city} · ${d.tier}', style: TextStyle(fontSize: 12, color: ctx.textSub, fontWeight: FontWeight.w500)),
+                            if (d.city.isNotEmpty) Text(d.city, style: TextStyle(fontSize: 12, color: ctx.textSub, fontWeight: FontWeight.w500)),
                           ])),
                           if (isSelected) const Icon(Icons.check_circle_rounded, color: _brand600, size: 22),
                         ]),
