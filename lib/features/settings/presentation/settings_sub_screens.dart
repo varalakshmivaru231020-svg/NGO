@@ -498,9 +498,9 @@ class _TeamMembersState extends State<TeamMembersScreen> {
   void _showInviteSheet() {
     final nameCtrl     = TextEditingController();
     final emailCtrl    = TextEditingController();
-    final usernameCtrl = TextEditingController();
     final passwordCtrl = TextEditingController();
-    String userType    = 'Volunteer';
+    String selectedRole = 'Field Officer';
+    const roleOptions = ['Admin', 'Field Officer', 'Donor Manager', 'Data Entry'];
     Map<String, String?> errors = {};
     bool obscurePass = true;
 
@@ -535,56 +535,52 @@ class _TeamMembersState extends State<TeamMembersScreen> {
           child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(color: ctx.border, borderRadius: BorderRadius.circular(2)))),
-            const Text('Add Team Member', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const Text('Create User', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 16),
             field(nameCtrl, 'Full Name', 'e.g. Priya Sharma'),
-            field(emailCtrl, 'Email Address', 'member@saksham.org', keyboard: TextInputType.emailAddress),
-            field(usernameCtrl, 'Username / User ID', 'e.g. priya.sharma'),
-            field(passwordCtrl, 'Password', 'Min 6 characters', obscure: obscurePass,
+            field(emailCtrl, 'Email', 'member@saksham.org', keyboard: TextInputType.emailAddress),
+            field(passwordCtrl, 'Password', 'Enter password', obscure: obscurePass,
               toggleObscure: () => setSheet(() => obscurePass = !obscurePass)),
-            Text('User Type', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: ctx.textSub)),
+            Text('Role', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: ctx.textSub)),
             const SizedBox(height: 6),
-            Wrap(spacing: 8, runSpacing: 8, children: ['Admin', 'Volunteer', 'Staff', 'Field Officer'].map((t) {
-              final active = userType == t;
-              return GestureDetector(
-                onTap: () => setSheet(() => userType = t),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: active ? _brand600 : ctx.surface2,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(t, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : ctx.textSub)),
-                ),
-              );
-            }).toList()),
+            Container(
+              decoration: BoxDecoration(color: ctx.surface2, borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: DropdownButtonHideUnderline(child: DropdownButton<String>(
+                value: selectedRole,
+                isExpanded: true,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                dropdownColor: ctx.cardBg,
+                borderRadius: BorderRadius.circular(12),
+                items: roleOptions.map((r) => DropdownMenuItem(value: r,
+                  child: Text(r, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: ctx.textPrimary)))).toList(),
+                onChanged: (v) { if (v != null) setSheet(() => selectedRole = v); },
+              )),
+            ),
             const SizedBox(height: 20),
             SizedBox(width: double.infinity, child: ElevatedButton(
               onPressed: () {
                 final name     = nameCtrl.text.trim();
                 final email    = emailCtrl.text.trim();
-                final username = usernameCtrl.text.trim();
                 final password = passwordCtrl.text;
                 final newErrors = <String, String?>{};
-                if (name.isEmpty)     newErrors['Full Name']      = 'Name is required';
-                if (email.isEmpty)    newErrors['Email Address']  = 'Email is required';
-                else if (!email.contains('@')) newErrors['Email Address'] = 'Enter a valid email';
-                if (username.isEmpty) newErrors['Username / User ID'] = 'Username is required';
-                if (password.isEmpty) newErrors['Password']       = 'Password is required';
-                else if (password.length < 6) newErrors['Password'] = 'Minimum 6 characters';
+                if (name.isEmpty)  newErrors['Full Name'] = 'Name is required';
+                if (email.isEmpty) newErrors['Email']     = 'Email is required';
+                else if (!email.contains('@')) newErrors['Email'] = 'Enter a valid email';
+                if (password.isEmpty) newErrors['Password'] = 'Password is required';
                 if (newErrors.isNotEmpty) { setSheet(() => errors = newErrors); return; }
                 setState(() => _members.add({
-                  'name': name, 'role': userType, 'email': email,
-                  'status': 'Invited', 'color': _sky500, 'self': false,
+                  'name': name, 'role': selectedRole, 'email': email,
+                  'status': 'Active', 'color': _sky500, 'self': false,
                 }));
                 Navigator.pop(ctx);
-                _snack(context, '$name added as $userType');
+                _snack(context, '$name created as $selectedRole');
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 padding: const EdgeInsets.symmetric(vertical: 15)),
-              child: const Text('Add Member', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              child: const Text('Create User', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
             )),
           ])),
         );
@@ -1551,24 +1547,34 @@ class _ManageRolesState extends State<ManageRolesScreen> {
       'members': 1,
       'isSystem': true,
       'perms': <String, dynamic>{
-        'donors':    <String, bool>{'view': true,  'add': true,  'edit': true},
-        'donations': <String, bool>{'view': true,  'add': true},
-        'children':  <String, bool>{'view': true,  'add': true,  'edit': true},
-        'reports':   <String, bool>{'view': true,  'export': true},
-        'settings':  <String, bool>{'access': true},
+        'donors':          <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': true},
+        'donations':       <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': true},
+        'students':        <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': true},
+        'offices':         <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': true},
+        'reports':         <String, bool>{'view': true,  'export': true},
+        'reminders':       <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': true},
+        'donationTracker': <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': true},
+        'paymentLinks':    <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': true},
+        'achievements':    <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': true},
+        'settings':        <String, bool>{'access': true},
       },
     },
     {
       'name': 'Field Officer',
-      'desc': 'Manages children and views reports',
+      'desc': 'Manages students and views reports',
       'members': 2,
       'isSystem': false,
       'perms': <String, dynamic>{
-        'donors':    <String, bool>{'view': true,  'add': false, 'edit': false},
-        'donations': <String, bool>{'view': true,  'add': false},
-        'children':  <String, bool>{'view': true,  'add': true,  'edit': true},
-        'reports':   <String, bool>{'view': true,  'export': false},
-        'settings':  <String, bool>{'access': false},
+        'donors':          <String, bool>{'view': true,  'add': false, 'edit': false, 'delete': false},
+        'donations':       <String, bool>{'view': true,  'add': false, 'edit': false, 'delete': false},
+        'students':        <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': false},
+        'offices':         <String, bool>{'view': true,  'add': false, 'edit': false, 'delete': false},
+        'reports':         <String, bool>{'view': true,  'export': false},
+        'reminders':       <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
+        'donationTracker': <String, bool>{'view': true,  'add': false, 'edit': false, 'delete': false},
+        'paymentLinks':    <String, bool>{'view': false, 'add': false, 'edit': false, 'delete': false},
+        'achievements':    <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
+        'settings':        <String, bool>{'access': false},
       },
     },
     {
@@ -1577,11 +1583,16 @@ class _ManageRolesState extends State<ManageRolesScreen> {
       'members': 1,
       'isSystem': false,
       'perms': <String, dynamic>{
-        'donors':    <String, bool>{'view': true,  'add': true,  'edit': true},
-        'donations': <String, bool>{'view': true,  'add': true},
-        'children':  <String, bool>{'view': false, 'add': false, 'edit': false},
-        'reports':   <String, bool>{'view': false, 'export': false},
-        'settings':  <String, bool>{'access': false},
+        'donors':          <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': false},
+        'donations':       <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': false},
+        'students':        <String, bool>{'view': false, 'add': false, 'edit': false, 'delete': false},
+        'offices':         <String, bool>{'view': false, 'add': false, 'edit': false, 'delete': false},
+        'reports':         <String, bool>{'view': false, 'export': false},
+        'reminders':       <String, bool>{'view': true,  'add': false, 'edit': false, 'delete': false},
+        'donationTracker': <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
+        'paymentLinks':    <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
+        'achievements':    <String, bool>{'view': false, 'add': false, 'edit': false, 'delete': false},
+        'settings':        <String, bool>{'access': false},
       },
     },
     {
@@ -1590,11 +1601,16 @@ class _ManageRolesState extends State<ManageRolesScreen> {
       'members': 1,
       'isSystem': false,
       'perms': <String, dynamic>{
-        'donors':    <String, bool>{'view': true,  'add': true,  'edit': false},
-        'donations': <String, bool>{'view': true,  'add': true},
-        'children':  <String, bool>{'view': true,  'add': true,  'edit': false},
-        'reports':   <String, bool>{'view': false, 'export': false},
-        'settings':  <String, bool>{'access': false},
+        'donors':          <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
+        'donations':       <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
+        'students':        <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
+        'offices':         <String, bool>{'view': true,  'add': false, 'edit': false, 'delete': false},
+        'reports':         <String, bool>{'view': false, 'export': false},
+        'reminders':       <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
+        'donationTracker': <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
+        'paymentLinks':    <String, bool>{'view': false, 'add': false, 'edit': false, 'delete': false},
+        'achievements':    <String, bool>{'view': true,  'add': false, 'edit': false, 'delete': false},
+        'settings':        <String, bool>{'access': false},
       },
     },
   ];
@@ -1605,18 +1621,26 @@ class _ManageRolesState extends State<ManageRolesScreen> {
       if (m is Map) return (m[key] as bool?) ?? false;
       return false;
     }
+    String _level(String mod) {
+      if (p(mod, 'delete')) return 'Full CRUD';
+      if (p(mod, 'edit'))   return 'No Delete';
+      if (p(mod, 'add'))    return 'Add only';
+      if (p(mod, 'view'))   return 'View only';
+      return '';
+    }
     final parts = <String>[];
-    if (p('donors', 'edit'))          parts.add('Donors (full)');
-    else if (p('donors', 'add'))      parts.add('Donors (add)');
-    else if (p('donors', 'view'))     parts.add('Donors (view)');
-    if (p('donations', 'add'))        parts.add('Donations (add)');
-    else if (p('donations', 'view'))  parts.add('Donations (view)');
-    if (p('children', 'edit'))        parts.add('Children (full)');
-    else if (p('children', 'add'))    parts.add('Children (add)');
-    else if (p('children', 'view'))   parts.add('Children (view)');
-    if (p('reports', 'export'))       parts.add('Reports + Export');
-    else if (p('reports', 'view'))    parts.add('Reports (view)');
-    if (parts.isEmpty)                parts.add('No module access');
+    for (final entry in {
+      'donors': 'Donors', 'donations': 'Donations', 'students': 'Students',
+      'offices': 'Offices', 'reminders': 'Reminders',
+      'donationTracker': 'Tracker', 'paymentLinks': 'Pay Links', 'achievements': 'Achievements',
+    }.entries) {
+      final lv = _level(entry.key);
+      if (lv.isNotEmpty) parts.add('${entry.value} ($lv)');
+    }
+    if (p('reports', 'export'))    parts.add('Reports + Export');
+    else if (p('reports', 'view')) parts.add('Reports (view)');
+    if (p('settings', 'access'))   parts.add('Settings');
+    if (parts.isEmpty)             parts.add('No module access');
     return parts;
   }
 
@@ -1631,11 +1655,16 @@ class _ManageRolesState extends State<ManageRolesScreen> {
     }
 
     final perms = <String, Map<String, bool>>{
-      'donors':    initPerm('donors',    ['view', 'add', 'edit']),
-      'donations': initPerm('donations', ['view', 'add']),
-      'children':  initPerm('children',  ['view', 'add', 'edit']),
-      'reports':   initPerm('reports',   ['view', 'export']),
-      'settings':  initPerm('settings',  ['access']),
+      'donors':          initPerm('donors',          ['view', 'add', 'edit', 'delete']),
+      'donations':       initPerm('donations',       ['view', 'add', 'edit', 'delete']),
+      'students':        initPerm('students',        ['view', 'add', 'edit', 'delete']),
+      'offices':         initPerm('offices',         ['view', 'add', 'edit', 'delete']),
+      'reports':         initPerm('reports',         ['view', 'export']),
+      'reminders':       initPerm('reminders',       ['view', 'add', 'edit', 'delete']),
+      'donationTracker': initPerm('donationTracker', ['view', 'add', 'edit', 'delete']),
+      'paymentLinks':    initPerm('paymentLinks',    ['view', 'add', 'edit', 'delete']),
+      'achievements':    initPerm('achievements',    ['view', 'add', 'edit', 'delete']),
+      'settings':        initPerm('settings',        ['access']),
     };
 
     showModalBottomSheet(
@@ -1701,30 +1730,48 @@ class _ManageRolesState extends State<ManageRolesScreen> {
                 _PermModule(
                   icon: Icons.people_outlined, color: _brand600, title: 'Donors',
                   perms: perms['donors']!,
-                  labels: const {'view': 'View donors', 'add': 'Add donors', 'edit': 'Edit & delete'},
+                  labels: const {'view': 'View', 'add': 'Add', 'edit': 'Edit', 'delete': 'Delete'},
                   onToggle: (k, v) => setSt(() {
                     perms['donors']![k] = v;
                     if (v && k != 'view') perms['donors']!['view'] = true;
+                    if (v && k == 'delete') perms['donors']!['edit'] = true;
+                    if (!v && k == 'view') { perms['donors']!['add'] = false; perms['donors']!['edit'] = false; perms['donors']!['delete'] = false; }
                   }),
                 ),
                 const SizedBox(height: 10),
                 _PermModule(
                   icon: Icons.account_balance_wallet_outlined, color: _amber600, title: 'Donations',
                   perms: perms['donations']!,
-                  labels: const {'view': 'View donations', 'add': 'Record donations'},
+                  labels: const {'view': 'View', 'add': 'Add', 'edit': 'Edit', 'delete': 'Delete'},
                   onToggle: (k, v) => setSt(() {
                     perms['donations']![k] = v;
-                    if (v && k == 'add') perms['donations']!['view'] = true;
+                    if (v && k != 'view') perms['donations']!['view'] = true;
+                    if (v && k == 'delete') perms['donations']!['edit'] = true;
+                    if (!v && k == 'view') { perms['donations']!['add'] = false; perms['donations']!['edit'] = false; perms['donations']!['delete'] = false; }
                   }),
                 ),
                 const SizedBox(height: 10),
                 _PermModule(
-                  icon: Icons.school_outlined, color: _violet500, title: 'Children',
-                  perms: perms['children']!,
-                  labels: const {'view': 'View children', 'add': 'Enrol children', 'edit': 'Edit & delete'},
+                  icon: Icons.school_outlined, color: _violet500, title: 'Students',
+                  perms: perms['students']!,
+                  labels: const {'view': 'View', 'add': 'Add', 'edit': 'Edit', 'delete': 'Delete'},
                   onToggle: (k, v) => setSt(() {
-                    perms['children']![k] = v;
-                    if (v && k != 'view') perms['children']!['view'] = true;
+                    perms['students']![k] = v;
+                    if (v && k != 'view') perms['students']!['view'] = true;
+                    if (v && k == 'delete') perms['students']!['edit'] = true;
+                    if (!v && k == 'view') { perms['students']!['add'] = false; perms['students']!['edit'] = false; perms['students']!['delete'] = false; }
+                  }),
+                ),
+                const SizedBox(height: 10),
+                _PermModule(
+                  icon: Icons.business_outlined, color: _sky500, title: 'Offices',
+                  perms: perms['offices']!,
+                  labels: const {'view': 'View', 'add': 'Add', 'edit': 'Edit', 'delete': 'Delete'},
+                  onToggle: (k, v) => setSt(() {
+                    perms['offices']![k] = v;
+                    if (v && k != 'view') perms['offices']!['view'] = true;
+                    if (v && k == 'delete') perms['offices']!['edit'] = true;
+                    if (!v && k == 'view') { perms['offices']!['add'] = false; perms['offices']!['edit'] = false; perms['offices']!['delete'] = false; }
                   }),
                 ),
                 const SizedBox(height: 10),
@@ -1735,6 +1782,54 @@ class _ManageRolesState extends State<ManageRolesScreen> {
                   onToggle: (k, v) => setSt(() {
                     perms['reports']![k] = v;
                     if (v && k == 'export') perms['reports']!['view'] = true;
+                  }),
+                ),
+                const SizedBox(height: 10),
+                _PermModule(
+                  icon: Icons.notifications_outlined, color: _amber600, title: 'Reminders',
+                  perms: perms['reminders']!,
+                  labels: const {'view': 'View', 'add': 'Add', 'edit': 'Edit', 'delete': 'Delete'},
+                  onToggle: (k, v) => setSt(() {
+                    perms['reminders']![k] = v;
+                    if (v && k != 'view') perms['reminders']!['view'] = true;
+                    if (v && k == 'delete') perms['reminders']!['edit'] = true;
+                    if (!v && k == 'view') { perms['reminders']!['add'] = false; perms['reminders']!['edit'] = false; perms['reminders']!['delete'] = false; }
+                  }),
+                ),
+                const SizedBox(height: 10),
+                _PermModule(
+                  icon: Icons.track_changes_outlined, color: _brand600, title: 'Donation Tracker',
+                  perms: perms['donationTracker']!,
+                  labels: const {'view': 'View', 'add': 'Add', 'edit': 'Edit', 'delete': 'Delete'},
+                  onToggle: (k, v) => setSt(() {
+                    perms['donationTracker']![k] = v;
+                    if (v && k != 'view') perms['donationTracker']!['view'] = true;
+                    if (v && k == 'delete') perms['donationTracker']!['edit'] = true;
+                    if (!v && k == 'view') { perms['donationTracker']!['add'] = false; perms['donationTracker']!['edit'] = false; perms['donationTracker']!['delete'] = false; }
+                  }),
+                ),
+                const SizedBox(height: 10),
+                _PermModule(
+                  icon: Icons.link_rounded, color: _violet500, title: 'Payment Links',
+                  perms: perms['paymentLinks']!,
+                  labels: const {'view': 'View', 'add': 'Add', 'edit': 'Edit', 'delete': 'Delete'},
+                  onToggle: (k, v) => setSt(() {
+                    perms['paymentLinks']![k] = v;
+                    if (v && k != 'view') perms['paymentLinks']!['view'] = true;
+                    if (v && k == 'delete') perms['paymentLinks']!['edit'] = true;
+                    if (!v && k == 'view') { perms['paymentLinks']!['add'] = false; perms['paymentLinks']!['edit'] = false; perms['paymentLinks']!['delete'] = false; }
+                  }),
+                ),
+                const SizedBox(height: 10),
+                _PermModule(
+                  icon: Icons.emoji_events_outlined, color: _amber600, title: 'Achievements',
+                  perms: perms['achievements']!,
+                  labels: const {'view': 'View', 'add': 'Add', 'edit': 'Edit', 'delete': 'Delete'},
+                  onToggle: (k, v) => setSt(() {
+                    perms['achievements']![k] = v;
+                    if (v && k != 'view') perms['achievements']!['view'] = true;
+                    if (v && k == 'delete') perms['achievements']!['edit'] = true;
+                    if (!v && k == 'view') { perms['achievements']!['add'] = false; perms['achievements']!['edit'] = false; perms['achievements']!['delete'] = false; }
                   }),
                 ),
                 const SizedBox(height: 10),
