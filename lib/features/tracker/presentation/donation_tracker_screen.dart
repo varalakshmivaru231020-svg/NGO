@@ -1,6 +1,8 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:excel/excel.dart' as xl;
 import '../../../core/utils/app_launcher.dart';
 import '../../../core/utils/native_file_saver.dart';
 import '../../../core/theme/app_theme.dart';
@@ -37,9 +39,10 @@ String _initials(String name) {
 }
 
 class _DItem {
-  const _DItem({required this.id, required this.donor, required this.type, required this.amount,
+  const _DItem({required this.id, required this.donor, required this.phone,
+    required this.category, required this.donationType, required this.amount,
     required this.method, required this.receipt, required this.date, required this.daysBefore});
-  final String id, donor, type, method, receipt, date;
+  final String id, donor, phone, category, donationType, method, receipt, date;
   final int amount, daysBefore;
 }
 
@@ -49,15 +52,15 @@ const _typeColors = {
 };
 
 const _allDonations = [
-  _DItem(id:'d1', donor:'Meera Iyer',     type:'General Donation', amount:15000,  method:'Payment Link', receipt:'RCP-2026-0156', date:'Today',          daysBefore:0),
-  _DItem(id:'d2', donor:'Kavya Reddy',    type:'Food Drive',       amount:11000,  method:'UPI',          receipt:'RCP-2026-0155', date:'02 Jun 2026',     daysBefore:2),
-  _DItem(id:'d3', donor:'Vikram Singh',   type:'Child Sponsorship',amount:30000,  method:'UPI',          receipt:'RCP-2026-0154', date:'02 Jun 2026',     daysBefore:2),
-  _DItem(id:'d4', donor:'Arjun Mehta',    type:'Corporate Match',  amount:50000,  method:'Bank Transfer',receipt:'RCP-2026-0153', date:'01 Jun 2026',     daysBefore:3),
-  _DItem(id:'d5', donor:'Rajesh Khanna',  type:'Education Fund',   amount:100000, method:'Bank Transfer',receipt:'RCP-2026-0149', date:'26 May 2026',     daysBefore:9),
-  _DItem(id:'d6', donor:'Priya Sharma',   type:'Child Sponsorship',amount:18000,  method:'UPI',          receipt:'RCP-2026-0148', date:'25 May 2026',     daysBefore:10),
-  _DItem(id:'d7', donor:'Deepak Nair',    type:'Food Drive',       amount:5000,   method:'UPI',          receipt:'RCP-2026-0140', date:'12 May 2026',     daysBefore:23),
-  _DItem(id:'d8', donor:'Sunita Iyer',    type:'Medical Aid',      amount:8500,   method:'Cash',         receipt:'RCP-2026-0130', date:'05 May 2026',     daysBefore:30),
-  _DItem(id:'d9', donor:'Kiran Reddy',    type:'General Donation', amount:2000,   method:'UPI',          receipt:'RCP-2026-0110', date:'10 Apr 2026',     daysBefore:55),
+  _DItem(id:'d1', donor:'Meera Iyer',    phone:'+91 98201 11001', category:'General Donation',  donationType:'One-time',   amount:15000,  method:'Payment Link',  receipt:'RCP-2026-0156', date:'Today',       daysBefore:0),
+  _DItem(id:'d2', donor:'Kavya Reddy',   phone:'+91 94501 22002', category:'Food Drive',         donationType:'One-time',   amount:11000,  method:'UPI',           receipt:'RCP-2026-0155', date:'02 Jun 2026', daysBefore:2),
+  _DItem(id:'d3', donor:'Vikram Singh',  phone:'+91 99001 33003', category:'Child Sponsorship',  donationType:'Recurring',  amount:30000,  method:'UPI',           receipt:'RCP-2026-0154', date:'02 Jun 2026', daysBefore:2),
+  _DItem(id:'d4', donor:'Arjun Mehta',   phone:'+91 87901 44004', category:'Corporate Match',    donationType:'Corporate',  amount:50000,  method:'Bank Transfer', receipt:'RCP-2026-0153', date:'01 Jun 2026', daysBefore:3),
+  _DItem(id:'d5', donor:'Rajesh Khanna', phone:'+91 98765 55005', category:'Education Fund',     donationType:'One-time',   amount:100000, method:'Bank Transfer', receipt:'RCP-2026-0149', date:'26 May 2026', daysBefore:9),
+  _DItem(id:'d6', donor:'Priya Sharma',  phone:'+91 91234 66006', category:'Child Sponsorship',  donationType:'Recurring',  amount:18000,  method:'UPI',           receipt:'RCP-2026-0148', date:'25 May 2026', daysBefore:10),
+  _DItem(id:'d7', donor:'Deepak Nair',   phone:'+91 80001 77007', category:'Food Drive',         donationType:'One-time',   amount:5000,   method:'UPI',           receipt:'RCP-2026-0140', date:'12 May 2026', daysBefore:23),
+  _DItem(id:'d8', donor:'Sunita Iyer',   phone:'+91 98451 88008', category:'Medical Aid',        donationType:'One-time',   amount:8500,   method:'Cash',          receipt:'RCP-2026-0130', date:'05 May 2026', daysBefore:30),
+  _DItem(id:'d9', donor:'Kiran Reddy',   phone:'+91 99876 99009', category:'General Donation',   donationType:'Pledge',     amount:2000,   method:'UPI',           receipt:'RCP-2026-0110', date:'10 Apr 2026', daysBefore:55),
 ];
 
 const _ranges = ['All', 'Today', 'This Week', 'This Month', 'Last Month'];
@@ -78,7 +81,7 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
     final max = maxDays[_range] ?? 9999;
     final min = _range == 'Last Month' ? 31 : 0;
     var list = _allDonations.where((d) => d.daysBefore >= min && d.daysBefore <= max).toList();
-    if (_typeFilter != 'All') list = list.where((d) => d.type == _typeFilter).toList();
+    if (_typeFilter != 'All') list = list.where((d) => d.category == _typeFilter).toList();
     return list;
   }
 
@@ -97,7 +100,7 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
     return _RangeSummary(total: total, count: items.length, donors: donors, avg: avg);
   }
 
-  Set<String> get _types => {'All', ..._allDonations.map((d) => d.type)};
+  Set<String> get _types => {'All', ..._allDonations.map((d) => d.category)};
 
   @override
   Widget build(BuildContext context) {
@@ -120,23 +123,40 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
               behavior: HitTestBehavior.opaque,
               onTap: () async {
                 final rows = _filtered;
-                final buf = StringBuffer();
-                buf.writeln('Donor,Type,Amount,Method,Receipt,Date');
-                for (final d in rows) {
-                  buf.writeln('${d.donor},${d.type},${d.amount},${d.method},${d.receipt},${d.date}');
+                final excel = xl.Excel.createExcel();
+                final sheet = excel['Donations'];
+                // header style
+                final hStyle = xl.CellStyle(
+                  bold: true, fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
+                  backgroundColorHex: xl.ExcelColor.fromHexString('#0E8C76'),
+                  horizontalAlign: xl.HorizontalAlign.Center,
+                );
+                final headers = ['Donor Name', 'Phone', 'Donation Type', 'Donation Amount (₹)', 'Category', 'Payment Mode', 'Receipt No.', 'Date'];
+                for (var c = 0; c < headers.length; c++) {
+                  final cell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0));
+                  cell.value = xl.TextCellValue(headers[c]);
+                  cell.cellStyle = hStyle;
                 }
-                final filename = 'Saksham_Donations_${DateFormat('ddMMyyyy').format(DateTime.now())}.csv';
-                final ok = await NativeFileSaver.saveCsv(filename, buf.toString());
+                for (var r = 0; r < rows.length; r++) {
+                  final d = rows[r];
+                  final rowData = [d.donor, d.phone, d.donationType, d.amount.toString(), d.category, d.method, d.receipt, d.date];
+                  for (var c = 0; c < rowData.length; c++) {
+                    sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r + 1)).value = xl.TextCellValue(rowData[c]);
+                  }
+                }
+                final rawBytes = excel.encode();
+                final filename = 'Saksham_Tracker_${DateFormat('ddMMyyyy').format(DateTime.now())}.xlsx';
+                final ok = rawBytes != null && await NativeFileSaver.saveBytes(filename, Uint8List.fromList(rawBytes), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(ok ? '✓ ${rows.length} records saved to Downloads/$filename' : 'Failed to save file', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    content: Text(ok ? '✓ ${rows.length} records exported to $filename' : 'Export failed', style: const TextStyle(fontWeight: FontWeight.w700)),
                     backgroundColor: ok ? _brand600 : Colors.red, behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
                 }
               },
               child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                 decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(12)),
-                child: const Row(children: [Icon(Icons.download_outlined, color: Colors.white, size: 16), SizedBox(width: 4), Text('Export CSV', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white))])),
+                child: const Row(children: [Icon(Icons.download_outlined, color: Colors.white, size: 16), SizedBox(width: 4), Text('Export Excel', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white))])),
             ),
           ])),
 
@@ -218,7 +238,7 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
                 Container(decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(20), border: Border.all(color: context.border)),
                   child: Column(children: e.value.asMap().entries.map((en) {
                     final i = en.key; final d = en.value;
-                    final typeColor = _typeColors[d.type] ?? _brand600;
+                    final typeColor = _typeColors[d.category] ?? _brand600;
                     final isOld = d.daysBefore > 60;
                     return Container(
                       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -235,9 +255,15 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
                             Row(children: [
                               Container(width: 8, height: 8, decoration: BoxDecoration(color: typeColor, borderRadius: BorderRadius.circular(2))),
                               const SizedBox(width: 6),
-                              Flexible(child: Text('${d.type} · ${d.method}', style: TextStyle(fontSize: 12.5, color: context.textSub, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
+                              Flexible(child: Text('${d.category} · ${d.method}', style: TextStyle(fontSize: 12.5, color: context.textSub, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
                             ]),
                             Text(d.receipt, style: TextStyle(fontSize: 11, color: context.textHint, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
+                            const SizedBox(height: 2),
+                            Row(children: [
+                              Icon(Icons.phone_outlined, size: 11, color: context.textHint),
+                              const SizedBox(width: 4),
+                              Text(d.phone, style: TextStyle(fontSize: 11, color: context.textHint, fontWeight: FontWeight.w500)),
+                            ]),
                           ])),
                           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                             Text(_inr(d.amount), style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: _brand700)),
@@ -247,11 +273,11 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
                         ]),
                         const SizedBox(height: 8),
                         Row(children: [
-                          _ActBtn(icon: Icons.call_outlined, label: 'Call', color: _brand600, onTap: () => _launchUrl('tel:+919900000001', context)),
+                          _ActBtn(icon: Icons.call_outlined, label: 'Call', color: _brand600, onTap: () => _launchUrl('tel:${d.phone.replaceAll(RegExp(r'[\s+]'), '')}', context)),
                           const SizedBox(width: 7),
-                          _ActBtn(icon: Icons.message_outlined, label: 'WhatsApp', color: const Color(0xFF25D366), onTap: () => _launchUrl('https://wa.me/919900000001', context)),
+                          _ActBtn(icon: Icons.message_outlined, label: 'WhatsApp', color: const Color(0xFF25D366), onTap: () => _launchUrl('https://wa.me/${d.phone.replaceAll(RegExp(r'[\s+]'), '')}', context)),
                           const SizedBox(width: 7),
-                          _ActBtn(icon: Icons.email_outlined, label: 'Email', color: _sky500, onTap: () => _launchUrl('mailto:donor@example.com', context)),
+                          _ActBtn(icon: Icons.email_outlined, label: 'Email', color: _sky500, onTap: () => _launchUrl('mailto:${d.donor.toLowerCase().replaceAll(' ', '.')}@example.com', context)),
                         ]),
                       ]),
                     );
