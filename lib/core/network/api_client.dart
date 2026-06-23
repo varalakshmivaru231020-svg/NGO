@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'ssl_bypass.dart' if (dart.library.io) 'ssl_bypass_io.dart';
 
 class ApiClient {
-  static const defaultBaseUrl = 'http://127.0.0.1:3001/api/v1';
+  static const defaultBaseUrl = 'https://ngo.bestprime.live/api/v1';
   static const serverUrlKey = 'server_url';
   late final Dio _dio;
 

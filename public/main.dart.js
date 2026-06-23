@@ -114013,7 +114013,7 @@ A.b7w.prototype={
 $1(a){return a.k7()},
 $S:699}
 A.ah5.prototype={
-agO(){var s=A.akF(A.ahG("http://127.0.0.1:3001/api/v1",B.Tu,A.O(["Content-Type","application/json"],t.N,t.z),B.TA))
+agO(){var s=A.akF(A.ahG("https://ngo.bestprime.live/api/v1",B.Tu,A.O(["Content-Type","application/json"],t.N,t.z),B.TA))
 this.a!==$&&A.be()
 this.a=s
 s.Fn$===$&&A.b()
@@ -114101,7 +114101,7 @@ s=l!=null?6:7
 break
 case 6:p=9
 k=A.aX(J.at(m.a,"server_url"))
-j=k!=null&&k.length!==0?k:"http://127.0.0.1:3001/api/v1"
+j=k!=null&&k.length!==0?k:"https://ngo.bestprime.live/api/v1"
 i=A.akF(null)
 i.Fn$===$&&A.b()
 c=t.N
@@ -119499,7 +119499,7 @@ o=o?B.acQ:B.Ya
 j.push(A.a0(A.cy(A.z(A.a([s,r,q,B.bb,A.X(A.a([p,B.aq,A.a0(A.Ao(o,B.alQ,n,A.ea(l,l,B.l,l,l,l,l,l,l,B.j,l,l,B.bn,l,new A.aT(A.n(12),B.p),l,l,l,l,l)),2)],k),B.h,B.d,B.e,0),B.cT,A.jf(a,"Active URL"),A.ho(a,new A.a7(B.aP,A.z(A.a([A.k(m.r,l,l,l,l,B.af9,l,l,l),B.Z,A.aF(l,B.aap,B.o,!1,l,l,l,l,l,l,l,l,l,l,l,l,l,l,m.gaxV(),l,l,l,l,l,l)],k),B.q,B.d,B.e),l))],k),B.q,B.d,B.e),l,B.o,B.UI,B.an,B.z),1))}return A.d8(l,l,A.z(j,B.h,B.d,B.e),l,l)}}
 A.aZW.prototype={
 $0(){var s=this.a,r=this.b
-r=r.length!==0?r:"http://127.0.0.1:3001/api/v1"
+r=r.length!==0?r:"https://ngo.bestprime.live/api/v1"
 s.r=r
 s.d.sd3(0,r)
 s.e=!1},
@@ -119513,7 +119513,7 @@ s.f=!1
 s.r=this.b},
 $S:0}
 A.aZX.prototype={
-$0(){var s="http://127.0.0.1:3001/api/v1",r=this.a
+$0(){var s="https://ngo.bestprime.live/api/v1",r=this.a
 r.r=s
 r.d.sd3(0,s)},
 $S:0}
