@@ -20,27 +20,44 @@ const _surface2 = Color(0xFFF4F7F6);
 // ── data ──────────────────────────────────────────────────────────────
 class _Reminder {
   const _Reminder({required this.id, required this.name, required this.type, required this.date,
-    required this.count, required this.mobile, required this.when, required this.isBday});
-  final String id, name, type, date, mobile, when;
+    required this.count, required this.mobile, required this.isBday});
+  final String id, name, type, date, mobile;
   final int count;
   final bool isBday;
 }
 
 const _birthdays = [
-  _Reminder(id:'b1', name:'Anita Desai', type:'Donor',   date:'04 Jun 2026', count:58, mobile:'+91 98337 11290', when:'Today',      isBday:true),
-  _Reminder(id:'b2', name:'Diya Reddy',  type:'Student', date:'04 Jun 2026', count:11, mobile:'+91 96112 99087', when:'Today',      isBday:true),
-  _Reminder(id:'b3', name:'Rohan Patil', type:'Student', date:'07 Jun 2026', count:12, mobile:'+91 90040 12009', when:'This week',  isBday:true),
-  _Reminder(id:'b4', name:'Arjun Mehta', type:'Donor',   date:'19 Jun 2026', count:36, mobile:'+91 90040 88876', when:'This month', isBday:true),
-  _Reminder(id:'b5', name:'Kavya Reddy', type:'Donor',   date:'21 Jun 2026', count:31, mobile:'+91 91210 66789', when:'This month', isBday:true),
+  _Reminder(id:'b1', name:'Anita Desai', type:'Donor',   date:'23 Jun', count:58, mobile:'+91 98337 11290', isBday:true),
+  _Reminder(id:'b2', name:'Diya Reddy',  type:'Student', date:'23 Jun', count:11, mobile:'+91 96112 99087', isBday:true),
+  _Reminder(id:'b3', name:'Rohan Patil', type:'Student', date:'26 Jun', count:12, mobile:'+91 90040 12009', isBday:true),
+  _Reminder(id:'b4', name:'Arjun Mehta', type:'Donor',   date:'29 Jun', count:36, mobile:'+91 90040 88876', isBday:true),
+  _Reminder(id:'b5', name:'Kavya Reddy', type:'Donor',   date:'30 Jun', count:31, mobile:'+91 91210 66789', isBday:true),
 ];
 
 const _anniversaries = [
-  _Reminder(id:'n1', name:'Vikram Singh', type:'Donor', date:'04 Jun 2026', count:20, mobile:'+91 70110 55432', when:'Today',      isBday:false),
-  _Reminder(id:'n2', name:'Meera Iyer',   type:'Donor', date:'09 Jun 2026', count:4,  mobile:'+91 96112 33447', when:'This week',  isBday:false),
-  _Reminder(id:'n3', name:'Priya Sharma', type:'Donor', date:'14 Jun 2026', count:14, mobile:'+91 99303 22118', when:'This month', isBday:false),
+  _Reminder(id:'n1', name:'Vikram Singh', type:'Donor', date:'23 Jun', count:20, mobile:'+91 70110 55432', isBday:false),
+  _Reminder(id:'n2', name:'Meera Iyer',   type:'Donor', date:'27 Jun', count:4,  mobile:'+91 96112 33447', isBday:false),
+  _Reminder(id:'n3', name:'Priya Sharma', type:'Donor', date:'14 Jul', count:14, mobile:'+91 99303 22118', isBday:false),
 ];
 
 const _ranges = ['Today', 'This week', 'This month'];
+
+String _rangeOf(_Reminder r) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final parts = r.date.split(' ');
+  const months = {'Jan':1,'Feb':2,'Mar':3,'Apr':4,'May':5,'Jun':6,'Jul':7,'Aug':8,'Sep':9,'Oct':10,'Nov':11,'Dec':12};
+  final day = int.parse(parts[0]);
+  final month = months[parts[1]] ?? now.month;
+  final year = month >= now.month ? now.year : now.year + 1;
+  final date = DateTime(year, month, day);
+  final diff = date.difference(today).inDays;
+  if (diff == 0) return 'Today';
+  if (diff > 0 && diff <= 7) return 'This week';
+  if (diff > 0 && date.month == today.month && date.year == today.year) return 'This month';
+  if (diff > 0 && diff <= 31) return 'This month';
+  return 'Future';
+}
 
 Color _avColor(String seed) {
   final palette = [_brand600, const Color(0xFFF6A723), _violet500, _sky500, const Color(0xFFEC5B8B), _coral500, const Color(0xFF14A98C)];
@@ -72,7 +89,7 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
   List<_Reminder> _filter(List<_Reminder> list) {
     final order = {'Today': 1, 'This week': 2, 'This month': 3};
     final max = order[_range]!;
-    return list.where((r) => (order[r.when] ?? 99) <= max).toList();
+    return list.where((r) => (order[_rangeOf(r)] ?? 99) <= max).toList();
   }
 
   void _toast(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -97,7 +114,7 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
-    final todayCount = _birthdays.where((b) => b.when == 'Today').length + _anniversaries.where((a) => a.when == 'Today').length;
+    final todayCount = _birthdays.where((b) => _rangeOf(b) == 'Today').length + _anniversaries.where((a) => _rangeOf(a) == 'Today').length;
 
     return Scaffold(
       backgroundColor: _surface2,
@@ -158,8 +175,10 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
               padding: const EdgeInsets.fromLTRB(18, 6, 18, 6),
               children: _ranges.map((r) {
                 final active = _range == r;
-                final bdayCount = _birthdays.where((b) => b.when == r).length;
-                final annivCount = _anniversaries.where((a) => a.when == r).length;
+                final order = {'Today': 1, 'This week': 2, 'This month': 3};
+                final max = order[r]!;
+                final bdayCount = _birthdays.where((b) => (order[_rangeOf(b)] ?? 99) <= max).length;
+                final annivCount = _anniversaries.where((a) => (order[_rangeOf(a)] ?? 99) <= max).length;
                 final total = bdayCount + annivCount;
                 return Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(
                   onTap: () => setState(() => _range = r),
@@ -219,7 +238,7 @@ class _ReminderList extends StatelessWidget {
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(18, 14, 18, 100),
         child: Center(child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 900),
+          constraints: const BoxConstraints(),
           child: Column(children: items.asMap().entries.map((e) => Padding(
             padding: EdgeInsets.only(bottom: e.key < items.length - 1 ? 10 : 0),
             child: _ReminderCard(item: e.value, isBday: isBday, onCall: onCall, onWhatsApp: onWhatsApp),
@@ -238,7 +257,7 @@ class _ReminderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _avColor(item.name);
-    final isToday = item.when == 'Today';
+    final isToday = _rangeOf(item) == 'Today';
     return Container(
       decoration: BoxDecoration(
         color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: isToday ? _amber600.withValues(alpha: 0.4) : _border),
@@ -265,7 +284,7 @@ class _ReminderCard extends StatelessWidget {
             ]),
             const SizedBox(height: 4),
             Text(isBday ? 'Turning ${item.count}' : '${item.count} years together', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _onSurface2)),
-            Text(item.date, style: const TextStyle(fontSize: 12, color: _onSurface3, fontWeight: FontWeight.w500)),
+            Text('${item.date} ${DateTime.now().year}', style: const TextStyle(fontSize: 12, color: _onSurface3, fontWeight: FontWeight.w500)),
           ])),
           if (isToday)
             Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),

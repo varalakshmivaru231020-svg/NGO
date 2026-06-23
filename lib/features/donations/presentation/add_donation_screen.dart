@@ -335,7 +335,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
         Expanded(child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           child: Center(child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
+            constraints: const BoxConstraints(),
             child: Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 32), child: Column(children: [
 
               // amount entry card

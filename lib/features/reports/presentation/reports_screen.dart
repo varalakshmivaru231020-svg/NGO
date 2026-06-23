@@ -95,7 +95,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         Expanded(child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           child: Center(child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 900),
+            constraints: const BoxConstraints(),
             child: Column(children: [
             // ── filter controls ────────────────────────────────────
             Padding(

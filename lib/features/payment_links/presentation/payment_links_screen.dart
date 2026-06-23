@@ -105,7 +105,7 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
           child: Center(child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 900),
+            constraints: const BoxConstraints(),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // ── Create card ────────────────────────────────────────
             _card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

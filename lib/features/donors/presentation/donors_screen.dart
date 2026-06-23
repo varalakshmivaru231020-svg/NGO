@@ -190,7 +190,7 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
         loading: () => Column(children: [
           Container(color: context.headerBg, height: top + 70),
           Expanded(child: Center(child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 900),
+            constraints: const BoxConstraints(),
             child: ListView.builder(
               padding: const EdgeInsets.fromLTRB(18, 16, 18, 40),
               itemCount: 6,

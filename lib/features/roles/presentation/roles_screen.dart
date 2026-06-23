@@ -69,7 +69,7 @@ class _RolesScreenState extends State<RolesScreen> {
         Text('Tap "Create Role" to add one', style: TextStyle(fontSize: 13, color: _onSurface3)),
       ]))
     : Center(child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 900),
+        constraints: const BoxConstraints(),
         child: ListView.builder(
           padding: const EdgeInsets.fromLTRB(18, 14, 18, 40),
           itemCount: appRoles.length,
@@ -86,7 +86,7 @@ class _RolesScreenState extends State<RolesScreen> {
       return const Center(child: Text('No roles to display', style: TextStyle(color: _onSurface3)));
     }
     return Center(child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 900),
+      constraints: const BoxConstraints(),
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(18, 14, 18, 40),
@@ -173,7 +173,7 @@ class _RolesScreenState extends State<RolesScreen> {
 
         // ── Info banner ──────────────────────────────────────────────
         Center(child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 900),
+          constraints: const BoxConstraints(),
           child: Container(
             margin: const EdgeInsets.fromLTRB(18, 14, 18, 0),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -191,7 +191,7 @@ class _RolesScreenState extends State<RolesScreen> {
 
         // ── Tab buttons ──────────────────────────────────────────────
         Center(child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 900),
+          constraints: const BoxConstraints(),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
             child: Row(children: [

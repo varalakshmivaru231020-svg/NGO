@@ -143,7 +143,7 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
         Expanded(child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           child: Center(child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 900),
+            constraints: const BoxConstraints(),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // range summary card
             Padding(padding: const EdgeInsets.fromLTRB(18, 16, 18, 0), child: Container(

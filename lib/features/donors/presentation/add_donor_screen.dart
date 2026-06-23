@@ -207,7 +207,7 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 760),
+                  constraints: const BoxConstraints(),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
                 // ── Photo + Personal ──────────────────────────────────

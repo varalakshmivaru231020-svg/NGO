@@ -715,11 +715,33 @@ class _DocumentsTabState extends State<_DocumentsTab> {
   }
 
   Future<void> _pickOther() async {
+    final nameCtrl = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Document Name'),
+        content: TextField(
+          controller: nameCtrl,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Enter document name'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              final v = nameCtrl.text.trim();
+              if (v.isNotEmpty) Navigator.pop(ctx, v);
+            },
+            child: const Text('Next'),
+          ),
+        ],
+      ),
+    );
+    if (name == null || !mounted) return;
     setState(() => _uploading = true);
     try {
       final r = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
       if (r != null && r.files.isNotEmpty && mounted) {
-        final name = r.files.single.name;
         _storeBytes(name, r.files.single.bytes);
         setState(() {
           _docs.add(_DocEntry(name, 'Attachment'));
@@ -748,6 +770,23 @@ class _DocumentsTabState extends State<_DocumentsTab> {
           ),
         ]),
         const SizedBox(height: 10),
+        GestureDetector(
+          onTap: _uploading ? null : _pickOther,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white, borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _brand600.withValues(alpha: 0.4), width: 1.5),
+            ),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.upload_file_outlined, size: 18, color: _brand600),
+              const SizedBox(width: 8),
+              const Text('Upload other document', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _brand600)),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
           child: Column(children: _docs.asMap().entries.map((entry) {
@@ -814,23 +853,6 @@ class _DocumentsTabState extends State<_DocumentsTab> {
               if (!isLast) const Divider(height: 1, color: _border),
             ]);
           }).toList()),
-        ),
-        const SizedBox(height: 12),
-        GestureDetector(
-          onTap: _uploading ? null : _pickOther,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            decoration: BoxDecoration(
-              color: Colors.white, borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _brand600.withValues(alpha: 0.4), width: 1.5),
-            ),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Icon(Icons.upload_file_outlined, size: 18, color: _brand600),
-              const SizedBox(width: 8),
-              const Text('Upload other attachment', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _brand600)),
-            ]),
-          ),
         ),
       ],
     );

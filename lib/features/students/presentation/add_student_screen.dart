@@ -313,7 +313,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
               padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 680),
+                  constraints: const BoxConstraints(),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
                 // ── Profile Photo ─────────────────────────────────────

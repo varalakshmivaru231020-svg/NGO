@@ -144,7 +144,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     physics: const BouncingScrollPhysics(),
     padding: const EdgeInsets.fromLTRB(18, 16, 18, 40),
     child: Center(child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 700),
+      constraints: const BoxConstraints(),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _settingsSection('Organization Details', [
           _settingsItem(Icons.business_outlined, 'Organization Name', _orgName, onTap: () => _editField('Organization Name', _orgName, (v) => _orgName = v)),
@@ -216,7 +216,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     physics: const BouncingScrollPhysics(),
     padding: const EdgeInsets.fromLTRB(18, 16, 18, 40),
     child: Center(child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 700),
+      constraints: const BoxConstraints(),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const SizedBox(height: 8),
         Center(child: Column(children: [
@@ -256,7 +256,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     physics: const BouncingScrollPhysics(),
     padding: const EdgeInsets.fromLTRB(18, 16, 18, 40),
     child: Center(child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 700),
+      constraints: const BoxConstraints(),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _settingsSection('Password & Authentication', [
           _settingsItem(Icons.lock_outline, 'Change Password', 'Last changed 30 days ago',
@@ -277,7 +277,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     physics: const BouncingScrollPhysics(),
     padding: const EdgeInsets.fromLTRB(18, 16, 18, 40),
     child: Center(child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 700),
+      constraints: const BoxConstraints(),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _settingsSection('Visual Identity', [
           _settingsItem(Icons.image_outlined, 'Organization Logo', 'Upload PNG or SVG', onTap: () {}),
@@ -300,7 +300,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     physics: const BouncingScrollPhysics(),
     padding: const EdgeInsets.fromLTRB(18, 16, 18, 40),
     child: Center(child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 700),
+      constraints: const BoxConstraints(),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _settingsSection('Alerts', [
           _settingsToggle(Icons.cake_outlined, 'Birthday Reminders', 'Get notified on donor/student birthdays', _notifBirthdays,

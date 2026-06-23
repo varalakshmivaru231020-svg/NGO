@@ -225,7 +225,7 @@ class _OfficesScreenState extends State<OfficesScreen> {
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
             child: Center(child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900),
+              constraints: const BoxConstraints(),
               child: Column(children: [
                 ...filtered.map((o) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),

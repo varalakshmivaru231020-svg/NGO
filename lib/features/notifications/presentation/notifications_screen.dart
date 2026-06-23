@@ -80,7 +80,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ]),
         ),
         Expanded(child: Center(child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 900),
+          constraints: const BoxConstraints(),
           child: ListView(
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(0, 12, 0, 100),
