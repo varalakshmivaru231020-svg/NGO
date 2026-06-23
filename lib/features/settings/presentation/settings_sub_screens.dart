@@ -1210,11 +1210,7 @@ class HelpSupportScreen extends StatelessWidget {
           _buildSectionLabel(context, 'App Info'),
           _buildCard(context, child: Column(children: [
             _buildRow(context, 'App Version',     value: 'v2.4.0 (Build 195)', icon: Icons.info_outline,       fg: context.textSub, trailing: const SizedBox.shrink()),
-            _buildRow(context, 'Flutter Version', value: '3.44.1',              icon: Icons.flutter_dash,       fg: _sky500,         trailing: const SizedBox.shrink()),
-            _buildRow(context, 'Report a Bug',    value: 'Send us a crash/UX report', icon: Icons.bug_report_outlined, fg: _coral500, last: true,
-              onTap: () => launchEmail('bugs@sakshamfoundation.org', context,
-                subject: 'Bug Report – Saksham App v2.4.0',
-                body: 'Describe the bug:\n\nSteps to reproduce:\n\nDevice: OPPO\nApp Version: v2.4.0')),
+            _buildRow(context, 'Flutter Version', value: '3.44.1',              icon: Icons.flutter_dash,       fg: _sky500,         last: true, trailing: const SizedBox.shrink()),
           ])),
         ]),
       )),
@@ -1235,32 +1231,36 @@ class HelpSupportScreen extends StatelessWidget {
   ));
 
   static void _showGuide(BuildContext context, String title, List<String> steps) {
-    showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.72),
-        decoration: BoxDecoration(color: ctx.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(color: ctx.border, borderRadius: BorderRadius.circular(2)))),
-          Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 16),
-          Flexible(child: SingleChildScrollView(child: Column(
-            children: steps.asMap().entries.map((e) => Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Container(width: 28, height: 28, margin: const EdgeInsets.only(right: 12),
-                  decoration: const BoxDecoration(color: _brand100, shape: BoxShape.circle),
-                  child: Center(child: Text('${e.key + 1}',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _brand600)))),
-                Expanded(child: Padding(padding: const EdgeInsets.only(top: 4),
-                  child: Text(e.value,
-                    style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500, color: ctx.textSub, height: 1.4)))),
-              ]),
-            )).toList(),
-          ))),
-        ]),
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: 480, maxHeight: MediaQuery.of(ctx).size.height * 0.72),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 16),
+              Flexible(child: SingleChildScrollView(child: Column(
+                children: steps.asMap().entries.map((e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Container(width: 28, height: 28, margin: const EdgeInsets.only(right: 12),
+                      decoration: const BoxDecoration(color: _brand100, shape: BoxShape.circle),
+                      child: Center(child: Text('${e.key + 1}',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _brand600)))),
+                    Expanded(child: Padding(padding: const EdgeInsets.only(top: 4),
+                      child: Text(e.value,
+                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500, color: ctx.textSub, height: 1.4)))),
+                  ]),
+                )).toList(),
+              ))),
+              const SizedBox(height: 16),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+            ]),
+          ),
+        ),
       ),
     );
   }
@@ -1316,7 +1316,7 @@ class _LegalScreen extends StatelessWidget {
       Expanded(child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 40),
-        child: Column(children: [
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           if (hasLiveBody) Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8)),
