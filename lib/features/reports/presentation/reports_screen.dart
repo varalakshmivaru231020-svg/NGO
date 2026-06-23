@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'package:excel/excel.dart' as xl;
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:go_router/go_router.dart';
@@ -65,6 +67,46 @@ const _topDonors = [
   ('Deepak Nair', 'Corporate', 125000),
 ];
 
+// ── Mock data for exports ──────────────────────────────────────────────
+const _donationRows = [
+  ('Rajesh Khanna',  'Jun 2026', 'Education Fund',   'Bank Transfer', 50000),
+  ('Arjun Mehta',   'Jun 2026', 'Child Sponsorship', 'UPI',           35000),
+  ('Priya Sharma',  'Jun 2026', 'General Fund',       'Cheque',        28000),
+  ('Vikram Singh',  'May 2026', 'Medical Aid',        'Bank Transfer', 22000),
+  ('Deepak Nair',   'May 2026', 'Education Fund',     'UPI',           18500),
+  ('Sunita Joshi',  'May 2026', 'Child Sponsorship',  'Cash',          15000),
+  ('Kavitha Rao',   'Apr 2026', 'Food Drive',         'UPI',           12000),
+  ('Suresh Nair',   'Apr 2026', 'Education Fund',     'Bank Transfer', 45000),
+  ('Deepak Joshi',  'Apr 2026', 'General Fund',       'Cheque',        30000),
+  ('Meena Gupta',   'Mar 2026', 'Child Sponsorship',  'UPI',           25000),
+];
+
+const _studentRows = [
+  ('SKT-C-0001', 'Aarav Kumar',    'Sulibele',    'Class 6',  'Active',    'Male',   12, 'Rajesh Khanna', '+91 98765 11001', 'Sulibele Village'),
+  ('SKT-C-0002', 'Sneha Patil',    'Yelahanka',   'Class 5',  'Active',    'Female', 11, 'Kavitha Rao',   '+91 98765 11002', 'Yelahanka Layout'),
+  ('SKT-C-0003', 'Ravi Shankar',   'Sulibele',    'Class 8',  'Active',    'Male',   14, '-',             '+91 98765 11003', 'Sulibele Village'),
+  ('SKT-C-0004', 'Lakshmi Devi',   'Yelahanka',   'Class 7',  'Active',    'Female', 13, 'Priya Sharma',  '+91 98765 11004', 'Yelahanka Main'),
+  ('SKT-C-0005', 'Kiran Reddy',    'Devanahalli', 'Class 4',  'Active',    'Male',   10, '-',             '+91 98765 11005', 'Devanahalli Town'),
+  ('SKT-C-0006', 'Pooja Nair',     'Sulibele',    'Class 10', 'Graduated', 'Female', 16, 'Suresh Nair',   '+91 98765 11006', 'Sulibele Village'),
+  ('SKT-C-0007', 'Ajay Verma',     'Devanahalli', 'Class 6',  'Active',    'Male',   12, '-',             '+91 98765 11007', 'Devanahalli Layout'),
+  ('SKT-C-0008', 'Divya Rao',      'Yelahanka',   'Class 3',  'Active',    'Female',  9, '-',             '+91 98765 11008', 'Yelahanka Village'),
+  ('SKT-C-0009', 'Mohan Lal',      'Sulibele',    'Class 7',  'Active',    'Male',   13, 'Deepak Joshi',  '+91 98765 11009', 'Sulibele Town'),
+  ('SKT-C-0010', 'Geetha Kumari',  'Devanahalli', 'Class 5',  'Active',    'Female', 11, '-',             '+91 98765 11010', 'Devanahalli Village'),
+];
+
+const _donorRows = [
+  ('SKT-D-001', 'Rajesh Khanna',  '+91 98765 43210', 'Mumbai, Maharashtra',   'Corporate',  320000, 'Jun 2026'),
+  ('SKT-D-002', 'Arjun Mehta',   '+91 98765 43211', 'Delhi, Delhi',           'Recurring',  210000, 'Jun 2026'),
+  ('SKT-D-003', 'Priya Sharma',  '+91 98765 43212', 'Bangalore, Karnataka',   'Recurring',  185000, 'Jun 2026'),
+  ('SKT-D-004', 'Vikram Singh',  '+91 98765 43213', 'Hyderabad, Telangana',   'One-Time',   150000, 'May 2026'),
+  ('SKT-D-005', 'Deepak Nair',   '+91 98765 43214', 'Chennai, Tamil Nadu',    'Corporate',  125000, 'May 2026'),
+  ('SKT-D-006', 'Sunita Joshi',  '+91 98765 43215', 'Pune, Maharashtra',      'Recurring',   98000, 'May 2026'),
+  ('SKT-D-007', 'Kavitha Rao',   '+91 98765 43216', 'Bangalore, Karnataka',   'One-Time',    75000, 'Apr 2026'),
+  ('SKT-D-008', 'Suresh Nair',   '+91 98765 43217', 'Kochi, Kerala',          'Corporate',   45000, 'Apr 2026'),
+  ('SKT-D-009', 'Deepak Joshi',  '+91 98765 43218', 'Jaipur, Rajasthan',      'Recurring',   30000, 'Apr 2026'),
+  ('SKT-D-010', 'Meena Gupta',   '+91 98765 43219', 'Ahmedabad, Gujarat',     'One-Time',    25000, 'Mar 2026'),
+];
+
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
   @override
@@ -74,7 +116,105 @@ class ReportsScreen extends StatefulWidget {
 class _ReportsScreenState extends State<ReportsScreen> {
   DateTimeRange? _dateRange;
   String _reportFilter = 'All';
+  bool _exporting = false;
   static const _filterOptions = ['All', 'Donations', 'Donors', 'Students'];
+
+  // ── Excel helpers ────────────────────────────────────────────────────
+  xl.CellStyle _headerStyle() => xl.CellStyle(
+    bold: true,
+    backgroundColorHex: xl.ExcelColor.fromHexString('#0E8C76'),
+    fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
+    horizontalAlign: xl.HorizontalAlign.Center,
+  );
+
+  xl.CellStyle _summaryStyle() => xl.CellStyle(
+    bold: true,
+    backgroundColorHex: xl.ExcelColor.fromHexString('#D6F3EC'),
+    fontColorHex: xl.ExcelColor.fromHexString('#0B6E5D'),
+  );
+
+  void _setRow(xl.Sheet sheet, int row, List<String> values, {xl.CellStyle? style}) {
+    for (int c = 0; c < values.length; c++) {
+      final cell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: row));
+      cell.value = xl.TextCellValue(values[c]);
+      if (style != null) cell.cellStyle = style;
+    }
+  }
+
+  Future<void> _export() async {
+    setState(() => _exporting = true);
+    final excel = xl.Excel.createExcel();
+    final dateStr = DateFormat('ddMMyyyy').format(DateTime.now());
+
+    if (_reportFilter == 'All' || _reportFilter == 'Donations') {
+      final sheet = excel['Donations'];
+      _setRow(sheet, 0, ['#', 'Donor Name', 'Month', 'Category', 'Payment Method', 'Amount (₹)'], style: _headerStyle());
+      int totalAmt = 0;
+      final uniqueDonors = <String>{};
+      for (int i = 0; i < _donationRows.length; i++) {
+        final r = _donationRows[i];
+        _setRow(sheet, i + 1, ['${i + 1}', r.$1, r.$2, r.$3, r.$4, r.$5.toString()]);
+        totalAmt += r.$5;
+        uniqueDonors.add(r.$1);
+      }
+      final sumRow = _donationRows.length + 2;
+      _setRow(sheet, sumRow,     ['SUMMARY', '', '', '', '', ''],      style: _summaryStyle());
+      _setRow(sheet, sumRow + 1, ['Total Donations', '${_donationRows.length}', '', '', '', ''], style: _summaryStyle());
+      _setRow(sheet, sumRow + 2, ['Total Donors',    '${uniqueDonors.length}',  '', '', '', ''], style: _summaryStyle());
+      _setRow(sheet, sumRow + 3, ['Total Amount (₹)', totalAmt.toString(),      '', '', '', ''], style: _summaryStyle());
+    }
+
+    if (_reportFilter == 'All' || _reportFilter == 'Students') {
+      final sheet = excel['Students'];
+      _setRow(sheet, 0, ['#', 'Child ID', 'Name', 'Centre', 'Class', 'Status', 'Gender', 'Age', 'Sponsor', 'Phone', 'Address'], style: _headerStyle());
+      for (int i = 0; i < _studentRows.length; i++) {
+        final r = _studentRows[i];
+        _setRow(sheet, i + 1, ['${i + 1}', r.$1, r.$2, r.$3, r.$4, r.$5, r.$6, r.$7.toString(), r.$8, r.$9, r.$10]);
+      }
+      final sumRow = _studentRows.length + 2;
+      _setRow(sheet, sumRow, ['SUMMARY', '', '', '', '', '', '', '', '', '', ''], style: _summaryStyle());
+      _setRow(sheet, sumRow + 1, ['Total Students', '${_studentRows.length}', '', '', '', '', '', '', '', '', ''], style: _summaryStyle());
+      final active = _studentRows.where((r) => r.$5 == 'Active').length;
+      final sponsored = _studentRows.where((r) => r.$8 != '-').length;
+      _setRow(sheet, sumRow + 2, ['Active', '$active', '', '', '', '', '', '', '', '', ''], style: _summaryStyle());
+      _setRow(sheet, sumRow + 3, ['Sponsored', '$sponsored', '', '', '', '', '', '', '', '', ''], style: _summaryStyle());
+    }
+
+    if (_reportFilter == 'All' || _reportFilter == 'Donors') {
+      final sheet = excel['Donors'];
+      _setRow(sheet, 0, ['#', 'Donor ID', 'Name', 'Phone', 'Address', 'Type', 'Total Donated (₹)', 'Last Donation'], style: _headerStyle());
+      int grandTotal = 0;
+      for (int i = 0; i < _donorRows.length; i++) {
+        final r = _donorRows[i];
+        _setRow(sheet, i + 1, ['${i + 1}', r.$1, r.$2, r.$3, r.$4, r.$5, r.$6.toString(), r.$7]);
+        grandTotal += r.$6;
+      }
+      final sumRow = _donorRows.length + 2;
+      _setRow(sheet, sumRow,     ['SUMMARY', '', '', '', '', '', '', ''],      style: _summaryStyle());
+      _setRow(sheet, sumRow + 1, ['Total Donors', '${_donorRows.length}', '', '', '', '', '', ''], style: _summaryStyle());
+      _setRow(sheet, sumRow + 2, ['Grand Total (₹)', grandTotal.toString(), '', '', '', '', '', ''], style: _summaryStyle());
+    }
+
+    if (excel.sheets.containsKey('Sheet1')) excel.delete('Sheet1');
+
+    final bytes = excel.encode();
+    if (bytes == null) { setState(() => _exporting = false); return; }
+
+    final filename = 'Saksham_${_reportFilter}_Report_$dateStr.xlsx';
+    final ok = await NativeFileSaver.saveBytes(filename, Uint8List.fromList(bytes),
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+    if (mounted) {
+      setState(() => _exporting = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ok ? '✓ Saved: $filename' : 'Export failed', style: const TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor: ok ? _brand600 : Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 3),
+      ));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -165,33 +305,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   ))),
                   const SizedBox(width: 10),
                   GestureDetector(
-                    onTap: () async {
-                      final buf = StringBuffer();
-                      buf.writeln('Metric,Value');
-                      buf.writeln('Filter,$_reportFilter');
-                      if (_dateRange != null) buf.writeln('From,${DateFormat('dd MMM yyyy').format(_dateRange!.start)}');
-                      if (_dateRange != null) buf.writeln('To,${DateFormat('dd MMM yyyy').format(_dateRange!.end)}');
-                      buf.writeln('Generated,${DateFormat('dd MMM yyyy').format(DateTime.now())}');
-                      buf.writeln('Total Raised,₹28,60,000');
-                      buf.writeln('Unique Donors,836');
-                      buf.writeln('Children Supported,178');
-                      final filename = 'Saksham_Report_${DateFormat('ddMMyyyy').format(DateTime.now())}.csv';
-                      final ok = await NativeFileSaver.saveCsv(filename, buf.toString());
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(ok ? '✓ Report saved: $filename' : 'Failed to save file', style: const TextStyle(fontWeight: FontWeight.w700)),
-                          backgroundColor: ok ? _brand600 : Colors.red, behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
-                      }
-                    },
+                    onTap: _exporting ? null : _export,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-                      decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(12)),
-                      child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.download_outlined, color: Colors.white, size: 16),
-                        SizedBox(width: 6),
-                        Text('Export', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white)),
-                      ]),
+                      decoration: BoxDecoration(
+                        color: _exporting ? _brand600.withValues(alpha: 0.6) : _brand600,
+                        borderRadius: BorderRadius.circular(12)),
+                      child: _exporting
+                        ? const SizedBox(width: 60, child: Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))))
+                        : const Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(Icons.download_outlined, color: Colors.white, size: 16),
+                            SizedBox(width: 6),
+                            Text('Export Excel', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white)),
+                          ]),
                     ),
                   ),
                 ]),
