@@ -227,10 +227,13 @@ class _StudentsScreenState extends State<StudentsScreen> {
     }
 
     final children  = _filtered;
-    final total     = _all.length;
-    final boys      = _all.where((s) => s.gender == 'MALE').length;
-    final girls     = _all.where((s) => s.gender != 'MALE').length;
-    final sponsored = _all.where((s) => s.isSponsored).length;
+    final centreFiltered = _centre == 'All Centres'
+        ? _all
+        : _all.where((s) => s.centreName == _centre).toList();
+    final total     = centreFiltered.length;
+    final boys      = centreFiltered.where((s) => s.gender == 'MALE').length;
+    final girls     = centreFiltered.where((s) => s.gender != 'MALE').length;
+    final sponsored = centreFiltered.where((s) => s.isSponsored).length;
 
     final centreTabs = ['All Centres', ..._centres.map((c) => c.name)];
 
@@ -247,7 +250,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Children', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: -0.5, height: 1, color: context.textPrimary)),
                 const SizedBox(height: 3),
-                Text('$total children · ${_centres.length} centres', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
+                Text(_centre == 'All Centres' ? '$total children · ${_centres.length} centres' : '$total children · $_centre', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
               ])),
               GestureDetector(
                 onTap: () => context.go('/students/new'),
