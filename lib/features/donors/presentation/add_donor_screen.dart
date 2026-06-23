@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,7 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../core/widgets/phone_field_with_code.dart';
 import '../../../core/widgets/photo_picker_widget.dart';
-import 'donors_screen.dart' show donorsProvider, demoLocalDonors, donorRefreshProvider;
+import 'donors_screen.dart' show donorsProvider, demoLocalDonors, donorRefreshProvider, localDonorPhotos;
 
 // ── colours ───────────────────────────────────────────────────────────
 const _brand600 = Color(0xFF0E8C76);
@@ -55,6 +56,7 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
   String? _category;
   final Set<String> _commPref = {};
   bool _saving = false;
+  Uint8List? _photoBytes;
 
   // categories loaded from API: name → id
   Map<String, String> _categoryNameToId = {};
@@ -144,6 +146,7 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
     };
     // Persist locally (survives navigation, cleared on restart)
     demoLocalDonors.insert(0, newDonor);
+    if (_photoBytes != null) localDonorPhotos[newId] = _photoBytes!;
 
     try {
       await apiClient.post('/donors', {
@@ -212,7 +215,7 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
 
                 // ── Photo + Personal ──────────────────────────────────
                 _Section(title: 'Personal Information', children: [
-                  const Center(child: PhotoPickerCircle(label: 'Photo', size: 92)),
+                  Center(child: PhotoPickerCircle(label: 'Photo', size: 92, onImageChanged: (b) => setState(() => _photoBytes = b))),
                   const SizedBox(height: 16),
                   _Row2(
                     left:  _Field(label: 'Full Name *', child: _textField(context, _name, hint: 'e.g. Rajesh Khanna', validator: (v) => v!.isEmpty ? 'Required' : null)),

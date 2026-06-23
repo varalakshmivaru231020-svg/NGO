@@ -6,7 +6,7 @@ import 'add_donor_screen.dart' show AddDonorScreen;
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/utils/open_bytes.dart';
-import 'donors_screen.dart' show demoLocalDonors, mockDonorData;
+import 'donors_screen.dart' show demoLocalDonors, mockDonorData, localDonorPhotos;
 
 const _brand600 = Color(0xFF0E8C76);
 const _brand700 = Color(0xFF0B6E5D);
@@ -222,11 +222,14 @@ class _DonorDetailScreenState extends State<DonorDetailScreen> with SingleTicker
               Container(
                 width: 64, height: 64,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [color, Color.lerp(color, Colors.black, 0.25)!]),
+                  gradient: localDonorPhotos[widget.id] == null ? LinearGradient(colors: [color, Color.lerp(color, Colors.black, 0.25)!]) : null,
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 2),
                 ),
-                child: Center(child: Text(_initials(_name), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 22))),
+                clipBehavior: Clip.hardEdge,
+                child: localDonorPhotos[widget.id] != null
+                    ? Image.memory(localDonorPhotos[widget.id]!, fit: BoxFit.cover, width: 64, height: 64)
+                    : Center(child: Text(_initials(_name), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 22))),
               ),
               const SizedBox(width: 14),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -763,6 +766,19 @@ class _DocumentsTabState extends State<_DocumentsTab> {
         Row(children: [
           const Text('DOCUMENTS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: _onSurface3, letterSpacing: 1.2)),
           const Spacer(),
+          GestureDetector(
+            onTap: _uploading ? null : _pickOther,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(8)),
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.upload_file_outlined, size: 13, color: Colors.white),
+                SizedBox(width: 4),
+                Text('+ Upload', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white)),
+              ]),
+            ),
+          ),
+          const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
             decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8)),
@@ -770,23 +786,6 @@ class _DocumentsTabState extends State<_DocumentsTab> {
           ),
         ]),
         const SizedBox(height: 10),
-        GestureDetector(
-          onTap: _uploading ? null : _pickOther,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            decoration: BoxDecoration(
-              color: Colors.white, borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _brand600.withValues(alpha: 0.4), width: 1.5),
-            ),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Icon(Icons.upload_file_outlined, size: 18, color: _brand600),
-              const SizedBox(width: 8),
-              const Text('Upload other document', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _brand600)),
-            ]),
-          ),
-        ),
-        const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
           child: Column(children: _docs.asMap().entries.map((entry) {

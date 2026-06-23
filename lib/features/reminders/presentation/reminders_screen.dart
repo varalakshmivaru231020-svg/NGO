@@ -82,7 +82,11 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
   String _range = 'Today';
 
   @override
-  void initState() { super.initState(); _tabs = TabController(length: 2, vsync: this); }
+  void initState() {
+    super.initState();
+    _tabs = TabController(length: 2, vsync: this);
+    _tabs.addListener(() => setState(() {}));
+  }
   @override
   void dispose() { _tabs.dispose(); super.dispose(); }
 
@@ -114,7 +118,10 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
-    final todayCount = _birthdays.where((b) => _rangeOf(b) == 'Today').length + _anniversaries.where((a) => _rangeOf(a) == 'Today').length;
+    final isBdayTab = _tabs.index == 0;
+    final todayCount = isBdayTab
+        ? _birthdays.where((b) => _rangeOf(b) == 'Today').length
+        : _anniversaries.where((a) => _rangeOf(a) == 'Today').length;
 
     return Scaffold(
       backgroundColor: _surface2,
@@ -177,8 +184,9 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
                 final active = _range == r;
                 final order = {'Today': 1, 'This week': 2, 'This month': 3};
                 final max = order[r]!;
-                final bdayCount = _birthdays.where((b) => (order[_rangeOf(b)] ?? 99) <= max).length;
-                final annivCount = _anniversaries.where((a) => (order[_rangeOf(a)] ?? 99) <= max).length;
+                final isBdayTab = _tabs.index == 0;
+                final bdayCount = isBdayTab ? _birthdays.where((b) => (order[_rangeOf(b)] ?? 99) <= max).length : 0;
+                final annivCount = isBdayTab ? 0 : _anniversaries.where((a) => (order[_rangeOf(a)] ?? 99) <= max).length;
                 final total = bdayCount + annivCount;
                 return Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(
                   onTap: () => setState(() => _range = r),

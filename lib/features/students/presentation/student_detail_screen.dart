@@ -1147,13 +1147,27 @@ class _DocumentsTabState extends State<_DocumentsTab> {
   }
 
   Future<void> _uploadOther() async {
+    final nameCtrl = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Document Name'),
+        content: TextField(controller: nameCtrl, autofocus: true,
+          decoration: const InputDecoration(hintText: 'Enter document name')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () { final v = nameCtrl.text.trim(); if (v.isNotEmpty) Navigator.pop(ctx, v); }, child: const Text('Next')),
+        ],
+      ),
+    );
+    if (name == null || !mounted) return;
     setState(() => _uploadingIdx = true);
     try {
       final result = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
       if (result != null && result.files.isNotEmpty && mounted) {
-        setState(() => _others.add(result.files.single.name));
+        setState(() => _others.add(name));
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${result.files.single.name} attached', style: const TextStyle(fontWeight: FontWeight.w700)),
+          content: Text('$name attached', style: const TextStyle(fontWeight: FontWeight.w700)),
           backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
       }
@@ -1168,16 +1182,33 @@ class _DocumentsTabState extends State<_DocumentsTab> {
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(18),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Count badge
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.folder_outlined, color: _brand600, size: 16),
-            const SizedBox(width: 6),
-            Text('$uploadedCount files', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _brand600)),
-          ]),
-        ),
+        // Header row: upload button left, count badge right
+        Row(children: [
+          GestureDetector(
+            onTap: _uploadingIdx ? null : _uploadOther,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(8)),
+              child: _uploadingIdx
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.upload_file_outlined, size: 14, color: Colors.white),
+                    SizedBox(width: 5),
+                    Text('+ Upload document', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
+                  ]),
+            ),
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.folder_outlined, color: _brand600, size: 16),
+              const SizedBox(width: 6),
+              Text('$uploadedCount files', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _brand600)),
+            ]),
+          ),
+        ]),
         const SizedBox(height: 14),
 
         // Document rows
@@ -1250,25 +1281,6 @@ class _DocumentsTabState extends State<_DocumentsTab> {
           ),
         )),
 
-        // Upload other attachment
-        GestureDetector(
-          onTap: _uploadingIdx ? null : _uploadOther,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            decoration: BoxDecoration(
-              color: _surface2, borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: _border, width: 1.5),
-            ),
-            child: _uploadingIdx
-              ? const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600)))
-              : const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(Icons.attach_file_rounded, size: 18, color: _brand600),
-                  SizedBox(width: 8),
-                  Text('Upload other attachment', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _brand600)),
-                ]),
-          ),
-        ),
         const SizedBox(height: 80),
       ]),
     );

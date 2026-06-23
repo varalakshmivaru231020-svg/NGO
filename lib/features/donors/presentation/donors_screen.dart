@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -95,6 +96,7 @@ Color _tierFg(String tier) => switch (tier) {
 
 // ── In-memory store: survives navigation, cleared on hot-restart ──────
 final demoLocalDonors = <Map<String, dynamic>>[];
+final localDonorPhotos = <String, Uint8List>{};
 
 // ── Refresh counter: increment to force list rebuild ─────────────────
 final donorRefreshProvider = StateProvider<int>((ref) => 0);
