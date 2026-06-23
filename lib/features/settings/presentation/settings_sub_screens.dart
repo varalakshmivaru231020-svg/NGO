@@ -8,6 +8,7 @@ import '../../../core/utils/app_launcher.dart';
 import '../../../core/utils/native_file_saver.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/widgets/photo_picker_widget.dart';
 
 // ── brand palette ────────────────────────────────────────────────
 const _brand600   = Color(0xFF0E8C76);
@@ -135,15 +136,7 @@ class _EditProfileState extends State<EditProfileScreen> {
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Center(child: Stack(children: [
-            Container(width: 88, height: 88,
-              decoration: const BoxDecoration(shape: BoxShape.circle,
-                gradient: LinearGradient(colors: [Color(0xFF0B6E5D), Color(0xFF14A98C)])),
-              child: const Center(child: Text('FA', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 28)))),
-            Positioned(bottom: 0, right: 0, child: Container(width: 28, height: 28,
-              decoration: BoxDecoration(color: _brand600, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
-              child: const Icon(Icons.camera_alt, size: 14, color: Colors.white))),
-          ])),
+          const Center(child: PhotoPickerCircle(size: 88, label: '', initials: 'FA')),
           const SizedBox(height: 24),
           _buildSectionLabel(context, 'Basic Info'),
           _buildCard(context, child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
