@@ -181,9 +181,8 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
       body: Column(children: [
         // ── Compact header (back + title only) ────────────────────
         Container(
-          color: Colors.white,
           padding: EdgeInsets.fromLTRB(4, top + 6, 16, 10),
-          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE5EBE9)))),
+          decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Color(0xFFE5EBE9)))),
           child: Row(children: [
             IconButton(
               icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: Color(0xFF15211E)),
@@ -214,20 +213,16 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
 
                 // ── Photo + Personal ──────────────────────────────────
                 _Section(title: 'Personal Information', children: [
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const PhotoPickerCircle(label: 'Photo', size: 72),
-                    const SizedBox(width: 16),
-                    Expanded(child: Column(children: [
-                      _Row2(
-                        left:  _Field(label: 'Full Name *', child: _textField(context, _name, hint: 'e.g. Rajesh Khanna', validator: (v) => v!.isEmpty ? 'Required' : null)),
-                        right: _Field(label: 'Gender',      child: _GenderToggle(value: _gender, onChanged: (v) => setState(() => _gender = v))),
-                      ),
-                      _Row2(
-                        left:  _Field(label: 'Date of Birth',   child: _DateField(ctrl: _dob,   hint: 'DD / MM / YYYY', onTap: () => _pickDate(_dob))),
-                        right: _Field(label: 'Donor Category',  child: _CategoryDropdown(value: _category, onChanged: (v) => setState(() => _category = v))),
-                      ),
-                    ])),
-                  ]),
+                  const Center(child: PhotoPickerCircle(label: 'Photo', size: 92)),
+                  const SizedBox(height: 16),
+                  _Row2(
+                    left:  _Field(label: 'Full Name *', child: _textField(context, _name, hint: 'e.g. Rajesh Khanna', validator: (v) => v!.isEmpty ? 'Required' : null)),
+                    right: _Field(label: 'Gender',      child: _GenderToggle(value: _gender, onChanged: (v) => setState(() => _gender = v))),
+                  ),
+                  _Row2(
+                    left:  _Field(label: 'Date of Birth',   child: _DateField(ctrl: _dob,   hint: 'DD / MM / YYYY', onTap: () => _pickDate(_dob))),
+                    right: _Field(label: 'Donor Category',  child: _CategoryDropdown(value: _category, onChanged: (v) => setState(() => _category = v))),
+                  ),
                 ]),
                 const SizedBox(height: 14),
 

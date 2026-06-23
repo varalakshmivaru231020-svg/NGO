@@ -9,6 +9,8 @@ import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/phone_field_with_code.dart';
 import '../../../core/widgets/photo_picker_widget.dart';
+import '../../donors/presentation/donors_screen.dart' show demoLocalDonors, mockDonorData;
+import 'students_screen.dart' show demoLocalStudents;
 
 // ── colours ───────────────────────────────────────────────────────────
 const _brand600 = Color(0xFF0E8C76);
@@ -84,6 +86,15 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
     _loadFormData();
   }
 
+  List<({String id, String name, String city})> _fallbackDonors() {
+    final all = [...demoLocalDonors, ...mockDonorData];
+    return all.map<({String id, String name, String city})>((d) => (
+      id:   d['id']   as String? ?? '',
+      name: d['name'] as String? ?? '',
+      city: d['city'] as String? ?? '',
+    )).toList();
+  }
+
   Future<void> _loadFormData() async {
     try {
       final results = await Future.wait([
@@ -115,7 +126,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       ];
       if (mounted) setState(() {
         _centres    = centres.isNotEmpty ? centres : fallback;
-        _apiDonors  = donors;
+        _apiDonors  = donors.isNotEmpty ? donors : _fallbackDonors();
         _centreName = _centres.first.name;
         _centreId   = _centres.first.id;
         _loadingForm = false;
@@ -132,6 +143,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         _centres    = fallback;
         _centreName = fallback.first.name;
         _centreId   = fallback.first.id;
+        _apiDonors  = _fallbackDonors();
       });
     }
   }
@@ -235,6 +247,21 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       } catch (_) {
         // No backend in demo mode — treat as success
       }
+      // Add to shared local list so the students screen shows it immediately
+      demoLocalStudents.insert(0, {
+        'id':      'local-${_name.text.trim().hashCode}',
+        'childId': 'SKT-C-new',
+        'name':    _name.text.trim(),
+        'gender':  _gender == 'Male' ? 'MALE' : 'FEMALE',
+        'dob':     _toIso(_dob),
+        'status':  statusMap[_status] ?? 'ACTIVE',
+        'class':   _classGrade.text.trim(),
+        'school':  _schoolName.text.trim(),
+        'center':  {'name': _centreName},
+        'sponsorships': _sponsorId != null
+            ? [{'donor': {'name': _sponsorName ?? ''}}]
+            : <Map<String, dynamic>>[],
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: const Row(children: [
@@ -262,9 +289,8 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       body: Column(children: [
         // ── Compact header (back + title only) ────────────────────
         Container(
-          color: Colors.white,
           padding: EdgeInsets.fromLTRB(4, top + 6, 16, 10),
-          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE5EBE9)))),
+          decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Color(0xFFE5EBE9)))),
           child: Row(children: [
             IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: Color(0xFF15211E)), onPressed: () => context.go('/students')),
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

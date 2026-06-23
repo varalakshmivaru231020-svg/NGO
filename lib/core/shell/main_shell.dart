@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/auth/role_auth.dart';
-import '../../main.dart' show themeModeProvider;
 
 const _brand600 = Color(0xFF0E8C76);
 const _coral500 = Color(0xFFF2685E);
@@ -112,13 +110,13 @@ class MainShell extends StatelessWidget {
 // ══════════════════════════════════════════════════════════════════════
 // SIDEBAR
 // ══════════════════════════════════════════════════════════════════════
-class _Sidebar extends ConsumerWidget {
+class _Sidebar extends StatelessWidget {
   const _Sidebar({required this.loc, required this.extended});
   final String loc;
   final bool extended;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return Container(
       width: extended ? 224 : 68,
       decoration: BoxDecoration(
@@ -144,47 +142,6 @@ class _Sidebar extends ConsumerWidget {
             ..._acct.where((n) => n.route != '/roles' || isAdmin).map((n) => _NavRow(n: n, loc: loc, ext: extended)),
           ]),
         )),
-        // dark mode toggle
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-          child: GestureDetector(
-            onTap: () {
-              final current = ref.read(themeModeProvider);
-              ref.read(themeModeProvider.notifier).state =
-                  current == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: extended
-                  ? const EdgeInsets.symmetric(horizontal: 10, vertical: 9)
-                  : const EdgeInsets.symmetric(vertical: 9),
-              decoration: BoxDecoration(
-                color: context.surface2,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: extended
-                  ? Row(children: [
-                      Icon(
-                        context.isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                        size: 18,
-                        color: context.textSub,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        context.isDark ? 'Light Mode' : 'Dark Mode',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.textPrimary),
-                      ),
-                    ])
-                  : Center(
-                      child: Icon(
-                        context.isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                        size: 20,
-                        color: context.textSub,
-                      ),
-                    ),
-            ),
-          ),
-        ),
         // ── profile footer ──────────────────────────────────────
         Divider(height: 1, color: context.border),
         _Footer(extended: extended),

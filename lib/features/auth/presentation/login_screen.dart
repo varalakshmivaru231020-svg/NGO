@@ -243,15 +243,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() { _loading = true; _error = null; });
 
     // 1. Admin credentials
-    if (name == _adminEmail && password == _adminPassword) {
+    if (name.trim() == _adminEmail && password == _adminPassword) {
       currentLoggedInRole = null;
-      if (mounted) context.go('/dashboard');
+      if (mounted) { setState(() => _loading = false); context.go('/dashboard'); }
       return;
     }
 
     // 2. Role credentials (by name or email, case-insensitive)
     final role = appRoles.where(
-      (r) => (r.name.toLowerCase() == name.toLowerCase() || r.email.toLowerCase() == name.toLowerCase()) && r.password == password,
+      (r) => (r.name.toLowerCase() == name.trim().toLowerCase() || r.email.toLowerCase() == name.trim().toLowerCase()) && r.password == password,
     ).firstOrNull;
 
     if (role != null) {
@@ -259,7 +259,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final firstRoute = role.modules.isNotEmpty
           ? (moduleToRoute[role.modules.first] ?? '/dashboard')
           : '/dashboard';
-      if (mounted) context.go(firstRoute);
+      if (mounted) { setState(() => _loading = false); context.go(firstRoute); }
       return;
     }
 

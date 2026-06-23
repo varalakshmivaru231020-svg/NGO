@@ -83,8 +83,10 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     final now = DateTime.now();
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     _date = '${now.day.toString().padLeft(2,'0')} ${months[now.month-1]} ${now.year}';
-    // pre-populate synchronously so dialog always has data
+    // pre-populate synchronously so the form always has data even if API fails
     _donors = _fallbackDonors();
+    _typeLabelToId = {for (final k in _typeVisuals.keys) k: k};
+    _typeLabels = _typeVisuals.keys.toList();
     _loadFormData();
   }
 
@@ -142,6 +144,11 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       if (mounted) {
         setState(() {
           _donors = _fallbackDonors();
+          // keep the static fallback types already set in initState
+          if (_typeLabelToId.isEmpty) {
+            _typeLabelToId = {for (final k in _typeVisuals.keys) k: k};
+            _typeLabels = _typeVisuals.keys.toList();
+          }
           _loadingData = false;
         });
       }
@@ -241,10 +248,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     if (_selectedDonorId == null) {
       _snack('Please select a donor', isError: true); return;
     }
-    final typeId = _typeLabelToId[_donationType];
-    if (typeId == null || typeId.isEmpty) {
-      _snack('Donation types not loaded — check connection', isError: true); return;
-    }
+    final typeId = _typeLabelToId[_donationType] ?? _donationType;
     setState(() => _saving = true);
     try {
       final resp = await apiClient.post('/donations', {
@@ -296,9 +300,8 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       body: Column(children: [
         // compact white header (back + title only)
         Container(
-          color: Colors.white,
           padding: EdgeInsets.fromLTRB(4, top + 6, 16, 10),
-          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE5EBE9)))),
+          decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Color(0xFFE5EBE9)))),
           child: Row(children: [
             IconButton(
               icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),

@@ -86,6 +86,9 @@ Color _statusBg(String s) => switch (s) {
   _           => const Color(0xFFF4F7F6),
 };
 
+// Shared in-memory student list — new enrollments are appended here
+final demoLocalStudents = <Map<String, dynamic>>[];
+
 // ── avatar helpers ────────────────────────────────────────────────────
 Color _avColor(String seed) {
   final palette = [_brand600, const Color(0xFFF6A723), _violet500, const Color(0xFF2D9CDB),
@@ -168,9 +171,9 @@ class _StudentsScreenState extends State<StudentsScreen> {
         return;
       }
     } catch (_) {}
-    // Fall back to mock data
+    // Fall back to mock data (new enrollments at top)
     if (mounted) setState(() {
-      _all     = _mockStudents.map(_Student.fromJson).toList();
+      _all     = [...demoLocalStudents.map(_Student.fromJson), ..._mockStudents.map(_Student.fromJson)];
       _centres = _mockCentres;
       _loading = false;
     });
