@@ -397,18 +397,31 @@ class _Section extends StatelessWidget {
   ]);
 }
 
-// ── Two-column row ────────────────────────────────────────────────────
+// ── Two-column row (single column on narrow/mobile screens) ──────────
 class _Row2 extends StatelessWidget {
   const _Row2({required this.left, required this.right});
   final Widget left, right;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 14),
-    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Expanded(child: left),
-      const SizedBox(width: 14),
-      Expanded(child: right),
-    ]),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (_, constraints) {
+      final wide = constraints.maxWidth >= 480;
+      if (wide) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: left),
+            const SizedBox(width: 14),
+            Expanded(child: right),
+          ]),
+        );
+      }
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        left,
+        const SizedBox(height: 14),
+        right,
+        const SizedBox(height: 14),
+      ]);
+    },
   );
 }
 

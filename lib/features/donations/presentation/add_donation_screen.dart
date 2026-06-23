@@ -396,44 +396,44 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
 
               const SizedBox(height: 12),
 
-              // donation type + payment method — 2-column on wide screen
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(child: _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const _Label('Allocate towards'),
-                  const SizedBox(height: 12),
-                  if (_loadingData)
-                    const Center(child: SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600)))
-                  else
-                    Wrap(spacing: 8, runSpacing: 8, children: (_typeLabels.isNotEmpty ? _typeLabels : _typeVisuals.keys.toList()).map((label) {
-                      final active = _donationType == label;
-                      final info = _typeVisuals[label] ?? _TypeInfo(label, _brand600, Icons.account_balance_wallet_outlined);
-                      return GestureDetector(
-                        onTap: () => setState(() => _donationType = label),
-                        child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(color: active ? info.color.withValues(alpha: 0.12) : context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? info.color : context.border)),
-                          child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            Icon(info.icon, size: 15, color: active ? info.color : context.textHint),
-                            const SizedBox(width: 6),
-                            Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? info.color : context.textSub)),
-                          ])),
-                      );
-                    }).toList()),
-                ]))),
-                const SizedBox(width: 12),
-                Expanded(child: _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const _Label('Payment Method'),
-                  const SizedBox(height: 12),
-                  Wrap(spacing: 8, runSpacing: 8, children: _methods.map((m) {
-                    final active = _method == m;
+              // donation type + payment method — stacked always (clean mobile-first)
+              _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const _Label('Allocate towards'),
+                const SizedBox(height: 12),
+                if (_loadingData)
+                  const Center(child: SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600)))
+                else
+                  Wrap(spacing: 8, runSpacing: 8, children: (_typeLabels.isNotEmpty ? _typeLabels : _typeVisuals.keys.toList()).map((label) {
+                    final active = _donationType == label;
+                    final info = _typeVisuals[label] ?? _TypeInfo(label, _brand600, Icons.account_balance_wallet_outlined);
                     return GestureDetector(
-                      onTap: () => setState(() => _method = m),
-                      child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(color: active ? _brand600 : context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? _brand600 : context.border)),
-                        child: Text(m, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub))),
+                      onTap: () => setState(() => _donationType = label),
+                      child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(color: active ? info.color.withValues(alpha: 0.12) : context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? info.color : context.border)),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(info.icon, size: 15, color: active ? info.color : context.textHint),
+                          const SizedBox(width: 6),
+                          Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? info.color : context.textSub)),
+                        ])),
                     );
                   }).toList()),
-                ]))),
-              ]),
+              ])),
+
+              const SizedBox(height: 12),
+
+              _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const _Label('Payment Method'),
+                const SizedBox(height: 12),
+                Wrap(spacing: 8, runSpacing: 8, children: _methods.map((m) {
+                  final active = _method == m;
+                  return GestureDetector(
+                    onTap: () => setState(() => _method = m),
+                    child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(color: active ? _brand600 : context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? _brand600 : context.border)),
+                      child: Text(m, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub))),
+                  );
+                }).toList()),
+              ])),
 
               const SizedBox(height: 12),
 
