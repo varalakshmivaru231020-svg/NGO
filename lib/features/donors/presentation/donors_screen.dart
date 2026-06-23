@@ -503,12 +503,14 @@ class _DonorCard extends StatelessWidget {
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Flexible(child: Text(donor.name, style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, letterSpacing: -0.2, height: 1, color: context.textPrimary), overflow: TextOverflow.ellipsis)),
-              const SizedBox(width: 7),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: donor.badgeBg, borderRadius: BorderRadius.circular(8)),
-                child: Text(donor.displayCategory, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: donor.badgeFg)),
-              ),
+              if (donor.categories.isNotEmpty) ...[
+                const SizedBox(width: 7),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: donor.badgeBg, borderRadius: BorderRadius.circular(8)),
+                  child: Text(donor.displayCategory, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: donor.badgeFg)),
+                ),
+              ],
             ]),
             const SizedBox(height: 5),
             Row(children: [
