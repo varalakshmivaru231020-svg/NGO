@@ -1,7 +1,6 @@
 // Shared role store + session state — used by login, sidebar, and roles screen
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
 import 'dart:convert';
+import 'role_storage.dart';
 
 class AppRole {
   AppRole({required this.name, required this.email, required this.password, required this.modules});
@@ -25,20 +24,18 @@ class AppRole {
   );
 }
 
-const _storageKey = 'saksham_roles';
-
 final _defaultRoles = <AppRole>[
   AppRole(name: 'Donations Manager', email: 'donations@saksham.org', password: 'don123',   modules: {'donations', 'reports', 'tracker'}),
   AppRole(name: 'Donor Manager',     email: 'donors@saksham.org',    password: 'donor123', modules: {'donors', 'donations', 'reports'}),
   AppRole(name: 'Children Manager',  email: 'children@saksham.org',  password: 'child123', modules: {'students', 'reports'}),
 ];
 
-// Global roles list — loaded from localStorage, falls back to defaults
+// Global roles list — loaded from storage, falls back to defaults
 final appRoles = _loadRoles();
 
 List<AppRole> _loadRoles() {
   try {
-    final raw = html.window.localStorage[_storageKey];
+    final raw = readRoleStorage();
     if (raw != null && raw.isNotEmpty) {
       final list = jsonDecode(raw) as List;
       return list.map((e) => AppRole.fromJson(e as Map<String, dynamic>)).toList();
@@ -50,8 +47,7 @@ List<AppRole> _loadRoles() {
 // Call this whenever appRoles is mutated (add / edit / delete)
 void saveRoles() {
   try {
-    html.window.localStorage[_storageKey] =
-        jsonEncode(appRoles.map((r) => r.toJson()).toList());
+    writeRoleStorage(jsonEncode(appRoles.map((r) => r.toJson()).toList()));
   } catch (_) {}
 }
 

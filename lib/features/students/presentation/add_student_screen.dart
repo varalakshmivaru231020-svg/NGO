@@ -1,7 +1,6 @@
 import 'dart:typed_data';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
 import 'package:file_picker/file_picker.dart';
+import '../../../core/utils/open_bytes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -761,12 +760,7 @@ class _DocUploadRowState extends State<_DocUploadRow> {
 
   void _view() {
     if (_bytes == null) return;
-    final name = _filename ?? 'document';
-    final mimeType = name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg';
-    final blob = html.Blob([_bytes!], mimeType);
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    html.window.open(url, '_blank');
-    // URL is intentionally kept alive so the opened tab can load the file
+    openBytesInBrowser(_bytes!, _filename ?? 'document');
   }
 
   @override

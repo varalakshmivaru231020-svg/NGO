@@ -1,11 +1,10 @@
 import 'dart:typed_data';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/utils/open_bytes.dart';
 import 'donors_screen.dart' show demoLocalDonors, mockDonorData;
 
 const _brand600 = Color(0xFF0E8C76);
@@ -686,10 +685,7 @@ class _DocumentsTabState extends State<_DocumentsTab> {
   void _viewDoc(String docName) {
     final bytes = _getBytes(docName);
     if (bytes == null) return;
-    final blob = html.Blob([bytes]);
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    html.window.open(url, '_blank');
-    html.Url.revokeObjectUrl(url);
+    openBytesInBrowser(bytes, docName);
   }
 
   Future<void> _pick(String docName) async {
