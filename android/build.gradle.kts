@@ -20,9 +20,11 @@ subprojects {
 }
 
 subprojects {
-    afterEvaluate {
-        extensions.findByType<com.android.build.gradle.LibraryExtension>()?.apply {
-            compileSdk = 36
+    if (project.name != "app") {
+        afterEvaluate {
+            extensions.findByType<com.android.build.gradle.LibraryExtension>()?.apply {
+                compileSdk = 36
+            }
         }
     }
 }

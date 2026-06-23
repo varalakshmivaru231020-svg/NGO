@@ -84,7 +84,31 @@ class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
               const Divider(height: 1, color: Color(0xFFE5EBE9)),
               InkWell(
                 borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
-                onTap: () { Navigator.pop(ctx); _pickImage(camera: false); },
+                onTap: () {
+                  // Create & click file input synchronously within user gesture (browser security requirement)
+                  final input = html.FileUploadInputElement()..accept = 'image/*';
+                  input.click();
+                  Navigator.pop(ctx);
+                  setState(() => _loading = true);
+                  input.onChange.first.then((_) {
+                    final files = input.files;
+                    if (files != null && files.isNotEmpty && mounted) {
+                      final reader = html.FileReader();
+                      reader.readAsArrayBuffer(files[0]);
+                      reader.onLoadEnd.first.then((_) {
+                        final buffer = reader.result;
+                        if (buffer is ByteBuffer && mounted) {
+                          setState(() { _bytes = buffer.asUint8List(); _loading = false; });
+                          widget.onImageChanged?.call(_bytes);
+                        } else {
+                          if (mounted) setState(() => _loading = false);
+                        }
+                      });
+                    } else {
+                      if (mounted) setState(() => _loading = false);
+                    }
+                  });
+                },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                   child: Row(children: [
