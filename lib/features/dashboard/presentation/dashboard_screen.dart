@@ -207,9 +207,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       LayoutBuilder(builder: (_, constraints) {
         final wide = constraints.maxWidth >= 500;
         final actions = [
-          _QuickAction(icon: Icons.person_add_outlined, label: 'Add Donor', color: const Color(0xFF0E8C76), bg: const Color(0xFFD6F3EC), onTap: () => ctx.go('/donors/add')),
-          _QuickAction(icon: Icons.receipt_long_outlined, label: 'Record Donation', color: const Color(0xFFE0921A), bg: const Color(0xFFFFF1D6), onTap: () => ctx.go('/donations/add')),
-          _QuickAction(icon: Icons.school_outlined, label: 'Add Student', color: const Color(0xFF7C6CF0), bg: const Color(0xFFE7E3FD), onTap: () => ctx.go('/students/add')),
+          _QuickAction(icon: Icons.person_add_outlined, label: 'Add Donor', color: const Color(0xFF0E8C76), bg: const Color(0xFFD6F3EC), onTap: () => ctx.go('/donors/new')),
+          _QuickAction(icon: Icons.receipt_long_outlined, label: 'Record Donation', color: const Color(0xFFE0921A), bg: const Color(0xFFFFF1D6), onTap: () => ctx.go('/donations/new')),
+          _QuickAction(icon: Icons.school_outlined, label: 'Add Student', color: const Color(0xFF7C6CF0), bg: const Color(0xFFE7E3FD), onTap: () => ctx.go('/students/new')),
           _QuickAction(icon: Icons.campaign_outlined, label: 'New Campaign', color: const Color(0xFF2D9CDB), bg: const Color(0xFFDCEFFB), onTap: () => _showCampaignDialog(ctx)),
         ];
         if (wide) {

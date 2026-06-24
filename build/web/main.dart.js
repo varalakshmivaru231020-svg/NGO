@@ -121209,13 +121209,13 @@ return A.Y(r,B.h,B.d,B.e,0)}r=t.p
 return A.y(A.a([A.Y(A.a([A.a2(q[0],1),B.ac,A.a2(q[1],1)],r),B.h,B.d,B.e,0),B.S,A.Y(A.a([A.a2(q[2],1),B.ac,A.a2(q[3],1)],r),B.h,B.d,B.e,0)],r),B.h,B.d,B.e)},
 $S:150}
 A.aRH.prototype={
-$0(){return A.bB(this.a).b2(0,"/donors/add",null)},
+$0(){return A.bB(this.a).b2(0,"/donors/new",null)},
 $S:0}
 A.aRI.prototype={
-$0(){return A.bB(this.a).b2(0,"/donations/add",null)},
+$0(){return A.bB(this.a).b2(0,"/donations/new",null)},
 $S:0}
 A.aRJ.prototype={
-$0(){return A.bB(this.a).b2(0,"/students/add",null)},
+$0(){return A.bB(this.a).b2(0,"/students/new",null)},
 $S:0}
 A.aRK.prototype={
 $0(){return this.a.aC1(this.b)},
