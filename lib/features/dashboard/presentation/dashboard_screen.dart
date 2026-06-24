@@ -115,11 +115,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 18),
-                  _quickActionsSection(context),
-                  const SizedBox(height: 16),
                   _kpiSection(context),
-                  const SizedBox(height: 14),
-                  _quickActions(context),
                   const SizedBox(height: 18),
                   _TrendCard(period: _period, onPeriodChange: (p) => setState(() => _period = p)),
                   const SizedBox(height: 14),
