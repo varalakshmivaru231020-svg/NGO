@@ -9,6 +9,7 @@ import '../../../core/utils/native_file_saver.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/widgets/photo_picker_widget.dart';
+import '../../students/presentation/students_screen.dart' show demoCentres;
 
 // ── brand palette ────────────────────────────────────────────────
 const _brand600   = Color(0xFF0E8C76);
@@ -2311,11 +2312,11 @@ class AdminPanelScreen extends StatelessWidget {
               LayoutBuilder(builder: (ctx, box) {
                 final cols = box.maxWidth > 460 ? 3 : 2;
                 final actions = <Map<String, dynamic>>[
-                  {'icon': Icons.people_outlined,          'color': _brand600,  'bg': _brand100,            'label': 'Team Members',   'route': '/settings/team-members'},
-                  {'icon': Icons.manage_accounts_outlined, 'color': _violet500, 'bg': const Color(0xFFEDE9FE), 'label': 'Manage Roles', 'route': '/settings/manage-roles'},
-                  {'icon': Icons.category_outlined,        'color': _amber600,  'bg': const Color(0xFFFFF1D6), 'label': 'Donation Types','route': '/settings/donation-types'},
-                  {'icon': Icons.download_outlined,        'color': _sky500,    'bg': _sky100,              'label': 'Export Data',    'route': '/settings/export-data'},
-                  {'icon': Icons.cloud_sync_outlined,      'color': _sky500,    'bg': _sky100,              'label': 'Backup & Sync',  'route': '/settings/backup-sync'},
+                  {'icon': Icons.people_outlined,          'color': _brand600,  'bg': _brand100,            'label': 'Team Members',     'route': '/settings/team-members'},
+                  {'icon': Icons.location_city_outlined,   'color': _violet500, 'bg': const Color(0xFFEDE9FE), 'label': 'Manage Centres', 'route': '/settings/centres'},
+                  {'icon': Icons.category_outlined,        'color': _amber600,  'bg': const Color(0xFFFFF1D6), 'label': 'Donation Types', 'route': '/settings/donation-types'},
+                  {'icon': Icons.download_outlined,        'color': _sky500,    'bg': _sky100,              'label': 'Export Data',      'route': '/settings/export-data'},
+                  {'icon': Icons.cloud_sync_outlined,      'color': _sky500,    'bg': _sky100,              'label': 'Backup & Sync',    'route': '/settings/backup-sync'},
                   {'icon': Icons.router_outlined,          'color': const Color(0xFF64748B), 'bg': const Color(0xFFF1F5F9), 'label': 'Server URL', 'route': '/settings/server-url'},
                 ];
                 final spacing = 10.0;
@@ -2510,4 +2511,136 @@ class _Label extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(text.toUpperCase(),
       style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: context.textHint, letterSpacing: 0.9));
+}
+
+// ════════════════════════════════════════════════════════════════
+// MANAGE CENTRES
+// ════════════════════════════════════════════════════════════════
+
+class ManageCentresScreen extends StatefulWidget {
+  const ManageCentresScreen({super.key});
+  @override
+  State<ManageCentresScreen> createState() => _ManageCentresScreenState();
+}
+
+class _ManageCentresScreenState extends State<ManageCentresScreen> {
+  void _openSheet({({String id, String name})? editing}) {
+    final nameCtrl = TextEditingController(text: editing?.name ?? '');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(editing == null ? 'Add Centre' : 'Edit Centre',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        content: TextField(
+          controller: nameCtrl, autofocus: true,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            hintText: 'Centre name',
+            filled: true, fillColor: const Color(0xFFF4F7F6),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              final n = nameCtrl.text.trim();
+              if (n.isEmpty) return;
+              setState(() {
+                if (editing == null) {
+                  demoCentres.add((id: 'c${demoCentres.length + 1}', name: n));
+                } else {
+                  final idx = demoCentres.indexOf(editing);
+                  if (idx != -1) demoCentres[idx] = (id: editing.id, name: n);
+                }
+              });
+              Navigator.pop(ctx);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: Text(editing == null ? 'Add' : 'Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _delete(({String id, String name}) c) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Delete Centre', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        content: Text('Remove "${c.name}"? Students assigned here will be unaffected.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () { setState(() => demoCentres.remove(c)); Navigator.pop(ctx); },
+            style: ElevatedButton.styleFrom(backgroundColor: _coral500, foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(children: [
+        _buildHeader(context, 'Manage Centres', sub: '${demoCentres.length} centres'),
+        Expanded(child: demoCentres.isEmpty
+          ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.location_city_outlined, size: 48, color: Color(0xFFB0C4BF)),
+              const SizedBox(height: 12),
+              const Text('No centres yet', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF5A6B67))),
+              const SizedBox(height: 6),
+              Text('Tap + to add a centre', style: TextStyle(fontSize: 13, color: const Color(0xFF93A29F))),
+            ]))
+          : ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+              itemCount: demoCentres.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (_, i) {
+                final c = demoCentres[i];
+                return Container(
+                  decoration: BoxDecoration(
+                    color: context.cardBg, borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: context.border),
+                    boxShadow: const [BoxShadow(color: Color(0x060D2822), blurRadius: 4, offset: Offset(0, 2))],
+                  ),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    leading: Container(
+                      width: 42, height: 42,
+                      decoration: const BoxDecoration(color: _brand100, shape: BoxShape.circle),
+                      child: const Icon(Icons.location_city_outlined, color: _brand600, size: 20)),
+                    title: Text(c.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                    subtitle: Text('ID: ${c.id}', style: const TextStyle(fontSize: 12, color: Color(0xFF93A29F))),
+                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 19, color: Color(0xFF5A6B67)),
+                        onPressed: () => _openSheet(editing: c)),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 19, color: _coral500),
+                        onPressed: () => _delete(c)),
+                    ]),
+                  ),
+                );
+              },
+            ),
+        ),
+      ]),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openSheet(),
+        backgroundColor: _brand600, foregroundColor: Colors.white,
+        icon: const Icon(Icons.add),
+        label: const Text('Add Centre', style: TextStyle(fontWeight: FontWeight.w700)),
+      ),
+    );
+  }
 }

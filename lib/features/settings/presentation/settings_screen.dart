@@ -270,6 +270,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
         _settingsItem(Icons.manage_accounts_outlined, 'Manage Roles', 'Staff access & permissions', onTap: () => context.go('/settings/manage-roles')),
         _settingsItem(Icons.people_outlined, 'Team Members', '5 staff', onTap: () => context.go('/settings/team-members')),
         _settingsItem(Icons.category_outlined, 'Donation Types', 'Manage categories', onTap: () => context.go('/settings/donation-types')),
+        _settingsItem(Icons.location_city_outlined, 'Manage Centres', 'Add and manage centres', onTap: () => context.go('/settings/centres')),
         _settingsItem(Icons.business_outlined, 'Offices', 'Manage office locations', onTap: () => context.go('/offices')),
       ]),
       const SizedBox(height: 16),

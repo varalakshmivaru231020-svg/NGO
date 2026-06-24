@@ -52,6 +52,9 @@ const _modeLabels = {
   'CARD': 'Card',
 };
 
+// In-memory store: survives navigation, cleared on hot-restart
+final demoLocalDonations = <Map<String, dynamic>>[];
+
 class _Donation {
   _Donation({required this.id, required this.donorId, required this.name, required this.amount,
     required this.type, required this.method, required this.receipt, required this.date,
@@ -138,9 +141,12 @@ class _DonationsScreenState extends State<DonationsScreen> {
         return;
       }
     } catch (_) {}
-    // Fall back to mock data
+    // Fall back to mock data (new additions at top)
     setState(() {
-      _donations = _mockData.map(_Donation.fromApi).toList();
+      _donations = [
+        ...demoLocalDonations.map(_Donation.fromApi),
+        ..._mockData.map(_Donation.fromApi),
+      ];
       _loading = false;
     });
   }

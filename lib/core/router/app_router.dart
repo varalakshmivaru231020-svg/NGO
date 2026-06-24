@@ -64,6 +64,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/settings/about-us',        builder: (ctx, state) => const AboutUsScreen()),
           GoRoute(path: '/settings/server-url',      builder: (ctx, state) => const ServerUrlScreen()),
           GoRoute(path: '/settings/razorpay',        builder: (ctx, state) => const RazorpayCredentialsScreen()),
+          GoRoute(path: '/settings/centres',         builder: (ctx, state) => const ManageCentresScreen()),
           GoRoute(path: '/settings/manage-roles',    builder: (ctx, state) => const ManageRolesScreen()),
           GoRoute(path: '/settings/admin-panel',     builder: (ctx, state) => const AdminPanelScreen()),
           GoRoute(path: '/roles',           builder: (ctx, state) => const RolesScreen()),

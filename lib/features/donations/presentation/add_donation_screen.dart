@@ -5,6 +5,7 @@ import '../../../core/network/api_client.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../donors/presentation/donors_screen.dart' show demoLocalDonors, mockDonorData;
+import 'donations_screen.dart' show demoLocalDonations;
 import 'receipt_generator.dart';
 
 const _brand700 = Color(0xFF0B6E5D);
@@ -288,6 +289,17 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       date:         _date,
       taxExemption: false,
     );
+    // Persist locally so list shows it immediately
+    demoLocalDonations.insert(0, {
+      'id': 'local_${receiptNo.hashCode}',
+      'donor': {'id': _selectedDonorId ?? '', 'name': _selectedDonorName ?? 'Donor'},
+      'amount': int.tryParse(amountText) ?? 0,
+      'type': {'label': _donationType},
+      'paymentMode': _methodModes[_method] ?? 'CASH',
+      'receiptNo': receiptNo,
+      'date': _date,
+      'status': 'COMPLETED',
+    });
     await showReceiptSheet(context, receipt);
     if (mounted) context.go('/donations');
   }

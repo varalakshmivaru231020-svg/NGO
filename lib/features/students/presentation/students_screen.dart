@@ -89,6 +89,13 @@ Color _statusBg(String s) => switch (s) {
 // Shared in-memory student list — new enrollments are appended here
 final demoLocalStudents = <Map<String, dynamic>>[];
 
+// Shared centres list — admin can add/remove via Manage Centres
+final demoCentres = <({String id, String name})>[
+  (id: 'c1', name: 'Sulibele'),
+  (id: 'c2', name: 'Yelahanka'),
+  (id: 'c3', name: 'Devanahalli'),
+];
+
 // ── avatar helpers ────────────────────────────────────────────────────
 Color _avColor(String seed) {
   final palette = [_brand600, const Color(0xFFF6A723), _violet500, const Color(0xFF2D9CDB),
@@ -141,11 +148,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
     {'id':'s10','childId':'SKT-C-0010','name':'Geetha Kumari','gender':'FEMALE','dob':'2014-09-08','status':'ACTIVE',   'class':'Class 5', 'school':'Govt Primary School',          'center':{'name':'Devanahalli'},'sponsorships':[]},
   ];
 
-  static final _mockCentres = [
-    (id: 'c1', name: 'Sulibele'),
-    (id: 'c2', name: 'Yelahanka'),
-    (id: 'c3', name: 'Devanahalli'),
-  ];
+  static const _mockCentres = <({String id, String name})>[];
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
@@ -174,7 +177,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
     // Fall back to mock data (new enrollments at top)
     if (mounted) setState(() {
       _all     = [...demoLocalStudents.map(_Student.fromJson), ..._mockStudents.map(_Student.fromJson)];
-      _centres = _mockCentres;
+      _centres = demoCentres;
       _loading = false;
     });
   }

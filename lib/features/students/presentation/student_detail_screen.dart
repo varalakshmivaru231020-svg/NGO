@@ -397,7 +397,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
                         child: Row(children: [
-                          _StudentStat(label: 'Activities',    value: data['achievementCount'] ?? '—'),
+                          _StudentStat(label: 'Achievements',  value: data['achievementCount'] ?? '—'),
                           _vDivider,
                           _StudentStat(label: 'Sponsorship',   value: data['sponsorshipAmt'] ?? '—'),
                         ]),
@@ -420,7 +420,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             _ProfileTab(data: data),
             _EducationTab(data: data),
             _SponsorTab(data: data, onAssign: () => _showSponsorPicker(context)),
-            _ActivitiesTab(studentId: name),
+            _AchievementsTab(studentId: name),
             const _DocumentsTab(),
             _ProgressTab(data: data),
           ],
@@ -491,7 +491,7 @@ class _AppBarBottom extends StatelessWidget implements PreferredSizeWidget {
         Tab(text: 'Profile'),
         Tab(text: 'Education'),
         Tab(text: 'Sponsor'),
-        Tab(text: 'Activities'),
+        Tab(text: 'Achievements'),
         Tab(text: 'Documents'),
         Tab(text: 'Progress'),
       ],
@@ -839,17 +839,17 @@ class _StudentActivity {
   }) : imageBytes = imageBytes ?? [], videoNames = videoNames ?? [];
 }
 
-final _studentActivities = <String, List<_StudentActivity>>{};
+final _studentAchievements = <String, List<_StudentActivity>>{};
 
-class _ActivitiesTab extends StatefulWidget {
-  const _ActivitiesTab({required this.studentId});
+class _AchievementsTab extends StatefulWidget {
+  const _AchievementsTab({required this.studentId});
   final String studentId;
   @override
-  State<_ActivitiesTab> createState() => _ActivitiesTabState();
+  State<_AchievementsTab> createState() => _AchievementsTabState();
 }
 
-class _ActivitiesTabState extends State<_ActivitiesTab> {
-  List<_StudentActivity> get _list => _studentActivities.putIfAbsent(widget.studentId, () => []);
+class _AchievementsTabState extends State<_AchievementsTab> {
+  List<_StudentActivity> get _list => _studentAchievements.putIfAbsent(widget.studentId, () => []);
 
   static const _cats = ['Arts', 'Sports', 'Academics', 'Community', 'Leadership', 'Other'];
 
@@ -879,7 +879,7 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 18, 12, 0),
               child: Row(children: [
-                Expanded(child: Text(editing == null ? 'Add Activity' : 'Edit Activity',
+                Expanded(child: Text(editing == null ? 'Add Achievement' : 'Edit Achievement',
                     style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: _onSurface1))),
                 IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close_rounded, size: 22, color: _onSurface2)),
               ]),
