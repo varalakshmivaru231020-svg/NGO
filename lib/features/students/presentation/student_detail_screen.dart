@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
+import '../../../core/network/api_client.dart';
+import 'students_screen.dart' show findStudentRecord;
 
 // ── colours ───────────────────────────────────────────────────────────
 const _brand700 = Color(0xFF0B6E5D);
@@ -91,24 +94,105 @@ class StudentDetailScreen extends StatefulWidget {
 }
 
 // mock donor list for sponsor picker
-final _kDonors = [
-  {'id': 'd1', 'donorId': 'SF-D-0001', 'name': 'Rajesh Mehta',   'category': 'Child Sponsor', 'city': 'Mumbai',    'amt': '₹18,000 / year'},
-  {'id': 'd2', 'donorId': 'SF-D-0002', 'name': 'Priya Sharma',   'category': 'Child Sponsor', 'city': 'Delhi',     'amt': '₹18,000 / year'},
-  {'id': 'd3', 'donorId': 'SF-D-0003', 'name': 'Ananya Iyer',    'category': 'Child Sponsor', 'city': 'Chennai',   'amt': '₹24,000 / year'},
-  {'id': 'd4', 'donorId': 'SF-D-0004', 'name': 'Vikram Singh',   'category': 'General Donor', 'city': 'Bengaluru', 'amt': '₹12,000 / year'},
-  {'id': 'd5', 'donorId': 'SF-D-0005', 'name': 'Sunita Kapoor',  'category': 'Child Sponsor', 'city': 'Pune',      'amt': '₹18,000 / year'},
-];
+// Sponsor-picker donors are loaded live from the backend (see _fetchDonors).
 
 class _StudentDetailScreenState extends State<StudentDetailScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
   late Map<String, String> _data;
+  Uint8List? _photoBytes; // student's uploaded profile photo, shown in the header
 
   @override
   void initState() {
     super.initState();
     _tabs = TabController(length: 6, vsync: this);
-    _data = Map<String, String>.from(_kChildren[widget.id] ?? _kChildren['s1']!);
+    _data = _resolveData(widget.id);
+    _photoBytes = _resolvePhoto(widget.id);
+  }
+
+  // Decode the student's uploaded photo (base64) from their record, if any.
+  Uint8List? _resolvePhoto(String id) {
+    final rec = findStudentRecord(id);
+    final raw = (rec?['photo'] ?? '').toString();
+    if (raw.isEmpty) return null;
+    try { return base64Decode(raw); } catch (_) { return null; }
+  }
+
+  // Resolve the student's own data: rich demo records first, then the live
+  // student store (created enrollments + dataset). Never falls back to another
+  // student, so each profile shows its own details.
+  Map<String, String> _resolveData(String id) {
+    if (_kChildren.containsKey(id)) return Map<String, String>.from(_kChildren[id]!);
+    final rec = findStudentRecord(id);
+    if (rec != null) return _dataFromRecord(id, rec);
+    return _emptyData(id);
+  }
+
+  Map<String, String> _dataFromRecord(String id, Map<String, dynamic> r) {
+    String s(String k) => (r[k] ?? '').toString();
+    final gender = switch (s('gender')) { 'MALE' => 'Male', 'FEMALE' => 'Female', final g => g };
+    const statusMap = {'ACTIVE': 'Active', 'GRADUATED': 'Graduated', 'INACTIVE': 'Relieved', 'DROPPED': 'Drop out'};
+    final centre = ((r['center'] as Map?)?['name'] ?? '').toString();
+    final sponsorships = (r['sponsorships'] as List?) ?? const [];
+    final sponsorName = sponsorships.isNotEmpty
+        ? (((sponsorships.first as Map?)?['donor'] as Map?)?['name'] ?? '').toString()
+        : '';
+    final age = _ageFromIso(s('dob'));
+    // Prefer the explicit key, fall back to the backend's field name.
+    String pick(String a, String b) => s(a).isNotEmpty ? s(a) : s(b);
+    return {
+      'childId':          s('childId').isNotEmpty ? s('childId') : id,
+      'name':             s('name'),
+      'centre':           centre,
+      'age':              age.isNotEmpty ? age : '—',
+      'gender':           gender.isNotEmpty ? gender : '—',
+      'class':            s('class').isNotEmpty ? s('class') : '—',
+      'status':           statusMap[s('status')] ?? (s('status').isNotEmpty ? s('status') : 'Active'),
+      'dob':              s('dob'),
+      'institution':      s('school'),
+      'school':           s('school'),
+      'sponsor':          sponsorName,
+      'sponsorshipAmt':   sponsorName.isNotEmpty ? '—' : '—',
+      'achievementCount': '0',
+      // Detail fields shown on the Profile tab (local + backend field names).
+      'aadhaar':     s('aadhaar'),
+      'admDate':     pick('admDate', 'admissionDate'),
+      'father':      s('fatherName'),
+      'mother':      s('motherName'),
+      'guardian':    s('guardian'),
+      'relation':    s('relation'),
+      'mobile':      pick('mobile', 'guardianPhone'),
+      'address':     s('address'),
+      'sat':         s('sat'),
+      'familyNotes': pick('familyNotes', 'notes'),
+      'height':      s('height'),
+      'weight':      s('weight'),
+      'medHistory':  pick('medHistory', 'medicalNotes'),
+    };
+  }
+
+  Map<String, String> _emptyData(String id) => {
+    'childId': id, 'name': 'Student', 'centre': '—', 'age': '—', 'gender': '—',
+    'class': '—', 'status': 'Active', 'sponsor': '', 'sponsorshipAmt': '—', 'achievementCount': '0',
+  };
+
+  // Compute "N yrs" from an ISO yyyy-mm-dd date of birth.
+  String _ageFromIso(String iso) {
+    final d = DateTime.tryParse(iso);
+    if (d == null) return '';
+    final now = DateTime.now();
+    var years = now.year - d.year;
+    if (now.month < d.month || (now.month == d.month && now.day < d.day)) years--;
+    return years >= 0 ? '$years yrs' : '';
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchDonors() async {
+    try {
+      final res = await apiClient.get('/donors', params: {'limit': '100'});
+      final inner = res['data'];
+      final list = inner is List ? inner : (inner is Map ? (inner['data'] as List? ?? const []) : const []);
+      return list.map((e) => (e as Map).cast<String, dynamic>()).toList();
+    } catch (_) { return []; }
   }
 
   void _showSponsorPicker(BuildContext context) {
@@ -125,38 +209,53 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             const Spacer(),
             IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
           ])),
-          Expanded(child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
-            itemCount: _kDonors.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (_, i) {
-              final d = _kDonors[i];
-              return ListTile(
-                contentPadding: const EdgeInsets.symmetric(vertical: 6),
-                leading: Container(width: 44, height: 44,
-                  decoration: const BoxDecoration(color: _brand100, shape: BoxShape.circle),
-                  child: Center(child: Text(_initials(d['name']!), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _brand600)))),
-                title: Text(d['name']!, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
-                subtitle: Text('${d['category']} · ${d['city']}', style: const TextStyle(fontSize: 12.5, color: _onSurface3)),
-                trailing: Text(d['amt']!, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand600)),
-                onTap: () {
-                  final now = DateTime.now();
-                  final dateStr = '${now.day.toString().padLeft(2,'0')} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][now.month-1]} ${now.year}';
-                  setState(() {
-                    _data['sponsor']          = d['name']!;
-                    _data['sponsorId']        = d['id']!;
-                    _data['sponsorDonorId']   = d['donorId']!;
-                    _data['sponsorCategory']  = d['category']!;
-                    _data['sponsorCity']      = d['city']!;
-                    _data['sponsorAmt']       = d['amt']!;
-                    _data['sponsorSince']     = dateStr;
-                    _data['sponsorshipAmt']   = d['amt']!.split(' ').first;
-                  });
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text('${d['name']} assigned as sponsor', style: const TextStyle(fontWeight: FontWeight.w700)),
-                    backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+          Expanded(child: FutureBuilder<List<Map<String, dynamic>>>(
+            future: _fetchDonors(),
+            builder: (c, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator(color: _brand600));
+              }
+              final donors = snap.data ?? const <Map<String, dynamic>>[];
+              if (donors.isEmpty) {
+                return const Center(child: Padding(padding: EdgeInsets.all(24),
+                  child: Text('No donors yet. Add a donor first.', style: TextStyle(fontSize: 13.5, color: _onSurface3, fontWeight: FontWeight.w500))));
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+                itemCount: donors.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (_, i) {
+                  final d = donors[i];
+                  final name = (d['name'] ?? '') as String;
+                  final city = (d['city'] ?? '') as String;
+                  final id = (d['id'] ?? '') as String;
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(vertical: 6),
+                    leading: Container(width: 44, height: 44,
+                      decoration: const BoxDecoration(color: _brand100, shape: BoxShape.circle),
+                      child: Center(child: Text(_initials(name), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _brand600)))),
+                    title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
+                    subtitle: Text(city.isNotEmpty ? 'Donor · $city' : 'Donor', style: const TextStyle(fontSize: 12.5, color: _onSurface3)),
+                    onTap: () {
+                      final now = DateTime.now();
+                      final dateStr = '${now.day.toString().padLeft(2,'0')} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][now.month-1]} ${now.year}';
+                      setState(() {
+                        _data['sponsor']         = name;
+                        _data['sponsorId']       = id;
+                        _data['sponsorDonorId']  = id;
+                        _data['sponsorCategory'] = 'Sponsor';
+                        _data['sponsorCity']     = city;
+                        _data['sponsorAmt']      = '';
+                        _data['sponsorSince']    = dateStr;
+                        _data['sponsorshipAmt']  = '—';
+                      });
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text('$name assigned as sponsor', style: const TextStyle(fontWeight: FontWeight.w700)),
+                        backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+                    },
+                  );
                 },
               );
             },
@@ -168,6 +267,42 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
 
   @override
   void dispose() { _tabs.dispose(); super.dispose(); }
+
+  // Backend enum ↔ display maps.
+  static const _genderBack = {'Male': 'MALE', 'Female': 'FEMALE', 'Other': 'OTHER'};
+  static const _statusBack = {'Active': 'ACTIVE', 'Graduated': 'GRADUATED', 'Relieved': 'INACTIVE', 'Drop out': 'DROPPED'};
+
+  // Persist an edit: update the on-screen data AND the underlying student record
+  // so the change survives navigation back to the list.
+  void _applyEdit({
+    required String name, required String centre, required String mobile,
+    required String address, required String gender, required String status,
+  }) {
+    setState(() {
+      if (name.isNotEmpty) _data['name'] = name;
+      _data['centre']  = centre;
+      _data['mobile']  = mobile;
+      _data['address'] = address;
+      _data['gender']  = gender;
+      _data['status']  = status;
+    });
+    final rec = findStudentRecord(widget.id);
+    if (rec != null) {
+      if (name.isNotEmpty) rec['name'] = name;
+      rec['gender']        = _genderBack[gender] ?? gender;
+      rec['status']        = _statusBack[status] ?? status;
+      rec['address']       = address;
+      rec['mobile']        = mobile;
+      rec['guardianPhone'] = mobile;
+      if (centre.isNotEmpty) rec['center'] = {'name': centre};
+    }
+  }
+
+  void _applyStatus(String status) {
+    setState(() => _data['status'] = status);
+    final rec = findStudentRecord(widget.id);
+    if (rec != null) rec['status'] = _statusBack[status] ?? status;
+  }
 
   void _showEditSheet(BuildContext context, Map<String, String> data) {
     final nameCtrl    = TextEditingController(text: data['name']);
@@ -237,6 +372,14 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             const SizedBox(height: 20),
             SizedBox(width: double.infinity, child: ElevatedButton(
               onPressed: () {
+                _applyEdit(
+                  name: nameCtrl.text.trim(),
+                  centre: centreCtrl.text.trim(),
+                  mobile: mobileCtrl.text.trim(),
+                  address: addressCtrl.text.trim(),
+                  gender: gender,
+                  status: status,
+                );
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: const Text('Student updated successfully', style: TextStyle(fontWeight: FontWeight.w700)),
@@ -307,6 +450,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
           const SizedBox(height: 8),
           SizedBox(width: double.infinity, child: ElevatedButton(
             onPressed: () {
+              _applyStatus(status);
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                 content: Text('Status updated to $status', style: const TextStyle(fontWeight: FontWeight.w700)),
@@ -361,11 +505,15 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
                     Container(
                       width: 70, height: 70,
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [color, Color.lerp(color, Colors.black, 0.2)!]),
+                        gradient: _photoBytes == null ? LinearGradient(colors: [color, Color.lerp(color, Colors.black, 0.2)!]) : null,
+                        color: _photoBytes != null ? Colors.white : null,
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 3))],
                       ),
-                      child: Center(child: Text(_initials(name), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 24))),
+                      clipBehavior: Clip.hardEdge,
+                      child: _photoBytes != null
+                          ? Image.memory(_photoBytes!, fit: BoxFit.cover, width: 70, height: 70)
+                          : Center(child: Text(_initials(name), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 24))),
                     ),
                     const SizedBox(height: 8),
                     Text(name, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800)),
@@ -513,22 +661,22 @@ class _ProfileTab extends StatelessWidget {
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       // Basic Profile
       _CardSection(title: 'Basic Profile', icon: Icons.person_outline, children: [
-        _InfoRow('Child ID',          data['childId']!),
-        _InfoRow('Centre',            data['centre']!),
-        _InfoRow('Date of Birth',     '${data['dob']!} (${data['age']!})'),
-        _InfoRow('Gender',            data['gender']!),
-        _InfoRow('Aadhaar Number',    data['aadhaar']!),
-        _InfoRow('Date of Admission', data['admDate']!, last: true),
+        _InfoRow('Child ID',          data['childId'] ?? '—'),
+        _InfoRow('Centre',            (data['centre'] ?? '').isNotEmpty ? data['centre']! : '—'),
+        _InfoRow('Date of Birth',     '${data['dob'] ?? ''} (${data['age'] ?? '—'})'),
+        _InfoRow('Gender',            data['gender'] ?? '—'),
+        _InfoRow('Aadhaar Number',    (data['aadhaar'] ?? '').isNotEmpty ? data['aadhaar']! : '—'),
+        _InfoRow('Date of Admission', (data['admDate'] ?? '').isNotEmpty ? data['admDate']! : '—', last: true),
       ]),
       const SizedBox(height: 14),
       // Family Details
       _CardSection(title: 'Family Details', icon: Icons.family_restroom_outlined, children: [
-        _InfoRow("Father's Name", data['father']!),
-        _InfoRow("Mother's Name", data['mother']!),
-        _InfoRow('Guardian',      '${data['guardian']!} (${data['relation']!})'),
-        _InfoRow('Mobile Number', data['mobile']!),
-        _InfoRow('Address',       data['address']!),
-        _InfoRow('SAT Number',    data['sat']!, last: true),
+        _InfoRow("Father's Name", (data['father'] ?? '').isNotEmpty ? data['father']! : '—'),
+        _InfoRow("Mother's Name", (data['mother'] ?? '').isNotEmpty ? data['mother']! : '—'),
+        _InfoRow('Guardian',      '${(data['guardian'] ?? '').isNotEmpty ? data['guardian']! : '—'}${(data['relation'] ?? '').isNotEmpty ? ' (${data['relation']})' : ''}'),
+        _InfoRow('Mobile Number', (data['mobile'] ?? '').isNotEmpty ? data['mobile']! : '—'),
+        _InfoRow('Address',       (data['address'] ?? '').isNotEmpty ? data['address']! : '—'),
+        _InfoRow('SAT Number',    (data['sat'] ?? '').isNotEmpty ? data['sat']! : '—', last: true),
       ]),
       const SizedBox(height: 14),
       if (data['familyNotes'] != null && data['familyNotes']!.isNotEmpty)
@@ -545,8 +693,8 @@ class _ProfileTab extends StatelessWidget {
       const SizedBox(height: 14),
       // Health & Medical
       _CardSection(title: 'Health & Medical', icon: Icons.health_and_safety_outlined, children: [
-        _InfoRow('Height', data['height']!),
-        _InfoRow('Weight', data['weight']!, last: true),
+        _InfoRow('Height', (data['height'] ?? '').isNotEmpty ? data['height']! : '—'),
+        _InfoRow('Weight', (data['weight'] ?? '').isNotEmpty ? data['weight']! : '—', last: true),
       ]),
       if (data['medHistory'] != null && data['medHistory']!.isNotEmpty) ...[
         const SizedBox(height: 10),
@@ -1034,7 +1182,7 @@ class _AchievementsTabState extends State<_AchievementsTab> {
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: Text(editing == null ? 'Save Activity' : 'Update', style: const TextStyle(fontWeight: FontWeight.w800)),
+                  child: Text(editing == null ? 'Save Achievement' : 'Update', style: const TextStyle(fontWeight: FontWeight.w800)),
                 )),
               ]),
             ),
@@ -1051,7 +1199,7 @@ class _AchievementsTabState extends State<_AchievementsTab> {
       Padding(
         padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
         child: Row(children: [
-          Text('${list.length} Activit${list.length == 1 ? 'y' : 'ies'}',
+          Text('${list.length} Achievement${list.length == 1 ? '' : 's'}',
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _onSurface2)),
           const Spacer(),
           GestureDetector(
@@ -1062,7 +1210,7 @@ class _AchievementsTabState extends State<_AchievementsTab> {
               child: const Row(mainAxisSize: MainAxisSize.min, children: [
                 Icon(Icons.add, color: Colors.white, size: 16),
                 SizedBox(width: 4),
-                Text('Add Activity', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                Text('Add Achievement', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
               ]),
             ),
           ),
@@ -1072,9 +1220,9 @@ class _AchievementsTabState extends State<_AchievementsTab> {
         Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
           const Icon(Icons.photo_library_outlined, size: 44, color: _onSurface3),
           const SizedBox(height: 12),
-          const Text('No activities yet', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _onSurface3)),
+          const Text('No achievements yet', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _onSurface3)),
           const SizedBox(height: 6),
-          const Text('Tap + to add an activity', style: TextStyle(fontSize: 13, color: _onSurface3)),
+          const Text('Tap + to add an achievement', style: TextStyle(fontSize: 13, color: _onSurface3)),
         ])))
       else
         Expanded(child: ListView.separated(
@@ -1186,11 +1334,11 @@ class _DocumentsTab extends StatefulWidget {
 
 class _DocumentsTabState extends State<_DocumentsTab> {
   final List<_DocEntry> _docs = [
-    _DocEntry(label: 'Aadhaar Card',          icon: Icons.credit_card_outlined,                     uploaded: true,  fileName: 'aadhaar_card.pdf'),
-    _DocEntry(label: 'Birth Certificate',      icon: Icons.article_outlined,                         uploaded: true,  fileName: 'birth_cert.pdf'),
-    _DocEntry(label: 'Transfer Certificate',   icon: Icons.transfer_within_a_station_outlined,       uploaded: false),
-    _DocEntry(label: 'Medical Reports',        icon: Icons.medical_services_outlined,                uploaded: true,  fileName: 'medical_report.pdf'),
-    _DocEntry(label: 'School Report Card',     icon: Icons.school_outlined,                          uploaded: true,  fileName: 'report_card.pdf'),
+    _DocEntry(label: 'Aadhaar Card',          icon: Icons.credit_card_outlined,               uploaded: false),
+    _DocEntry(label: 'Birth Certificate',      icon: Icons.article_outlined,                   uploaded: false),
+    _DocEntry(label: 'Transfer Certificate',   icon: Icons.transfer_within_a_station_outlined, uploaded: false),
+    _DocEntry(label: 'Medical Reports',        icon: Icons.medical_services_outlined,          uploaded: false),
+    _DocEntry(label: 'School Report Card',     icon: Icons.school_outlined,                    uploaded: false),
   ];
 
   final List<String> _others = [];

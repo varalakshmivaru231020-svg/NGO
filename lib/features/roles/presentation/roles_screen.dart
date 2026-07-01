@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/auth/role_auth.dart';
+import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 
 const _brand600 = Color(0xFF0E8C76);
@@ -51,9 +52,13 @@ class _RolesScreenState extends State<RolesScreen> {
   void _openCreate() => _openSheet(context, null, () => setState(() {}));
   void _openEdit(AppRole r) => _openSheet(context, r, () => setState(() {}));
 
-  void _delete(AppRole r) {
+  void _delete(AppRole r) async {
+    // Deactivate the backend account too, so the deleted member loses access everywhere.
+    if (r.backendId != null) {
+      try { await apiClient.patch('/users/${r.backendId}/toggle-active', {}); } catch (_) {}
+    }
     setState(() { appRoles.remove(r); saveRoles(); });
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('Role "${r.name}" deleted'),
       backgroundColor: _coral500,
       duration: const Duration(seconds: 2),
@@ -534,7 +539,12 @@ void _openSheet(BuildContext context, AppRole? existing, VoidCallback onSaved) {
                     final pass  = passCtrl.text.trim();
                     if (name.isEmpty || pass.isEmpty) return;
                     if (existing == null) {
-                      appRoles.add(AppRole(name: name, email: email, password: pass, modules: Set.from(selected)));
+                      // Prevent duplicate: skip if email already registered
+                      if (email.isNotEmpty && appRoles.any((r) => r.email.toLowerCase() == email.toLowerCase())) {
+                        // Just return without adding — email already exists
+                      } else {
+                        appRoles.add(AppRole(name: name, email: email, password: pass, modules: Set.from(selected)));
+                      }
                     } else {
                       existing.name     = name;
                       existing.email    = email;

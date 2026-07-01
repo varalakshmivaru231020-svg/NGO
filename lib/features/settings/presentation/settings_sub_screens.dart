@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,8 @@ import '../../../core/utils/native_file_saver.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/widgets/photo_picker_widget.dart';
+import '../../../core/auth/role_auth.dart';
+import '../profile_store.dart';
 import '../../students/presentation/students_screen.dart' show demoCentres;
 
 // ── brand palette ────────────────────────────────────────────────
@@ -105,6 +108,20 @@ void _snack(BuildContext ctx, String msg) {
   ));
 }
 
+// Friendly message for a failed POST /users (team-member creation).
+String _createUserErrorMsg(Object e) {
+  if (e is DioException) {
+    final code = e.response?.statusCode;
+    final data = e.response?.data;
+    final serverMsg = (data is Map && data['message'] != null) ? data['message'].toString() : null;
+    if (code == 409) return serverMsg ?? 'That email is already registered';
+    if (code == 400) return serverMsg ?? 'Invalid details (password needs 8+ characters)';
+    if (code == 401 || code == 403) return 'Admin session expired — please log out and log in as admin again';
+    return serverMsg ?? 'Could not create the member on the server';
+  }
+  return 'Could not reach the server. Check your connection.';
+}
+
 // ════════════════════════════════════════════════════════════════
 // 1. EDIT PROFILE
 // ════════════════════════════════════════════════════════════════
@@ -115,18 +132,44 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileState extends State<EditProfileScreen> {
-  final _name  = TextEditingController(text: 'Farhan Ansari');
-  final _email = TextEditingController(text: 'kishorreddy992@gmail.com');
-  final _phone = TextEditingController(text: '9876543210');
-  final _role  = TextEditingController(text: 'Admin');
-  final _org   = TextEditingController(text: 'Saksham Foundation');
-  final _bio   = TextEditingController(text: 'Managing donations and child welfare programs since 2018.');
+  late final ProfileData _p = adminProfile.value;
+  late final _name  = TextEditingController(text: _p.name);
+  late final _email = TextEditingController(text: _p.email);
+  late final _phone = TextEditingController(text: _p.phone);
+  late final _role  = TextEditingController(text: _p.role);
+  late final _org   = TextEditingController(text: _p.org);
+  late final _bio   = TextEditingController(text: _p.bio);
+  Uint8List? _photo;
+  bool _photoChanged = false;
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _photo = _p.photoBytes;
+  }
 
   @override
   void dispose() {
     for (final c in [_name, _email, _phone, _role, _org, _bio]) c.dispose();
     super.dispose();
+  }
+
+  void _save() async {
+    setState(() => _saving = true);
+    await Future.delayed(const Duration(milliseconds: 400));
+    var updated = adminProfile.value.copyWith(
+      name:  _name.text.trim().isEmpty ? null : _name.text.trim(),
+      email: _email.text.trim(),
+      phone: _phone.text.trim(),
+      role:  _role.text.trim().isEmpty ? null : _role.text.trim(),
+      org:   _org.text.trim().isEmpty  ? null : _org.text.trim(),
+      bio:   _bio.text.trim(),
+    );
+    // Only touch the photo field if the user actually changed it.
+    if (_photoChanged) updated = updated.copyWith(photoBase64: encodePhoto(_photo));
+    updateProfile(updated);
+    if (mounted) { setState(() => _saving = false); _snack(context, 'Profile updated successfully'); }
   }
 
   @override
@@ -137,7 +180,11 @@ class _EditProfileState extends State<EditProfileScreen> {
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Center(child: PhotoPickerCircle(size: 88, label: '', initials: 'FA')),
+          Center(child: PhotoPickerCircle(
+            size: 88, label: '', initials: _p.initials, initialImage: _photo,
+            placeholderAsset: brandLogoAsset,
+            onImageChanged: (bytes) { _photo = bytes; _photoChanged = true; },
+          )),
           const SizedBox(height: 24),
           _buildSectionLabel(context, 'Basic Info'),
           _buildCard(context, child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
@@ -154,11 +201,7 @@ class _EditProfileState extends State<EditProfileScreen> {
           ]))),
           const SizedBox(height: 24),
           SizedBox(width: double.infinity, child: ElevatedButton(
-            onPressed: _saving ? null : () async {
-              setState(() => _saving = true);
-              await Future.delayed(const Duration(milliseconds: 600));
-              if (mounted) { setState(() => _saving = false); _snack(context, 'Profile updated successfully'); }
-            },
+            onPressed: _saving ? null : _save,
             style: ElevatedButton.styleFrom(
               backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -488,20 +531,40 @@ class TeamMembersScreen extends StatefulWidget {
 }
 
 class _TeamMembersState extends State<TeamMembersScreen> {
-  final List<Map<String, dynamic>> _members = [
-    {'name': 'Farhan Ansari', 'role': 'Admin',          'email': 'farhan@saksham.org',  'status': 'Active',   'color': _brand600,   'self': true},
-    {'name': 'Priya Reddy',   'role': 'Field Officer',  'email': 'priya@saksham.org',   'status': 'Active',   'color': _violet500,  'self': false},
-    {'name': 'Suresh Kumar',  'role': 'Donor Manager',  'email': 'suresh@saksham.org',  'status': 'Active',   'color': _sky500,     'self': false},
-    {'name': 'Anita Sharma',  'role': 'Programme Lead', 'email': 'anita@saksham.org',   'status': 'Active',   'color': _amber600,   'self': false},
-    {'name': 'Kiran Mehta',   'role': 'Data Entry',     'email': 'kiran@saksham.org',   'status': 'Inactive', 'color': _coral500,   'self': false},
+  static const _avatarPalette = [_brand600, _violet500, _sky500, _amber600, _coral500];
+  static Color _memberColor(String seed) {
+    int h = 0;
+    for (final c in seed.codeUnits) { h = ((h * 31) + c) & 0xFFFFFFFF; }
+    return _avatarPalette[h % _avatarPalette.length];
+  }
+
+  // The team = the admin owner (row 0, self) + every persisted login account
+  // (appRoles). Editing this list changes who can actually log in & what they see.
+  // Team members below the owner — everyone in appRoles except the admin.
+  List<AppRole> get _memberRoles =>
+      appRoles.where((r) => r.email.toLowerCase() != adminProfile.value.email.toLowerCase()).toList();
+
+  List<Map<String, dynamic>> get _members => [
+    {'name': adminProfile.value.name, 'role': 'Super Admin', 'email': adminProfile.value.email, 'status': 'Active', 'color': _brand600, 'self': true},
+    for (final r in _memberRoles)
+      {
+        'name':   r.name,
+        'role':   r.roleName.isNotEmpty ? r.roleName : 'Custom',
+        'email':  r.email,
+        'status': r.active ? 'Active' : 'Inactive',
+        'color':  _memberColor(r.name),
+        'self':   false,
+      },
   ];
 
   void _showInviteSheet() {
     final nameCtrl     = TextEditingController();
     final emailCtrl    = TextEditingController();
     final passwordCtrl = TextEditingController();
-    String selectedRole = 'Field Officer';
-    const roleOptions = ['Admin', 'Field Officer', 'Donor Manager', 'Data Entry'];
+    final roleOptions = roleTemplates.map((t) => t['name'] as String).toList();
+    String selectedRole = roleOptions.contains('Field Officer')
+        ? 'Field Officer'
+        : (roleOptions.isNotEmpty ? roleOptions.first : 'Field Officer');
     Map<String, String?> errors = {};
     bool obscurePass = true;
 
@@ -560,7 +623,7 @@ class _TeamMembersState extends State<TeamMembersScreen> {
             ),
             const SizedBox(height: 20),
             SizedBox(width: double.infinity, child: ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 final name     = nameCtrl.text.trim();
                 final email    = emailCtrl.text.trim();
                 final password = passwordCtrl.text;
@@ -569,13 +632,42 @@ class _TeamMembersState extends State<TeamMembersScreen> {
                 if (email.isEmpty) newErrors['Email']     = 'Email is required';
                 else if (!email.contains('@')) newErrors['Email'] = 'Enter a valid email';
                 if (password.isEmpty) newErrors['Password'] = 'Password is required';
+                else if (password.length < 8) newErrors['Password'] = 'Min 8 characters';
                 if (newErrors.isNotEmpty) { setSheet(() => errors = newErrors); return; }
-                setState(() => _members.add({
-                  'name': name, 'role': selectedRole, 'email': email,
-                  'status': 'Active', 'color': _sky500, 'self': false,
-                }));
-                Navigator.pop(ctx);
-                _snack(context, '$name created as $selectedRole');
+
+                final modules = modulesForRoleName(selectedRole);
+                final backendRole = selectedRole.toLowerCase() == 'admin' ? 'ADMIN' : 'STAFF';
+
+                // Create on the backend first so the account persists server-side
+                // and works on any device/browser.
+                String? backendUserId;
+                try {
+                  final res = await apiClient.post('/users', {
+                    'name': name, 'email': email, 'password': password,
+                    'role': backendRole, 'modules': modules.join(','),
+                  });
+                  // Non-Super-Admins: queued for approval — don't add the member yet.
+                  if ((res['meta'] as Map?)?['pendingApproval'] == true) {
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    if (mounted) _snack(context, 'Submitted for Super Admin approval');
+                    return;
+                  }
+                  backendUserId = ((res['data'] as Map?)?.cast<String, dynamic>())?['id'] as String?;
+                } catch (e) {
+                  if (mounted) _snack(context, _createUserErrorMsg(e));
+                  return;
+                }
+
+                // Mirror locally so the team list updates instantly + offline login works.
+                if (!appRoles.any((r) => r.email.toLowerCase() == email.toLowerCase())) {
+                  setState(() => appRoles.add(AppRole(
+                    name: name, email: email, password: password,
+                    roleName: selectedRole, modules: modules, backendId: backendUserId,
+                  )));
+                  saveRoles();
+                }
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) _snack(context, '$name created as $selectedRole');
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
@@ -593,13 +685,35 @@ class _TeamMembersState extends State<TeamMembersScreen> {
     final name = _members[idx]['name'] as String;
     showDialog(context: context, builder: (ctx) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Remove Member', style: TextStyle(fontWeight: FontWeight.w800)),
-      content: Text('Remove $name from the team? They will lose access to the app.'),
+      title: const Text('Delete Member', style: TextStyle(fontWeight: FontWeight.w800)),
+      content: Text("Delete $name from the team?\n\nTheir login will be disabled immediately — they will not be able to sign in on any device."),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
         TextButton(
-          onPressed: () { Navigator.pop(ctx); setState(() => _members.removeAt(idx)); _snack(context, '$name removed from team'); },
-          child: const Text('Remove', style: TextStyle(color: _coral500, fontWeight: FontWeight.w800))),
+          onPressed: () async {
+            Navigator.pop(ctx);
+            // Row 0 is the admin owner; member rows map to _memberRoles[idx - 1].
+            final members = _memberRoles;
+            final ai = idx - 1;
+            if (ai >= 0 && ai < members.length) {
+              final removed = members[ai];
+              // Delete (deactivate) the backend account so they can't log in
+              // anywhere — deterministic, and revokes their refresh tokens.
+              if (removed.backendId != null) {
+                try {
+                  await apiClient.delete('/users/${removed.backendId}');
+                } catch (_) {
+                  // Fall back to the toggle endpoint if delete is unavailable.
+                  try { await apiClient.patch('/users/${removed.backendId}/toggle-active', {}); } catch (_) {}
+                }
+              }
+              // Remove locally so the offline fallback login also fails.
+              setState(() => appRoles.removeWhere((r) => r.email.toLowerCase() == removed.email.toLowerCase()));
+              saveRoles();
+            }
+            if (mounted) _snack(context, '$name deleted — login disabled');
+          },
+          child: const Text('Delete', style: TextStyle(color: _coral500, fontWeight: FontWeight.w800))),
       ],
     ));
   }
@@ -1696,80 +1810,9 @@ class ManageRolesScreen extends StatefulWidget {
 }
 
 class _ManageRolesState extends State<ManageRolesScreen> {
-  final List<Map<String, dynamic>> _roles = [
-    {
-      'name': 'Admin',
-      'desc': 'Full access to all features and settings',
-      'members': 1,
-      'isSystem': true,
-      'perms': <String, dynamic>{
-        'donors':          <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': true},
-        'donations':       <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': true},
-        'students':        <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': true},
-        'offices':         <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': true},
-        'reports':         <String, bool>{'view': true,  'export': true},
-        'reminders':       <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': true},
-        'donationTracker': <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': true},
-        'paymentLinks':    <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': true},
-        'achievements':    <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': true},
-        'settings':        <String, bool>{'access': true},
-      },
-    },
-    {
-      'name': 'Field Officer',
-      'desc': 'Manages students and views reports',
-      'members': 2,
-      'isSystem': false,
-      'perms': <String, dynamic>{
-        'donors':          <String, bool>{'view': true,  'add': false, 'edit': false, 'delete': false},
-        'donations':       <String, bool>{'view': true,  'add': false, 'edit': false, 'delete': false},
-        'students':        <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': false},
-        'offices':         <String, bool>{'view': true,  'add': false, 'edit': false, 'delete': false},
-        'reports':         <String, bool>{'view': true,  'export': false},
-        'reminders':       <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
-        'donationTracker': <String, bool>{'view': true,  'add': false, 'edit': false, 'delete': false},
-        'paymentLinks':    <String, bool>{'view': false, 'add': false, 'edit': false, 'delete': false},
-        'achievements':    <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
-        'settings':        <String, bool>{'access': false},
-      },
-    },
-    {
-      'name': 'Donor Manager',
-      'desc': 'Handles donors and donations only',
-      'members': 1,
-      'isSystem': false,
-      'perms': <String, dynamic>{
-        'donors':          <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': false},
-        'donations':       <String, bool>{'view': true,  'add': true,  'edit': true,  'delete': false},
-        'students':        <String, bool>{'view': false, 'add': false, 'edit': false, 'delete': false},
-        'offices':         <String, bool>{'view': false, 'add': false, 'edit': false, 'delete': false},
-        'reports':         <String, bool>{'view': false, 'export': false},
-        'reminders':       <String, bool>{'view': true,  'add': false, 'edit': false, 'delete': false},
-        'donationTracker': <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
-        'paymentLinks':    <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
-        'achievements':    <String, bool>{'view': false, 'add': false, 'edit': false, 'delete': false},
-        'settings':        <String, bool>{'access': false},
-      },
-    },
-    {
-      'name': 'Data Entry',
-      'desc': 'Can add records; cannot edit or delete',
-      'members': 1,
-      'isSystem': false,
-      'perms': <String, dynamic>{
-        'donors':          <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
-        'donations':       <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
-        'students':        <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
-        'offices':         <String, bool>{'view': true,  'add': false, 'edit': false, 'delete': false},
-        'reports':         <String, bool>{'view': false, 'export': false},
-        'reminders':       <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
-        'donationTracker': <String, bool>{'view': true,  'add': true,  'edit': false, 'delete': false},
-        'paymentLinks':    <String, bool>{'view': false, 'add': false, 'edit': false, 'delete': false},
-        'achievements':    <String, bool>{'view': true,  'add': false, 'edit': false, 'delete': false},
-        'settings':        <String, bool>{'access': false},
-      },
-    },
-  ];
+  // Role definitions now live in the shared, persisted role-template store
+  // (core/auth/role_auth.dart) so edits control real access and survive restart.
+  List<Map<String, dynamic>> get _roles => roleTemplates;
 
   List<String> _summary(Map<String, dynamic> perms) {
     bool p(String mod, String key) {
@@ -2005,16 +2048,28 @@ class _ManageRolesState extends State<ManageRolesScreen> {
                   if (isNew) {
                     setState(() => _roles.add({
                       'name': name, 'desc': descCtrl.text.trim(),
-                      'members': 0, 'isSystem': false, 'perms': perms,
+                      'isSystem': false, 'perms': perms,
                     }));
+                    saveRoleTemplates();
+                    applyTemplateToMembers(name);
                     _snack(context, '"$name" role created');
                   } else {
+                    final oldName = role!['name'] as String;
                     final idx = _roles.indexOf(role);
                     if (idx >= 0) setState(() {
                       _roles[idx]['name'] = name;
                       _roles[idx]['desc'] = descCtrl.text.trim();
                       _roles[idx]['perms'] = perms;
                     });
+                    // Re-point members that referenced the old name, then
+                    // re-apply the (possibly changed) permissions to them.
+                    if (oldName != name) {
+                      for (final mbr in appRoles) {
+                        if (mbr.roleName.toLowerCase() == oldName.toLowerCase()) mbr.roleName = name;
+                      }
+                    }
+                    saveRoleTemplates();
+                    applyTemplateToMembers(name);
                     _snack(context, '"$name" role updated');
                   }
                   Navigator.pop(ctx);
@@ -2067,6 +2122,13 @@ class _ManageRolesState extends State<ManageRolesScreen> {
             Expanded(child: ElevatedButton(
               onPressed: () {
                 setState(() => _roles.removeAt(idx));
+                // Members that used this role keep their current access but are
+                // no longer linked to a template.
+                for (final mbr in appRoles) {
+                  if (mbr.roleName.toLowerCase() == roleName.toLowerCase()) mbr.roleName = '';
+                }
+                saveRoleTemplates();
+                saveRoles();
                 Navigator.pop(ctx);
                 _snack(context, '"$roleName" role deleted');
               },
@@ -2094,7 +2156,10 @@ class _ManageRolesState extends State<ManageRolesScreen> {
         itemBuilder: (ctx, i) {
           final r        = _roles[i];
           final isSystem = r['isSystem'] as bool;
-          final members  = r['members'] as int;
+          final roleNm   = r['name'] as String;
+          // Live member count = team members assigned this role (+ admin for the System role).
+          final members  = appRoles.where((m) => m.roleName.toLowerCase() == roleNm.toLowerCase()).length
+              + (isSystem ? 1 : 0);
           final summary  = _summary(r['perms'] as Map<String, dynamic>);
           return Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -2524,6 +2589,28 @@ class ManageCentresScreen extends StatefulWidget {
 }
 
 class _ManageCentresScreenState extends State<ManageCentresScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _loadCentres();
+  }
+
+  // Centres are stored in the backend (shared with Add Student). Load them so
+  // this screen and the student forms always show the same dynamic list.
+  Future<void> _loadCentres() async {
+    try {
+      final res = await apiClient.get('/students/centers');
+      final list = (res['data'] as List<dynamic>? ?? []);
+      final centres = list.map<({String id, String name})>((c) {
+        final m = c as Map<String, dynamic>;
+        return (id: m['id'] as String, name: (m['name'] ?? '') as String);
+      }).toList();
+      if (mounted && centres.isNotEmpty) {
+        setState(() { demoCentres..clear()..addAll(centres); });
+      }
+    } catch (_) {/* keep existing list if backend unreachable */}
+  }
+
   void _openSheet({({String id, String name})? editing}) {
     final nameCtrl = TextEditingController(text: editing?.name ?? '');
     showDialog(
@@ -2546,18 +2633,23 @@ class _ManageCentresScreenState extends State<ManageCentresScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               final n = nameCtrl.text.trim();
               if (n.isEmpty) return;
-              setState(() {
+              try {
                 if (editing == null) {
-                  demoCentres.add((id: 'c${demoCentres.length + 1}', name: n));
+                  await apiClient.post('/students/centers', {'name': n});
                 } else {
-                  final idx = demoCentres.indexOf(editing);
-                  if (idx != -1) demoCentres[idx] = (id: editing.id, name: n);
+                  await apiClient.patch('/students/centers/${editing.id}', {'name': n});
                 }
-              });
-              Navigator.pop(ctx);
+                await _loadCentres();
+                if (ctx.mounted) Navigator.pop(ctx);
+              } catch (e) {
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                  _snack(context, 'Could not save centre — log in as admin and try again');
+                }
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
@@ -2578,7 +2670,15 @@ class _ManageCentresScreenState extends State<ManageCentresScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () { setState(() => demoCentres.remove(c)); Navigator.pop(ctx); },
+            onPressed: () async {
+              try {
+                await apiClient.delete('/students/centers/${c.id}');
+                await _loadCentres();
+              } catch (_) {
+                if (mounted) setState(() => demoCentres.remove(c));
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
             style: ElevatedButton.styleFrom(backgroundColor: _coral500, foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
             child: const Text('Delete'),

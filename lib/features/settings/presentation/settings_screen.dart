@@ -1,13 +1,14 @@
-import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../main.dart' show themeModeProvider;
 import '../../../core/theme/app_theme.dart';
+import '../../../core/auth/role_auth.dart';
+import '../profile_store.dart';
+import '../org_store.dart';
 
 const _brand600 = Color(0xFF0E8C76);
-const _brand100 = Color(0xFFD6F3EC);
 const _coral500 = Color(0xFFF2685E);
 const _coral100 = Color(0xFFFFE3DF);
 const _onSurface3 = Color(0xFF93A29F);
@@ -21,19 +22,6 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabCtrl;
-
-  // Editable org/registration fields
-  String _orgName    = 'Saksham Foundation';
-  String _orgWebsite = 'www.saksham.org';
-  String _orgAddress = 'Mumbai, Maharashtra';
-  String _orgPhone   = '+91 98765 43210';
-  String _regNo      = 'NGO-2019-MH-00123';
-  String _pan        = 'AABCS1234D';
-  String _fcraSt     = 'Active';
-
-  // Logo & profile photo
-  Uint8List? _logoBytes;
-  Uint8List? _profileBytes;
 
   void _editField(String label, String current, void Function(String) onSave) {
     final ctrl = TextEditingController(text: current);
@@ -52,7 +40,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
         ElevatedButton(
-          onPressed: () { if (ctrl.text.trim().isNotEmpty) { setState(() => onSave(ctrl.text.trim())); } Navigator.pop(ctx); },
+          onPressed: () { if (ctrl.text.trim().isNotEmpty) { onSave(ctrl.text.trim()); } Navigator.pop(ctx); },
           style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
           child: const Text('Save'),
         ),
@@ -60,10 +48,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     ));
   }
 
+  // Logo + profile photo both persist so they survive a reload and propagate
+  // to the sidebar / receipts.
   Future<void> _pickLogo() async {
     final r = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
     if (r != null && r.files.isNotEmpty && r.files.single.bytes != null && mounted) {
-      setState(() => _logoBytes = r.files.single.bytes);
+      updateOrg(orgProfile.value.copyWith(logoBase64: encodeLogo(r.files.single.bytes)));
       _toast('Logo updated');
     }
   }
@@ -71,7 +61,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   Future<void> _pickProfilePhoto() async {
     final r = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
     if (r != null && r.files.isNotEmpty && r.files.single.bytes != null && mounted) {
-      setState(() => _profileBytes = r.files.single.bytes);
+      updateProfile(adminProfile.value.copyWith(photoBase64: encodePhoto(r.files.single.bytes)));
       _toast('Profile photo updated');
     }
   }
@@ -146,6 +136,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
+    // Team members get a read-only profile only — no org/security settings,
+    // no edit. Admins get the full settings.
+    if (!isAdmin) return _memberProfile(context, top);
     return Scaffold(
       body: Column(children: [
         // ── Header ───────────────────────────────────────────────
@@ -201,7 +194,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   }
 
   // ── Tab: Organization ──────────────────────────────────────────
-  Widget _orgTab() => SingleChildScrollView(
+  Widget _orgTab() => ValueListenableBuilder<OrgData>(
+    valueListenable: orgProfile,
+    builder: (context, org, _) => SingleChildScrollView(
     physics: const BouncingScrollPhysics(),
     padding: const EdgeInsets.fromLTRB(18, 16, 18, 40),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -214,9 +209,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
             decoration: BoxDecoration(color: const Color(0xFFF4F7F6), borderRadius: BorderRadius.circular(12),
               border: Border.all(color: const Color(0xFFE5EBE9))),
             clipBehavior: Clip.hardEdge,
-            child: _logoBytes != null
-                ? Image.memory(_logoBytes!, fit: BoxFit.cover)
-                : const Icon(Icons.image_outlined, size: 26, color: _onSurface3),
+            child: org.logoBytes != null
+                ? Image.memory(org.logoBytes!, fit: BoxFit.cover)
+                : Image.asset(brandLogoAsset, fit: BoxFit.contain),
           ),
           title: const Text('Upload Logo', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
           subtitle: const Text('PNG or SVG, recommended 200×200px', style: TextStyle(fontSize: 12, color: _onSurface3)),
@@ -225,7 +220,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(8)),
-              child: Text(_logoBytes != null ? 'Change' : 'Upload',
+              child: Text(org.logoBytes != null ? 'Change' : 'Upload',
                 style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white)),
             ),
           ),
@@ -253,22 +248,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
       ]),
       const SizedBox(height: 16),
       _settingsSection('Organization Details', [
-        _settingsItem(Icons.business_outlined, 'Organization Name', _orgName, onTap: () => _editField('Organization Name', _orgName, (v) => _orgName = v)),
-        _settingsItem(Icons.language_outlined, 'Website', _orgWebsite, onTap: () => _editField('Website', _orgWebsite, (v) => _orgWebsite = v)),
-        _settingsItem(Icons.location_on_outlined, 'Address', _orgAddress, onTap: () => _editField('Address', _orgAddress, (v) => _orgAddress = v)),
-        _settingsItem(Icons.phone_outlined, 'Contact Number', _orgPhone, onTap: () => _editField('Contact Number', _orgPhone, (v) => _orgPhone = v)),
+        _settingsItem(Icons.business_outlined, 'Organization Name', org.name, onTap: () => _editField('Organization Name', org.name, (v) => updateOrg(orgProfile.value.copyWith(name: v)))),
+        _settingsItem(Icons.language_outlined, 'Website', org.website, onTap: () => _editField('Website', org.website, (v) => updateOrg(orgProfile.value.copyWith(website: v)))),
+        _settingsItem(Icons.location_on_outlined, 'Address', org.address, onTap: () => _editField('Address', org.address, (v) => updateOrg(orgProfile.value.copyWith(address: v)))),
+        _settingsItem(Icons.phone_outlined, 'Contact Number', org.phone, onTap: () => _editField('Contact Number', org.phone, (v) => updateOrg(orgProfile.value.copyWith(phone: v)))),
       ]),
       const SizedBox(height: 16),
       _settingsSection('Registration', [
-        _settingsItem(Icons.article_outlined, 'Registration Number', _regNo, onTap: () => _editField('Registration Number', _regNo, (v) => _regNo = v)),
-        _settingsItem(Icons.account_balance_outlined, 'PAN / Tax ID', _pan, onTap: () => _editField('PAN / Tax ID', _pan, (v) => _pan = v)),
-        _settingsItem(Icons.verified_outlined, 'FCRA Status', _fcraSt, onTap: () => _editField('FCRA Status', _fcraSt, (v) => _fcraSt = v)),
+        _settingsItem(Icons.article_outlined, 'Registration Number', org.regNo, onTap: () => _editField('Registration Number', org.regNo, (v) => updateOrg(orgProfile.value.copyWith(regNo: v)))),
+        _settingsItem(Icons.account_balance_outlined, 'PAN / Tax ID', org.pan, onTap: () => _editField('PAN / Tax ID', org.pan, (v) => updateOrg(orgProfile.value.copyWith(pan: v)))),
+        _settingsItem(Icons.verified_outlined, 'FCRA Status', org.fcra, onTap: () => _editField('FCRA Status', org.fcra, (v) => updateOrg(orgProfile.value.copyWith(fcra: v)))),
       ]),
       const SizedBox(height: 16),
       _settingsSection('Administration', [
         _settingsItem(Icons.admin_panel_settings_outlined, 'Admin Panel', 'Overview, team & system settings', onTap: () => context.go('/settings/admin-panel')),
         _settingsItem(Icons.manage_accounts_outlined, 'Manage Roles', 'Staff access & permissions', onTap: () => context.go('/settings/manage-roles')),
-        _settingsItem(Icons.people_outlined, 'Team Members', '5 staff', onTap: () => context.go('/settings/team-members')),
+        _settingsItem(Icons.people_outlined, 'Team Members',
+            '${1 + appRoles.where((r) => r.email.toLowerCase() != adminProfile.value.email.toLowerCase()).length} staff',
+            onTap: () => context.go('/settings/team-members')),
         _settingsItem(Icons.category_outlined, 'Donation Types', 'Manage categories', onTap: () => context.go('/settings/donation-types')),
         _settingsItem(Icons.location_city_outlined, 'Manage Centres', 'Add and manage centres', onTap: () => context.go('/settings/centres')),
         _settingsItem(Icons.business_outlined, 'Offices', 'Manage office locations', onTap: () => context.go('/offices')),
@@ -300,55 +297,58 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
           ])),
       ),
       const SizedBox(height: 14),
-      Center(child: Text('Saksham Foundation · v2.4.0',
+      Center(child: Text('${org.name} · v2.4.0',
         style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w600))),
     ]),
-  );
+  ));
 
   // ── Tab: Profile ───────────────────────────────────────────────
-  Widget _profileTab() => SingleChildScrollView(
-    physics: const BouncingScrollPhysics(),
-    padding: const EdgeInsets.fromLTRB(18, 16, 18, 40),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const SizedBox(height: 8),
-      Center(child: Column(children: [
-        GestureDetector(
-          onTap: _pickProfilePhoto,
-          child: Stack(children: [
-            Container(
-              width: 88, height: 88,
-              decoration: BoxDecoration(shape: BoxShape.circle,
-                color: _profileBytes == null ? _brand600 : null,
-                border: Border.all(color: _brand600.withValues(alpha: 0.35), width: 2)),
-              clipBehavior: Clip.hardEdge,
-              child: _profileBytes != null
-                  ? Image.memory(_profileBytes!, fit: BoxFit.cover)
-                  : const Center(child: Text('FA', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900))),
-            ),
-            Positioned(bottom: 0, right: 0,
-              child: Container(width: 26, height: 26,
-                decoration: BoxDecoration(color: _brand600, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
-                child: const Icon(Icons.camera_alt, size: 13, color: Colors.white))),
-          ]),
-        ),
-        const SizedBox(height: 10),
-        GestureDetector(
-          onTap: _pickProfilePhoto,
-          child: const Text('Change Photo', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _brand600)),
-        ),
-      ])),
-      const SizedBox(height: 20),
-      _settingsSection('Personal Information', [
-        _settingsItem(Icons.person_outline, 'Full Name', 'Farhan Ansari', onTap: () => context.go('/settings/edit-profile')),
-        _settingsItem(Icons.email_outlined, 'Email', 'admin@saksham.org', onTap: () => context.go('/settings/edit-profile')),
-        _settingsItem(Icons.phone_outlined, 'Phone', '+91 99887 66554', onTap: () => context.go('/settings/edit-profile')),
-        _settingsItem(Icons.work_outline, 'Role', 'Administrator', onTap: null),
+  Widget _profileTab() => ValueListenableBuilder<ProfileData>(
+    valueListenable: adminProfile,
+    builder: (context, profile, _) => SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 40),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const SizedBox(height: 8),
+        Center(child: Column(children: [
+          GestureDetector(
+            onTap: _pickProfilePhoto,
+            child: Stack(children: [
+              Container(
+                width: 88, height: 88,
+                decoration: BoxDecoration(shape: BoxShape.circle,
+                  color: Colors.white,
+                  border: Border.all(color: _brand600.withValues(alpha: 0.35), width: 2)),
+                clipBehavior: Clip.hardEdge,
+                child: profile.photoBytes != null
+                    ? Image.memory(profile.photoBytes!, fit: BoxFit.cover)
+                    : Image.asset(brandLogoAsset, fit: BoxFit.cover, alignment: Alignment.centerLeft),
+              ),
+              Positioned(bottom: 0, right: 0,
+                child: Container(width: 26, height: 26,
+                  decoration: BoxDecoration(color: _brand600, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+                  child: const Icon(Icons.camera_alt, size: 13, color: Colors.white))),
+            ]),
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: _pickProfilePhoto,
+            child: const Text('Change Photo', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _brand600)),
+          ),
+        ])),
+        const SizedBox(height: 20),
+        _settingsSection('Personal Information', [
+          _settingsItem(Icons.person_outline, 'Full Name', profile.name, onTap: () => context.go('/settings/edit-profile')),
+          _settingsItem(Icons.email_outlined, 'Email', profile.email, onTap: () => context.go('/settings/edit-profile')),
+          _settingsItem(Icons.phone_outlined, 'Phone', profile.phone, onTap: () => context.go('/settings/edit-profile')),
+          _settingsItem(Icons.work_outline, 'Role', profile.role, onTap: null),
+        ]),
+        const SizedBox(height: 16),
+        _settingsSection('Edit Profile', [
+          _settingsItem(Icons.edit_outlined, 'Edit Profile', 'Update your personal information', onTap: () => context.go('/settings/edit-profile')),
+        ]),
       ]),
-      const SizedBox(height: 16),
-      _settingsSection('Edit Profile', [
-        _settingsItem(Icons.edit_outlined, 'Edit Profile', 'Update your personal information', onTap: () => context.go('/settings/edit-profile')),
-      ]),
-    ]),
+    ),
   );
 
   // ── Tab: Security ──────────────────────────────────────────────
@@ -382,6 +382,71 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     title: Text(device, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
     subtitle: Text(time, style: const TextStyle(fontSize: 12.5, color: _onSurface3)),
   );
+
+  // ── Read-only profile for logged-in team members ──────────────
+  Widget _memberProfile(BuildContext context, double top) {
+    final r = currentLoggedInRole;
+    final name = (r?.name.isNotEmpty ?? false) ? r!.name : 'Team Member';
+    final email = r?.email ?? '';
+    final role = (r?.roleName.isNotEmpty ?? false) ? r!.roleName : 'Team Member';
+    final parts = name.trim().split(RegExp(r'\s+'));
+    final initials = ((parts.isNotEmpty && parts[0].isNotEmpty ? parts[0][0] : '') +
+        (parts.length > 1 && parts[1].isNotEmpty ? parts[1][0] : '')).toUpperCase();
+    return Scaffold(
+      body: Column(children: [
+        Container(
+          color: context.headerBg,
+          padding: EdgeInsets.fromLTRB(18, top + 14, 18, 16),
+          child: Row(children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+              onPressed: () => context.go('/dashboard'),
+              padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+            ),
+            const SizedBox(width: 10),
+            Text('My Profile', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: context.textPrimary)),
+          ]),
+        ),
+        Expanded(child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(18, 20, 18, 40),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Center(child: Column(children: [
+              Container(
+                width: 88, height: 88,
+                decoration: const BoxDecoration(shape: BoxShape.circle,
+                  gradient: LinearGradient(colors: [Color(0xFF0B6E5D), Color(0xFF14A98C)])),
+                child: Center(child: Text(initials.isEmpty ? 'U' : initials, style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800))),
+              ),
+              const SizedBox(height: 12),
+              Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 3),
+              Text(role, style: const TextStyle(fontSize: 13, color: _brand600, fontWeight: FontWeight.w700)),
+            ])),
+            const SizedBox(height: 24),
+            _settingsSection('Personal Information', [
+              _settingsItem(Icons.person_outline, 'Full Name', name),
+              _settingsItem(Icons.email_outlined, 'Email', email.isEmpty ? '—' : email),
+              _settingsItem(Icons.phone_outlined, 'Phone', '—'),
+              _settingsItem(Icons.work_outline, 'Role', role),
+            ]),
+            const SizedBox(height: 24),
+            GestureDetector(
+              onTap: () => context.go('/login'),
+              child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(color: _coral100, borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: _coral500.withValues(alpha: 0.3))),
+                child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(Icons.logout_rounded, color: _coral500, size: 20),
+                  SizedBox(width: 10),
+                  Text('Log Out', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _coral500)),
+                ])),
+            ),
+          ]),
+        )),
+      ]),
+    );
+  }
 
   // ── Helper: Section with title + card ─────────────────────────
   Widget _settingsSection(String title, List<Widget> items) =>

@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/network/api_client.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../donors/presentation/donors_screen.dart' show demoLocalDonors, mockDonorData;
+import '../../donors/presentation/donors_screen.dart' show demoLocalDonors;
 import 'donations_screen.dart' show demoLocalDonations;
 import 'receipt_generator.dart';
 
@@ -92,7 +92,8 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
   }
 
   List<({String id, String name, String city, String tier, String mobile, String email})> _fallbackDonors() {
-    final all = [...demoLocalDonors, ...mockDonorData];
+    // Only not-yet-synced local donors — no demo/mock donors in the picker.
+    final all = [...demoLocalDonors];
     return all.map<({String id, String name, String city, String tier, String mobile, String email})>((d) => (
       id:     d['id']     as String? ?? '',
       name:   d['name']   as String? ?? '',
@@ -263,6 +264,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     setState(() => _saving = true);
 
     String receiptNo = 'SF/26-27/${(DateTime.now().millisecondsSinceEpoch % 9999 + 1000)}';
+    bool backendOk = false;
     try {
       final resp = await apiClient.post('/donations', {
         'donorId': _selectedDonorId,
@@ -270,8 +272,18 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
         'amount': int.parse(amountText),
         'paymentMode': _methodModes[_method] ?? 'CASH',
       });
+      // Non-Super-Admins: queued for approval — no receipt, nothing recorded yet.
+      if ((resp['meta'] as Map?)?['pendingApproval'] == true) {
+        if (mounted) {
+          setState(() => _saving = false);
+          _snack('Submitted for Super Admin approval');
+          context.go('/donations');
+        }
+        return;
+      }
       final data = resp['data'] as Map<String, dynamic>? ?? {};
       receiptNo = data['receiptNo'] as String? ?? receiptNo;
+      backendOk = true;
     } catch (_) {
       // No backend in demo mode — continue with local receipt
     }
@@ -290,16 +302,18 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       taxExemption: false,
     );
     // Persist locally so list shows it immediately
-    demoLocalDonations.insert(0, {
-      'id': 'local_${receiptNo.hashCode}',
-      'donor': {'id': _selectedDonorId ?? '', 'name': _selectedDonorName ?? 'Donor'},
-      'amount': int.tryParse(amountText) ?? 0,
-      'type': {'label': _donationType},
-      'paymentMode': _methodModes[_method] ?? 'CASH',
-      'receiptNo': receiptNo,
-      'date': _date,
-      'status': 'COMPLETED',
-    });
+    if (!backendOk) {
+      demoLocalDonations.insert(0, {
+        'id': 'local_${receiptNo.hashCode}',
+        'donor': {'id': _selectedDonorId ?? '', 'name': _selectedDonorName ?? 'Donor'},
+        'amount': int.tryParse(amountText) ?? 0,
+        'type': {'label': _donationType},
+        'paymentMode': _methodModes[_method] ?? 'CASH',
+        'receiptNo': receiptNo,
+        'date': _date,
+        'status': 'COMPLETED',
+      });
+    }
     await showReceiptSheet(context, receipt);
     if (mounted) context.go('/donations');
   }

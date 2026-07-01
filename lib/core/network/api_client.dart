@@ -3,7 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'ssl_bypass.dart' if (dart.library.io) 'ssl_bypass_io.dart';
 
 class ApiClient {
-  static const defaultBaseUrl = 'https://ngo.bestprime.live/api/v1';
+  // NOTE: points at the local backend for development/testing. For production,
+  // set this to the deployed API URL (e.g. https://ngo.bestprime.live/api/v1).
+  static const defaultBaseUrl = 'http://localhost:3001/api/v1';
   static const serverUrlKey = 'server_url';
   late final Dio _dio;
 
@@ -66,7 +68,17 @@ class ApiClient {
     return r.data as Map<String, dynamic>;
   }
 
-  Future<void> delete(String path) async => _dio.delete(path);
+  Future<Map<String, dynamic>> put(String path, Map<String, dynamic> body) async {
+    final r = await _dio.put(path, data: body);
+    return r.data as Map<String, dynamic>;
+  }
+
+  // Returns the decoded response body (or null) so callers can detect an
+  // approval-pending result; existing callers that ignore it still work.
+  Future<Map<String, dynamic>?> delete(String path) async {
+    final r = await _dio.delete(path);
+    return r.data is Map<String, dynamic> ? r.data as Map<String, dynamic> : null;
+  }
 
   Future<void> saveTokens(String access, String refresh) async {
     final prefs = await SharedPreferences.getInstance();

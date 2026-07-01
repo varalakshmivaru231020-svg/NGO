@@ -133,20 +133,28 @@ class _DonationsScreenState extends State<DonationsScreen> {
       } else {
         list = [];
       }
-      if (list.isNotEmpty) {
-        setState(() {
-          _donations = list.map((j) => _Donation.fromApi(j as Map<String, dynamic>)).toList();
-          _loading = false;
-        });
-        return;
-      }
+      // Backend is the source of truth even when empty (clean DB = empty list).
+      setState(() {
+        final apiDonations = list.map((j) => _Donation.fromApi(j as Map<String, dynamic>)).toList();
+        final localDonations = demoLocalDonations.map(_Donation.fromApi).toList();
+
+        final seenReceipts = apiDonations.map((d) => d.receipt.toLowerCase().trim()).toSet();
+        final uniqueLocal = localDonations.where((d) => !seenReceipts.contains(d.receipt.toLowerCase().trim())).toList();
+
+        _donations = [...uniqueLocal, ...apiDonations];
+        _loading = false;
+      });
+      return;
     } catch (_) {}
-    // Fall back to mock data (new additions at top)
+    // Backend unreachable → demo/mock so the app still works offline.
     setState(() {
-      _donations = [
-        ...demoLocalDonations.map(_Donation.fromApi),
-        ..._mockData.map(_Donation.fromApi),
-      ];
+      final mockDonations = _mockData.map(_Donation.fromApi).toList();
+      final localDonations = demoLocalDonations.map(_Donation.fromApi).toList();
+
+      final seenReceipts = mockDonations.map((d) => d.receipt.toLowerCase().trim()).toSet();
+      final uniqueLocal = localDonations.where((d) => !seenReceipts.contains(d.receipt.toLowerCase().trim())).toList();
+
+      _donations = [...uniqueLocal, ...mockDonations];
       _loading = false;
     });
   }

@@ -868,14 +868,6 @@ class _SponsoredTab extends StatefulWidget {
 }
 
 class _SponsoredTabState extends State<_SponsoredTab> {
-  bool get _isChildSponsor {
-    final cats = widget.donor['categories'] as List<dynamic>? ?? [];
-    return cats.any((c) {
-      final name = ((c as Map<String, dynamic>?)?['category'] as Map<String, dynamic>?)?['name'] as String? ?? '';
-      return name.toLowerCase().contains('sponsor');
-    });
-  }
-
   void _openAddSponsor(List<Map<String, dynamic>> allChildren) {
     final nameCtrl   = TextEditingController();
     final idCtrl     = TextEditingController(text: 'SKT-C-${(1000 + allChildren.length + 1).toString().padLeft(4,'0')}');
@@ -947,7 +939,10 @@ class _SponsoredTabState extends State<_SponsoredTab> {
   @override
   Widget build(BuildContext context) {
     final id = widget.donor['id'] as String? ?? '';
-    final showMock = _isChildSponsor || id == 'd1' || id == 'd7' || id == 'd11';
+    // Only the original demo seed donors carry a sample sponsored child.
+    // A child is NEVER auto-assigned just because the donor's category is
+    // "Child Sponsor" — it must be added explicitly via "Add Sponsor".
+    final showMock = id == 'd1' || id == 'd7' || id == 'd11';
     final mockList = showMock
         ? [{'name': 'Aarav Kumar', 'childId': 'SKT-C-0001', 'age': 12, 'centre': 'Sulibele', 'since': 'Jul 2022', 'amount': '₹18,000 / yr', 'status': 'Active'}]
         : <Map<String, dynamic>>[];

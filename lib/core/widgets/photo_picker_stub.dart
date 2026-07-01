@@ -13,11 +13,15 @@ class PhotoPickerCircle extends StatefulWidget {
     this.size = 88,
     this.label = 'Photo',
     this.initials,
+    this.initialImage,
+    this.placeholderAsset,
     this.onImageChanged,
   });
   final double size;
   final String label;
   final String? initials;
+  final Uint8List? initialImage;
+  final String? placeholderAsset; // shown when no photo is set
   final void Function(Uint8List?)? onImageChanged;
 
   @override
@@ -27,6 +31,12 @@ class PhotoPickerCircle extends StatefulWidget {
 class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
   Uint8List? _bytes;
   bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _bytes = widget.initialImage;
+  }
 
   void _showOptions() {
     showDialog(
@@ -132,11 +142,13 @@ class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
                     child: CircularProgressIndicator(color: _brand600, strokeWidth: 2.5)))
                 : _bytes != null
                     ? Image.memory(_bytes!, fit: BoxFit.cover, width: widget.size, height: widget.size)
-                    : Center(
-                        child: widget.initials != null
-                            ? Text(widget.initials!,
-                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: widget.size * 0.28))
-                            : Icon(Icons.add_a_photo_outlined, size: widget.size * 0.35, color: Colors.white)),
+                    : widget.placeholderAsset != null
+                        ? Container(color: Colors.white, child: Image.asset(widget.placeholderAsset!, fit: BoxFit.cover, alignment: Alignment.centerLeft, width: widget.size, height: widget.size))
+                        : Center(
+                            child: widget.initials != null
+                                ? Text(widget.initials!,
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: widget.size * 0.28))
+                                : Icon(Icons.add_a_photo_outlined, size: widget.size * 0.35, color: Colors.white)),
           ),
           Positioned(
             bottom: 0, right: 0,

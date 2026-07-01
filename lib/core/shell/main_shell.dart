@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/auth/role_auth.dart';
+import '../../features/notifications/notification_store.dart';
+import '../../features/settings/profile_store.dart';
+import '../../features/settings/org_store.dart';
 
 const _brand600 = Color(0xFF0E8C76);
 const _coral500 = Color(0xFFF2685E);
@@ -36,8 +39,11 @@ const _mgmt = [
 ];
 
 const _acct = [
-  _N(Icons.notifications_outlined,     Icons.notifications,       'Notifications',   '/notifications',    badge: 3),
-  _N(Icons.settings_outlined,          Icons.settings,            'Settings',        '/settings'),
+  _N(Icons.notifications_outlined,     Icons.notifications,       'Notifications',   '/notifications'),
+  // Approvals is Super-Admin only ('approvals' is granted to no role → admins only).
+  _N(Icons.fact_check_outlined,        Icons.fact_check,          'Approvals',       '/approvals', module: 'approvals'),
+  _N(Icons.location_city_outlined,     Icons.location_city,       'Centre',          '/centres',   module: 'settings'),
+  _N(Icons.settings_outlined,          Icons.settings,            'Settings',        '/settings',  module: 'settings'),
   _N(Icons.help_outline_rounded,       Icons.help_rounded,        'Help',            '/help'),
 ];
 
@@ -56,7 +62,8 @@ int _tabIdx(String loc) {
   if (loc.startsWith('/students'))  return 3;
   if (loc.startsWith('/more') || loc == '/offices' || loc == '/payment-links' ||
       loc == '/reminders' || loc == '/notifications' || loc == '/donation-tracker' ||
-      loc == '/reports' || loc == '/achievements' || loc == '/settings' || loc == '/help') return 4;
+      loc == '/reports' || loc == '/achievements' || loc == '/centres' ||
+      loc == '/settings' || loc == '/help') return 4;
   return 0;
 }
 
@@ -137,7 +144,7 @@ class _Sidebar extends StatelessWidget {
               ..._mgmt.where((n) => n.visible()).map((n) => _NavRow(n: n, loc: loc, ext: extended)),
             ],
             _Divider(label: 'Account', ext: extended),
-            ..._acct.map((n) => _NavRow(n: n, loc: loc, ext: extended)),
+            ..._acct.where((n) => n.visible()).map((n) => _NavRow(n: n, loc: loc, ext: extended)),
           ]),
         )),
         // ── profile footer ──────────────────────────────────────
@@ -152,29 +159,38 @@ class _Sidebar extends StatelessWidget {
 class _Logo extends StatelessWidget {
   const _Logo({required this.extended});
   final bool extended;
-  static const _avatar = BoxDecoration(
-    gradient: LinearGradient(colors: [Color(0xFF0B6E5D), Color(0xFF14A98C)]),
-    shape: BoxShape.circle,
-  );
   @override
   Widget build(BuildContext context) {
-    final icon = Container(
-      width: 36, height: 36, decoration: _avatar,
-      child: const Icon(Icons.volunteer_activism, size: 19, color: Colors.white),
-    );
-    if (!extended) {
-      return Padding(padding: const EdgeInsets.symmetric(vertical: 14), child: Center(child: icon));
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-      child: Row(children: [
-        icon, const SizedBox(width: 10),
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Saksham', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900,
-              letterSpacing: -0.4, color: context.textPrimary)),
-          Text('Foundation', style: TextStyle(fontSize: 10, color: context.textSub, fontWeight: FontWeight.w600)),
-        ]),
-      ]),
+    // Reads the live org profile so an uploaded logo / renamed org shows here
+    // immediately and after a reload. Falls back to the foundation brand logo.
+    return ValueListenableBuilder<OrgData>(
+      valueListenable: orgProfile,
+      builder: (context, org, _) {
+        final logo = org.logoBytes;
+        final icon = Container(
+          width: 36, height: 36,
+          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+          clipBehavior: Clip.hardEdge,
+          child: logo != null
+              ? Image.memory(logo, fit: BoxFit.cover, width: 36, height: 36)
+              : Image.asset(brandLogoAsset, fit: BoxFit.contain, width: 36, height: 36),
+        );
+        if (!extended) {
+          return Padding(padding: const EdgeInsets.symmetric(vertical: 14), child: Center(child: icon));
+        }
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+          child: Row(children: [
+            icon, const SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(org.shortName, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900,
+                  letterSpacing: -0.4, color: context.textPrimary), overflow: TextOverflow.ellipsis),
+              if (org.tagline.isNotEmpty)
+                Text(org.tagline, style: TextStyle(fontSize: 10, color: context.textSub, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+            ])),
+          ]),
+        );
+      },
     );
   }
 }
@@ -215,6 +231,18 @@ class _NavRow extends StatelessWidget {
   final bool ext;
   @override
   Widget build(BuildContext context) {
+    // The Notifications row shows the live unread count and updates the moment
+    // notifications are read.
+    if (n.route == '/notifications') {
+      return ValueListenableBuilder<int>(
+        valueListenable: unreadNotifCount,
+        builder: (context, count, _) => _row(context, count > 0 ? count : null),
+      );
+    }
+    return _row(context, n.badge);
+  }
+
+  Widget _row(BuildContext context, int? badge) {
     final active = n.active(loc);
     return GestureDetector(
       onTap: () => context.go(n.route),
@@ -250,24 +278,24 @@ class _NavRow extends StatelessWidget {
                       style: TextStyle(fontSize: 13, fontWeight: active ? FontWeight.w800 : FontWeight.w600,
                           color: active ? _brand600 : context.textPrimary),
                       overflow: TextOverflow.ellipsis)),
-                  if (n.badge != null)
+                  if (badge != null)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                       decoration: BoxDecoration(color: _coral500, borderRadius: BorderRadius.circular(8)),
-                      child: Text('${n.badge}',
+                      child: Text('$badge',
                           style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900))),
                 ])
               : Center(
                   child: Stack(clipBehavior: Clip.none, children: [
                     Icon(active ? n.filled : n.icon,
                         color: active ? _brand600 : context.textSub, size: 22),
-                    if (n.badge != null)
+                    if (badge != null)
                       Positioned(
                         right: -5, top: -3,
                         child: Container(
                           width: 15, height: 15,
                           decoration: const BoxDecoration(color: _coral500, shape: BoxShape.circle),
-                          child: Center(child: Text('${n.badge}',
+                          child: Center(child: Text('$badge',
                               style: const TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.w900))))),
                   ]),
                 ),
@@ -291,35 +319,49 @@ class _Footer extends StatelessWidget {
       top: false,
       child: Padding(
         padding: const EdgeInsets.all(9),
-        child: GestureDetector(
-          onTap: () => context.go('/settings'),
-          child: extended
-              ? Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: context.surface2,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(children: [
-                    Container(width: 32, height: 32, decoration: _grad,
-                        child: Center(child: Text(
-                          isAdmin ? 'FA' : (currentLoggedInRole?.name.trim().split(' ').where((w) => w.isNotEmpty).map((w) => w[0].toUpperCase()).take(2).join() ?? 'U'),
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11)))),
-                    const SizedBox(width: 9),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(isAdmin ? 'Farhan Ansari' : (currentLoggedInRole?.name ?? 'User'),
-                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textPrimary), overflow: TextOverflow.ellipsis),
-                      Text(isAdmin ? 'Administrator' : 'Role Member',
-                          style: TextStyle(fontSize: 10.5, color: context.textSub, fontWeight: FontWeight.w500)),
-                    ])),
-                    Icon(Icons.settings_outlined, size: 15, color: context.textSub),
-                  ]),
-                )
-              : Container(
-                  width: 38, height: 38, decoration: _grad,
-                  child: Center(child: Text(
-                    isAdmin ? 'FA' : (currentLoggedInRole?.name.trim().split(' ').where((w) => w.isNotEmpty).map((w) => w[0].toUpperCase()).take(2).join() ?? 'U'),
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11)))),
+        child: ValueListenableBuilder<ProfileData>(
+          valueListenable: adminProfile,
+          builder: (context, profile, _) {
+            // Admin shows the editable profile (name/photo); role members show their login.
+            final roleInitials = currentLoggedInRole?.name.trim().split(' ')
+                .where((w) => w.isNotEmpty).map((w) => w[0].toUpperCase()).take(2).join();
+            final initials = isAdmin ? profile.initials : (roleInitials?.isNotEmpty == true ? roleInitials! : 'U');
+            final displayName = isAdmin ? profile.name : (currentLoggedInRole?.name ?? 'User');
+            final photo = isAdmin ? profile.photoBytes : null;
+
+            Widget avatar(double d) => Container(
+              width: d, height: d, decoration: _grad, clipBehavior: Clip.hardEdge,
+              child: photo != null
+                ? Image.memory(photo, fit: BoxFit.cover, width: d, height: d)
+                : isAdmin
+                  ? Container(color: Colors.white, child: Image.asset(brandLogoAsset, fit: BoxFit.cover, alignment: Alignment.centerLeft, width: d, height: d))
+                  : Center(child: Text(initials,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11))));
+
+            return GestureDetector(
+              onTap: () => context.go('/settings'),
+              child: extended
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: context.surface2,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(children: [
+                        avatar(32),
+                        const SizedBox(width: 9),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(displayName,
+                              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textPrimary), overflow: TextOverflow.ellipsis),
+                          Text(isAdmin ? 'Administrator' : 'Role Member',
+                              style: TextStyle(fontSize: 10.5, color: context.textSub, fontWeight: FontWeight.w500)),
+                        ])),
+                        Icon(Icons.settings_outlined, size: 15, color: context.textSub),
+                      ]),
+                    )
+                  : avatar(38),
+            );
+          },
         ),
       ),
     );

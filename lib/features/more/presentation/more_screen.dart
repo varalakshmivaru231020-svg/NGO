@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../notifications/notification_store.dart';
+import '../../settings/profile_store.dart';
 
 const _brand600 = Color(0xFF0E8C76);
 const _brand100 = Color(0xFFD6F3EC);
@@ -17,19 +19,11 @@ class MoreScreen extends StatefulWidget {
 }
 
 class _MoreScreenState extends State<MoreScreen> {
-  String _name = 'Farhan Ansari';
-  String _role = 'Admin';
-  String _org  = 'Saksham Foundation';
-
-  String get _initials {
-    final p = _name.trim().split(RegExp(r'\s+'));
-    return ((p[0].isNotEmpty ? p[0][0] : '') + (p.length > 1 && p[1].isNotEmpty ? p[1][0] : '')).toUpperCase();
-  }
-
   void _openEditProfile() {
-    final nameCtrl = TextEditingController(text: _name);
-    final roleCtrl = TextEditingController(text: _role);
-    final orgCtrl  = TextEditingController(text: _org);
+    final p = adminProfile.value;
+    final nameCtrl = TextEditingController(text: p.name);
+    final roleCtrl = TextEditingController(text: p.role);
+    final orgCtrl  = TextEditingController(text: p.org);
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
       builder: (ctx) => Padding(
@@ -53,9 +47,11 @@ class _MoreScreenState extends State<MoreScreen> {
             const SizedBox(height: 20),
             SizedBox(width: double.infinity, child: ElevatedButton(
               onPressed: () {
-                setState(() { _name = nameCtrl.text.trim().isNotEmpty ? nameCtrl.text.trim() : _name;
-                  _role = roleCtrl.text.trim().isNotEmpty ? roleCtrl.text.trim() : _role;
-                  _org  = orgCtrl.text.trim().isNotEmpty  ? orgCtrl.text.trim()  : _org; });
+                updateProfile(adminProfile.value.copyWith(
+                  name: nameCtrl.text.trim().isEmpty ? null : nameCtrl.text.trim(),
+                  role: roleCtrl.text.trim().isEmpty ? null : roleCtrl.text.trim(),
+                  org:  orgCtrl.text.trim().isEmpty  ? null : orgCtrl.text.trim(),
+                ));
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: const Text('Profile updated', style: TextStyle(fontWeight: FontWeight.w700)),
@@ -95,30 +91,39 @@ class _MoreScreenState extends State<MoreScreen> {
           // ── profile card ──────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [Color(0xFF0B6E5D), Color(0xFF14A98C)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-                borderRadius: BorderRadius.circular(22),
-                boxShadow: const [BoxShadow(color: Color(0x400B6E5D), blurRadius: 16, offset: Offset(0, 6))],
-              ),
-              child: Row(children: [
-                Container(width: 52, height: 52,
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
-                  child: Center(child: Text(_initials, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)))),
-                const SizedBox(width: 14),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(_name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17)),
-                  const SizedBox(height: 3),
-                  Text('$_role · $_org', style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
-                ])),
-                GestureDetector(
-                  onTap: _openEditProfile,
-                  child: Container(width: 36, height: 36,
-                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.edit_outlined, color: Colors.white, size: 17)),
-                ),
-              ]),
+            child: ValueListenableBuilder<ProfileData>(
+              valueListenable: adminProfile,
+              builder: (context, p, _) {
+                final photo = p.photoBytes;
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Color(0xFF0B6E5D), Color(0xFF14A98C)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: const [BoxShadow(color: Color(0x400B6E5D), blurRadius: 16, offset: Offset(0, 6))],
+                  ),
+                  child: Row(children: [
+                    Container(width: 52, height: 52,
+                      clipBehavior: Clip.hardEdge,
+                      decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                      child: photo != null
+                        ? Image.memory(photo, fit: BoxFit.cover, width: 52, height: 52)
+                        : Image.asset(brandLogoAsset, fit: BoxFit.cover, alignment: Alignment.centerLeft, width: 52, height: 52)),
+                    const SizedBox(width: 14),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(p.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17)),
+                      const SizedBox(height: 3),
+                      Text('${p.role} · ${p.org}', style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                    ])),
+                    GestureDetector(
+                      onTap: _openEditProfile,
+                      child: Container(width: 36, height: 36,
+                        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(10)),
+                        child: const Icon(Icons.edit_outlined, color: Colors.white, size: 17)),
+                    ),
+                  ]),
+                );
+              },
             ),
           ),
 
@@ -139,7 +144,8 @@ class _MoreScreenState extends State<MoreScreen> {
           const SizedBox(height: 14),
           // ── Account ───────────────────────────────────────────────
           _GroupSection(title: 'Account', items: [
-            _MenuItem(icon: Icons.notifications_outlined, iconBg: const Color(0xFFFFE3DF), iconFg: _coral500,  label: 'Notifications',     sub: '3 unread',               route: '/notifications', badge: '3'),
+            _MenuItem(icon: Icons.notifications_outlined, iconBg: const Color(0xFFFFE3DF), iconFg: _coral500,  label: 'Notifications',     sub: 'Tap to view',            route: '/notifications'),
+            _MenuItem(icon: Icons.location_city_outlined, iconBg: const Color(0xFFE7E3FD), iconFg: _violet500, label: 'Centre',            sub: 'Manage centres',         route: '/centres'),
             _MenuItem(icon: Icons.settings_outlined,      iconBg: const Color(0xFFE7EDEB), iconFg: const Color(0xFF5A6B67), label: 'Settings',          sub: 'App & account',          route: '/settings'),
             _MenuItem(icon: Icons.help_outline_rounded,   iconBg: const Color(0xFFDCEFFB), iconFg: _sky500,    label: 'Help & Support',    sub: 'Guides & contact',       route: '/help'),
           ]),
@@ -220,7 +226,15 @@ class _MenuRow extends StatelessWidget {
           Text(item.label, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: context.textPrimary)),
           Text(item.sub, style: TextStyle(fontSize: 12.5, color: context.textSub, fontWeight: FontWeight.w500)),
         ])),
-        if (item.badge != null)
+        if (item.route == '/notifications')
+          ValueListenableBuilder<int>(
+            valueListenable: unreadNotifCount,
+            builder: (_, count, __) => count == 0 ? const SizedBox.shrink() : Container(
+              margin: const EdgeInsets.only(right: 8), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(color: _coral500, borderRadius: BorderRadius.circular(8)),
+              child: Text('$count', style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w800))),
+          )
+        else if (item.badge != null)
           Container(margin: const EdgeInsets.only(right: 8), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(color: _coral500, borderRadius: BorderRadius.circular(8)),
             child: Text(item.badge!, style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w800))),

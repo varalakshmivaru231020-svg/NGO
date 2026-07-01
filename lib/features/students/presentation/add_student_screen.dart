@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import '../../../core/utils/open_bytes.dart';
@@ -9,7 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/phone_field_with_code.dart';
 import '../../../core/widgets/photo_picker_widget.dart';
 import '../../donors/presentation/donors_screen.dart' show demoLocalDonors, mockDonorData;
-import 'students_screen.dart' show demoLocalStudents;
+import 'students_screen.dart' show demoLocalStudents, demoCentres;
 
 // ── colours ───────────────────────────────────────────────────────────
 const _brand600 = Color(0xFF0E8C76);
@@ -73,10 +74,11 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   String? _sponsorName;
 
   bool _saving = false;
+  Uint8List? _photoBytes;
 
   // loaded from API
   List<({String id, String name})> _centres = [];
-  List<({String id, String name, String city})> _apiDonors = [];
+  List<({String id, String name, String city, String phone})> _apiDonors = [];
   bool _loadingForm = true;
 
   @override
@@ -85,12 +87,13 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
     _loadFormData();
   }
 
-  List<({String id, String name, String city})> _fallbackDonors() {
+  List<({String id, String name, String city, String phone})> _fallbackDonors() {
     final all = [...demoLocalDonors, ...mockDonorData];
-    return all.map<({String id, String name, String city})>((d) => (
-      id:   d['id']   as String? ?? '',
-      name: d['name'] as String? ?? '',
-      city: d['city'] as String? ?? '',
+    return all.map<({String id, String name, String city, String phone})>((d) => (
+      id:    d['id']     as String? ?? '',
+      name:  d['name']   as String? ?? '',
+      city:  d['city']   as String? ?? '',
+      phone: (d['mobile'] ?? d['phone'] ?? d['whatsapp'] ?? '') as String,
     )).toList();
   }
 
@@ -112,36 +115,31 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       final dRes  = results[1];
       final dData = dRes['data'];
       final dList = dData is List ? dData as List<dynamic> : <dynamic>[];
-      final donors = dList.map<({String id, String name, String city})>((d) {
+      final donors = dList.map<({String id, String name, String city, String phone})>((d) {
         final m = d as Map<String, dynamic>;
-        return (id: m['id'] as String? ?? '', name: m['name'] as String? ?? '', city: m['city'] as String? ?? '');
+        return (id: m['id'] as String? ?? '', name: m['name'] as String? ?? '', city: m['city'] as String? ?? '',
+                phone: (m['mobile'] ?? m['phone'] ?? '') as String);
       }).toList();
 
-      final fallback = [
-        (id: 'sulibele',   name: 'Sulibele'),
-        (id: 'bangalore',  name: 'Bangalore'),
-        (id: 'hosur',      name: 'Hosur'),
-        (id: 'mysore',     name: 'Mysore'),
-      ];
       if (mounted) setState(() {
-        _centres    = centres.isNotEmpty ? centres : fallback;
+        // Fall back to the shared centres list (managed via Manage Centres) so
+        // newly added centres show up here dynamically when the API is unavailable.
+        _centres    = centres.isNotEmpty ? centres : demoCentres;
         _apiDonors  = donors.isNotEmpty ? donors : _fallbackDonors();
-        _centreName = _centres.first.name;
-        _centreId   = _centres.first.id;
+        if (_centres.isNotEmpty) {
+          _centreName = _centres.first.name;
+          _centreId   = _centres.first.id;
+        }
         _loadingForm = false;
       });
     } catch (_) {
-      final fallback = [
-        (id: 'sulibele',   name: 'Sulibele'),
-        (id: 'bangalore',  name: 'Bangalore'),
-        (id: 'hosur',      name: 'Hosur'),
-        (id: 'mysore',     name: 'Mysore'),
-      ];
       if (mounted) setState(() {
         _loadingForm = false;
-        _centres    = fallback;
-        _centreName = fallback.first.name;
-        _centreId   = fallback.first.id;
+        _centres    = demoCentres;
+        if (_centres.isNotEmpty) {
+          _centreName = _centres.first.name;
+          _centreId   = _centres.first.id;
+        }
         _apiDonors  = _fallbackDonors();
       });
     }
@@ -172,30 +170,85 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   }
 
   void _showSponsorPicker() {
+    final searchCtrl = TextEditingController();
+    String query = '';
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: context.cardBg,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => Column(mainAxisSize: MainAxisSize.min, children: [
-        const SizedBox(height: 8),
-        Container(width: 40, height: 4, decoration: BoxDecoration(color: context.border, borderRadius: BorderRadius.circular(2))),
-        const SizedBox(height: 16),
-        const Text('Link a Donor as Sponsor', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 12),
-        ...(_apiDonors.isEmpty
-          ? [const Padding(padding: EdgeInsets.all(16), child: Text('No donors available', style: TextStyle(color: _onSurface3)))]
-          : _apiDonors.map((d) => ListTile(
-              leading: CircleAvatar(backgroundColor: _brand100, child: Text(d.name.isNotEmpty ? d.name[0] : '?', style: const TextStyle(color: _brand600, fontWeight: FontWeight.w800))),
-              title: Text(d.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Text(d.city, style: TextStyle(color: context.textHint, fontWeight: FontWeight.w500)),
-              trailing: Icon(Icons.chevron_right, color: context.textHint),
-              onTap: () {
-                setState(() { _sponsorId = d.id; _sponsorName = d.name; });
-                Navigator.pop(context);
-              },
-            ))),
-        const SizedBox(height: 16),
-      ]),
+      builder: (_) => StatefulBuilder(builder: (ctx, setSheet) {
+        final q = query.trim().toLowerCase();
+        final qDigits = q.replaceAll(RegExp(r'[^0-9]'), '');
+        final filtered = q.isEmpty
+            ? _apiDonors
+            : _apiDonors.where((d) {
+                final byName = d.name.toLowerCase().contains(q);
+                final byPhone = qDigits.isNotEmpty &&
+                    d.phone.replaceAll(RegExp(r'[^0-9]'), '').contains(qDigits);
+                return byName || byPhone;
+              }).toList();
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: SizedBox(
+            height: MediaQuery.of(ctx).size.height * 0.7,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const SizedBox(height: 8),
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: context.border, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 14),
+              const Text('Link a Donor as Sponsor', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  controller: searchCtrl,
+                  autofocus: false,
+                  onChanged: (v) => setSheet(() => query = v),
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  decoration: InputDecoration(
+                    hintText: 'Search by name or mobile number',
+                    hintStyle: TextStyle(color: context.textHint, fontWeight: FontWeight.w400),
+                    prefixIcon: Icon(Icons.search, color: context.textHint, size: 20),
+                    suffixIcon: query.isEmpty ? null : IconButton(
+                      icon: Icon(Icons.close, color: context.textHint, size: 18),
+                      onPressed: () { searchCtrl.clear(); setSheet(() => query = ''); },
+                    ),
+                    filled: true, fillColor: _surface2,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: filtered.isEmpty
+                    ? Center(child: Text(_apiDonors.isEmpty ? 'No donors available' : 'No donors match your search',
+                        style: const TextStyle(color: _onSurface3, fontWeight: FontWeight.w600)))
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => Divider(height: 1, color: context.border),
+                        itemBuilder: (_, i) {
+                          final d = filtered[i];
+                          return ListTile(
+                            leading: CircleAvatar(backgroundColor: _brand100, child: Text(d.name.isNotEmpty ? d.name[0].toUpperCase() : '?', style: const TextStyle(color: _brand600, fontWeight: FontWeight.w800))),
+                            title: Text(d.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            subtitle: Text([d.city, d.phone].where((s) => s.isNotEmpty).join('  ·  '),
+                                style: TextStyle(color: context.textHint, fontWeight: FontWeight.w500)),
+                            trailing: Icon(Icons.chevron_right, color: context.textHint),
+                            onTap: () {
+                              setState(() { _sponsorId = d.id; _sponsorName = d.name; });
+                              Navigator.pop(context);
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ]),
+          ),
+        );
+      }),
     );
   }
 
@@ -225,12 +278,14 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
     setState(() => _saving = true);
     try {
       final statusMap = {'Active': 'ACTIVE', 'Graduated': 'GRADUATED', 'Relieved': 'INACTIVE', 'Drop out': 'DROPPED'};
+      final photoB64 = _photoBytes != null ? base64Encode(_photoBytes!) : null;
       final body = <String, dynamic>{
         'name':       _name.text.trim(),
         'dob':        _toIso(_dob),
         'gender':     _gender == 'Male' ? 'MALE' : 'FEMALE',
         'centerId':   _centreId,
         'status':     statusMap[_status] ?? 'ACTIVE',
+        if (photoB64 != null) 'photo': photoB64,
         if (_classGrade.text.trim().isNotEmpty) 'class': _classGrade.text.trim(),
         if (_schoolName.text.trim().isNotEmpty) 'school': _schoolName.text.trim(),
         if (_fatherName.text.trim().isNotEmpty) 'fatherName': _fatherName.text.trim(),
@@ -241,22 +296,62 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         if (_medHistory.text.trim().isNotEmpty) 'medicalNotes': _medHistory.text.trim(),
         if (_familyNotes.text.trim().isNotEmpty) 'notes': _familyNotes.text.trim(),
       };
+      Map<String, dynamic>? res;
       try {
-        await apiClient.post('/students', body);
+        res = await apiClient.post('/students', body);
       } catch (_) {
-        // No backend in demo mode — treat as success
+        // No backend reachable — fall back to a local-only record.
       }
-      // Add to shared local list so the students screen shows it immediately
+
+      // Non-Super-Admins: the backend queues this for approval instead of
+      // creating it. Don't add anything locally — it must wait for approval.
+      final pending = res != null && (res['meta'] as Map?)?['pendingApproval'] == true;
+      if (pending) {
+        if (mounted) {
+          setState(() => _saving = false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: const Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.hourglass_top_rounded, color: Colors.white, size: 18),
+              SizedBox(width: 8),
+              Flexible(child: Text('Submitted for Super Admin approval', style: TextStyle(fontWeight: FontWeight.w700))),
+            ]),
+            backgroundColor: _amber600, behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ));
+          context.go('/students');
+        }
+        return;
+      }
+
+      final created = (res?['data'] as Map?)?.cast<String, dynamic>();
+      final savedId = created?['id'] as String?;
+      final studentId = savedId ?? 'local-${DateTime.now().microsecondsSinceEpoch}';
+
+      // Full local record so the detail Profile tab shows everything immediately.
       demoLocalStudents.insert(0, {
-        'id':      'local-${_name.text.trim().hashCode}',
-        'childId': 'SKT-C-new',
-        'name':    _name.text.trim(),
-        'gender':  _gender == 'Male' ? 'MALE' : 'FEMALE',
-        'dob':     _toIso(_dob),
-        'status':  statusMap[_status] ?? 'ACTIVE',
-        'class':   _classGrade.text.trim(),
-        'school':  _schoolName.text.trim(),
-        'center':  {'name': _centreName},
+        'id':          studentId,
+        'childId':     'SKT-C-new',
+        'name':        _name.text.trim(),
+        'gender':      _gender == 'Male' ? 'MALE' : 'FEMALE',
+        'dob':         _toIso(_dob),
+        'status':      statusMap[_status] ?? 'ACTIVE',
+        'class':       _classGrade.text.trim(),
+        'school':      _schoolName.text.trim(),
+        'center':      {'name': _centreName},
+        'aadhaar':     _aadhaar.text.trim(),
+        'admDate':     _admDate.isNotEmpty ? _toIso(_admDate) : '',
+        'fatherName':  _fatherName.text.trim(),
+        'motherName':  _motherName.text.trim(),
+        'guardian':    _guardian.text.trim(),
+        'relation':    _relation.text.trim(),
+        'mobile':      _mobile.text.trim(),
+        'address':     _address.text.trim(),
+        'sat':         _satNo.text.trim(),
+        'familyNotes': _familyNotes.text.trim(),
+        'height':      _height.text.trim(),
+        'weight':      _weight.text.trim(),
+        'medHistory':  _medHistory.text.trim(),
+        if (photoB64 != null) 'photo': photoB64,
         'sponsorships': _sponsorId != null
             ? [{'donor': {'name': _sponsorName ?? ''}}]
             : <Map<String, dynamic>>[],
@@ -273,7 +368,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
           width: 280,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ));
-        context.go('/students');
+        context.go('/students/$studentId');
       }
     } catch (e) {
       if (mounted) {
@@ -317,7 +412,10 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
                 // ── Profile Photo ─────────────────────────────────────
-                const Center(child: PhotoPickerCircle(label: 'Child Photo', size: 88)),
+                Center(child: PhotoPickerCircle(
+                  label: 'Child Photo', size: 88,
+                  onImageChanged: (b) => setState(() => _photoBytes = b),
+                )),
                 const SizedBox(height: 16),
 
                 // ── Basic Profile ────────────────────────────────────

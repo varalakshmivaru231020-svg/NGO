@@ -1,9 +1,17 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/auth/role_auth.dart';
+import '../../../core/network/api_client.dart';
+import '../../notifications/notification_store.dart';
+import '../../settings/profile_store.dart';
+import '../../donors/presentation/donors_screen.dart' show demoLocalDonors;
+import '../../donations/presentation/donations_screen.dart' show demoLocalDonations;
+import '../../students/presentation/students_screen.dart' show demoLocalStudents;
 
 // ── colours ───────────────────────────────────────────────────────────
 const _brand700 = Color(0xFF0B6E5D);
@@ -50,6 +58,14 @@ const _typeColors = {
   'General Fund':      Color(0xFF14A98C),
   'Food':              Color(0xFFF6A723),
   'Infrastructure':    Color(0xFF2D9CDB),
+};
+const _modeLabels = {
+  'UPI': 'UPI',
+  'BANK_TRANSFER': 'Bank Transfer',
+  'CASH': 'Cash',
+  'CHEQUE': 'Cheque',
+  'PAYMENT_LINK': 'Payment Link',
+  'CARD': 'Card',
 };
 
 // ── helpers ───────────────────────────────────────────────────────────
@@ -102,12 +118,205 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   String _period = '7M';
 
+  // Live counts from the backend so the dashboard reflects real data.
+  int? _students, _donors, _offices, _raised, _todayRaised;
+
+  List<_Donation> _dynamicRecentDonations = [];
+  List<_TypeSlice> _dynamicTypeSlices = [];
+  List<MapEntry<String, double>> _dynamicTrend7M = [];
+  List<MapEntry<String, double>> _dynamicTrend1Y = [];
+  int _totalDonationsAmount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCounts();
+  }
+
+  Future<void> _loadCounts() async {
+    Future<int?> count(String path) async {
+      try {
+        final r = await apiClient.get(path, params: {'limit': '1000', 'page': '1'});
+        final inner = r['data'];
+        final list = inner is List ? inner : (inner is Map ? (inner['data'] as List? ?? const []) : const []);
+        return list.length;
+      } catch (_) { return null; }
+    }
+    
+    final sCount = await count('/students');
+    final dCount = await count('/donors');
+    final oCount = await count('/offices');
+    
+    int? raised = 0;
+    int? today = 0;
+    List<_Donation> recent = [];
+    List<_TypeSlice> slices = [];
+    List<MapEntry<String, double>> trend7M = [];
+    List<MapEntry<String, double>> trend1Y = [];
+    int totalAmt = 0;
+
+    try {
+      final r = await apiClient.get('/donations', params: {'limit': '1000', 'page': '1'});
+      final inner = r['data'];
+      final list = inner is List ? inner : (inner is Map ? (inner['data'] as List? ?? const []) : const []);
+      
+      // Map local donations to similar format
+      final localDonationsMapped = demoLocalDonations.map((j) {
+        final donor = j['donor'] as Map? ?? {};
+        final type = j['type'] as Map? ?? {};
+        return {
+          'amount': j['amount'],
+          'date': j['date'],
+          'createdAt': j['date'],
+          'paymentMode': j['paymentMode'],
+          'donor': {'name': donor['name']},
+          'type': {'label': type['label']},
+          'receiptNo': j['receiptNo'],
+        };
+      }).toList();
+
+      final allDonationsRaw = [...localDonationsMapped, ...list];
+      final seenReceipts = <String>{};
+      final uniqueDonationsRaw = <Map>[];
+      for (final item in allDonationsRaw) {
+        final rec = '${item['receiptNo'] ?? ''}'.toLowerCase().trim();
+        if (rec.isNotEmpty && seenReceipts.contains(rec)) continue;
+        if (rec.isNotEmpty) seenReceipts.add(rec);
+        uniqueDonationsRaw.add(item);
+      }
+
+      // 1. Calculate raised and todayRaised
+      final now = DateTime.now();
+      for (final e in uniqueDonationsRaw) {
+        final amt = (e['amount'] as num?)?.toInt() ?? 0;
+        raised = raised! + amt;
+        final rawDt = '${e['date'] ?? e['createdAt'] ?? ''}';
+        final dt = DateTime.tryParse(rawDt)?.toLocal();
+        if (dt != null && dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+          today = today! + amt;
+        }
+      }
+
+      // 2. Format date for recent donations
+      String formatDate(String rawDate) {
+        try {
+          final dt = DateTime.parse(rawDate).toLocal();
+          const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+          return '${dt.day.toString().padLeft(2,'0')} ${m[dt.month-1]}';
+        } catch (_) {
+          return 'Recent';
+        }
+      }
+
+      // 3. Populate recent donations list
+      for (final e in uniqueDonationsRaw.take(4)) {
+        final donor = e['donor'] as Map? ?? {};
+        final type = e['type'] as Map? ?? {};
+        final name = donor['name'] as String? ?? 'Unknown';
+        final tLabel = type['label'] as String? ?? 'General Donation';
+        final method = _modeLabels[e['paymentMode']] ?? e['paymentMode'] as String? ?? 'Cash';
+        final amt = (e['amount'] as num?)?.toInt() ?? 0;
+        final rawDt = '${e['date'] ?? e['createdAt'] ?? ''}';
+        recent.add(_Donation(name, tLabel, method, amt, formatDate(rawDt)));
+      }
+
+      // 4. Calculate donations by type
+      final typeSums = <String, int>{};
+      for (final e in uniqueDonationsRaw) {
+        final type = e['type'] as Map? ?? {};
+        final label = type['label'] as String? ?? 'General Fund';
+        final amt = (e['amount'] as num?)?.toInt() ?? 0;
+        typeSums[label] = (typeSums[label] ?? 0) + amt;
+        totalAmt += amt;
+      }
+      
+      Color getSliceColor(String label) {
+        if (_typeColors.containsKey(label)) return _typeColors[label]!;
+        if (label == 'Education Fund') return const Color(0xFF7C6CF0);
+        if (label == 'Healthcare' || label == 'Medical') return const Color(0xFFF2685E);
+        if (label == 'General Donation' || label == 'General Fund') return const Color(0xFF14A98C);
+        if (label == 'Food & Nutrition' || label == 'Food') return const Color(0xFFF6A723);
+        return _avColor(label);
+      }
+
+      if (totalAmt > 0) {
+        final sortedTypes = typeSums.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+        int otherAmt = 0;
+        for (int i = 0; i < sortedTypes.length; i++) {
+          final entry = sortedTypes[i];
+          final pct = ((entry.value / totalAmt) * 100).round();
+          if (i < 4) {
+            slices.add(_TypeSlice(entry.key, pct, getSliceColor(entry.key)));
+          } else {
+            otherAmt += entry.value;
+          }
+        }
+        if (otherAmt > 0) {
+          final otherPct = ((otherAmt / totalAmt) * 100).round();
+          slices.add(_TypeSlice('Other', otherPct, const Color(0xFF64748B)));
+        }
+      }
+
+      // 5. Calculate donation trend
+      List<MapEntry<String, double>> computeTrend(int monthsLimit) {
+        final months = <DateTime>[];
+        for (int i = monthsLimit - 1; i >= 0; i--) {
+          months.add(DateTime(now.year, now.month - i, 1));
+        }
+        
+        final monthLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        final monthlySums = {for (final m in months) m.month: 0.0};
+        
+        for (final e in uniqueDonationsRaw) {
+          final rawDt = '${e['date'] ?? e['createdAt'] ?? ''}';
+          final dt = DateTime.tryParse(rawDt)?.toLocal();
+          if (dt != null) {
+            for (final m in months) {
+              if (dt.year == m.year && dt.month == m.month) {
+                final amt = (e['amount'] as num?)?.toDouble() ?? 0.0;
+                monthlySums[m.month] = monthlySums[m.month]! + (amt / 1000.0);
+              }
+            }
+          }
+        }
+        
+        return months.map((m) => MapEntry(monthLabels[m.month - 1], monthlySums[m.month] ?? 0.0)).toList();
+      }
+
+      trend7M = computeTrend(7);
+      trend1Y = computeTrend(12);
+
+    } catch (_) {}
+
+    if (mounted) {
+      setState(() {
+        _students = sCount;
+        _donors = dCount;
+        _offices = oCount;
+        _raised = raised;
+        _todayRaised = today;
+        _dynamicRecentDonations = recent;
+        _dynamicTypeSlices = slices;
+        _dynamicTrend7M = trend7M;
+        _dynamicTrend1Y = trend1Y;
+        _totalDonationsAmount = totalAmt;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Real backend data only — no demo fallback (a clean DB shows empty).
+    final recentList = _dynamicRecentDonations;
+    final slices = _dynamicTypeSlices;
+    final t7M = _dynamicTrend7M;
+    final t1Y = _dynamicTrend1Y;
+    final hasDonations = _totalDonationsAmount > 0;
+
     return Scaffold(
       body: Column(
         children: [
-          _BrandHeader(onNotif: () => context.go('/notifications')),
+          _BrandHeader(onNotif: () => context.go('/notifications'), raised: _raised, todayRaised: _todayRaised),
           Expanded(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -117,11 +326,40 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   const SizedBox(height: 18),
                   _kpiSection(context),
                   const SizedBox(height: 18),
-                  _TrendCard(period: _period, onPeriodChange: (p) => setState(() => _period = p)),
-                  const SizedBox(height: 14),
-                  const _DonutCard(),
-                  const SizedBox(height: 18),
-                  _recentSection(context),
+                  _quickActions(context),
+                  // Donation analytics — shown only when there are donations and
+                  // the role can see them (no fake charts on an empty database).
+                  if ((canAccess('donations') || canAccess('reports')) && hasDonations) ...[
+                    const SizedBox(height: 18),
+                    LayoutBuilder(builder: (_, c) {
+                      final trend = _TrendCard(
+                        period: _period, 
+                        onPeriodChange: (p) => setState(() => _period = p), 
+                        padded: c.maxWidth < 800,
+                        trend7M: t7M,
+                        trend1Y: t1Y,
+                      );
+                      if (c.maxWidth >= 800) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Expanded(child: trend),
+                            const SizedBox(width: 14),
+                            Expanded(child: _DonutCard(slices: slices, totalAmount: _totalDonationsAmount, padded: false)),
+                          ]),
+                        );
+                      }
+                      return Column(children: [
+                        trend,
+                        const SizedBox(height: 14),
+                        _DonutCard(slices: slices, totalAmount: _totalDonationsAmount),
+                      ]);
+                    }),
+                  ],
+                  if (canAccess('donations')) ...[
+                    const SizedBox(height: 18),
+                    _recentSection(context, recentList),
+                  ],
                   const SizedBox(height: 96),
                 ],
               ),
@@ -132,52 +370,88 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  // ── Quick Actions ────────────────────────────────────────────────
-  Widget _quickActionsSection(BuildContext ctx) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 18),
-    child: IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _QA(label: 'Add Donation', icon: Icons.account_balance_wallet_outlined, bg: _brand100, fg: _brand600, onTap: () => ctx.go('/donations/new')),
-          const SizedBox(width: 10),
-          _QA(label: 'Add Donor',    icon: Icons.person_add_outlined,              bg: _violet100, fg: _violet500, onTap: () => ctx.go('/donors/new')),
-          const SizedBox(width: 10),
-          _QA(label: 'Pay Link',     icon: Icons.qr_code_2_outlined,               bg: _sky100,    fg: _sky500,    onTap: () => ctx.go('/payment-links')),
-          const SizedBox(width: 10),
-          _QA(label: 'Reminders',    icon: Icons.cake_outlined,                    bg: _amber100,  fg: _amber600,  onTap: () => ctx.go('/reminders')),
-        ],
-      ),
-    ),
-  );
-
   // ── KPI section — 6 cards, single row on desktop, wraps on mobile ──
   Widget _kpiSection(BuildContext ctx) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 18),
     child: LayoutBuilder(builder: (_, constraints) {
       final wide = constraints.maxWidth >= 800;
-      final cards = [
-        _KPICard(label: 'Total Raised',      value: '₹56.1L', icon: Icons.account_balance_wallet_outlined, fg: _amber600,  bg: _amber100,  onTap: () => ctx.go('/donations'), emphasis: true),
-        _KPICard(label: 'Total Donors',      value: '836',     icon: Icons.people_outlined,                 fg: _brand600,  bg: _brand100,  onTap: () => ctx.go('/donors'),    emphasis: true),
-        _KPICard(label: 'Total Students',    value: '178',     icon: Icons.school_outlined,                 fg: _violet500, bg: _violet100, onTap: () => ctx.go('/students')),
-        _KPICard(label: 'Total Offices',     value: '4',       icon: Icons.business_outlined,               fg: _sky500,    bg: _sky100,    onTap: () {}),
-        _KPICard(label: 'Birthdays Today',   value: '2',       icon: Icons.cake_outlined,                   fg: _coral500,  bg: _coral100,  onTap: () => ctx.go('/reminders')),
-        _KPICard(label: 'Anniversary Today', value: '1',       icon: Icons.favorite_border,                 fg: _coral500,  bg: _coral100,  onTap: () => ctx.go('/reminders')),
+      // Each card is tagged with the module it belongs to; a card only shows if
+      // the logged-in user can access that module (admins see everything).
+      String n(int? v) => v?.toString() ?? '—';
+      final all = <({String module, _KPICard card})>[
+        (module: 'donations', card: _KPICard(label: 'Total Raised',      value: _raised != null ? _inr(_raised!, compact: true) : '—', icon: Icons.account_balance_wallet_outlined, fg: _amber600,  bg: _amber100,  onTap: () => ctx.go('/donations'), emphasis: true)),
+        (module: 'donors',    card: _KPICard(label: 'Total Donors',      value: n(_donors),   icon: Icons.people_outlined,                 fg: _brand600,  bg: _brand100,  onTap: () => ctx.go('/donors'),    emphasis: true)),
+        (module: 'students',  card: _KPICard(label: 'Total Students',    value: n(_students), icon: Icons.school_outlined,                 fg: _violet500, bg: _violet100, onTap: () => ctx.go('/students'))),
+        (module: 'offices',   card: _KPICard(label: 'Total Offices',     value: n(_offices),  icon: Icons.business_outlined,               fg: _sky500,    bg: _sky100,    onTap: () => ctx.go('/offices'))),
+        (module: 'reminders', card: _KPICard(label: 'Birthdays Today',   value: '0',          icon: Icons.cake_outlined,                   fg: _coral500,  bg: _coral100,  onTap: () => ctx.go('/reminders'))),
+        (module: 'reminders', card: _KPICard(label: 'Anniversary Today', value: '0',          icon: Icons.favorite_border,                 fg: _coral500,  bg: _coral100,  onTap: () => ctx.go('/reminders'))),
       ];
-      if (wide) {
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: cards.expand((c) => [Expanded(child: c), const SizedBox(width: 10)]).toList()..removeLast(),
-        );
-      }
-      // narrow: 2-column wrap
-      final cardW = (constraints.maxWidth - 10) / 2;
+      final cards = all.where((c) => canAccess(c.module)).map((c) => c.card).toList();
+      if (cards.isEmpty) return const SizedBox.shrink();
+      // Up to 3 per row on desktop (2 on mobile). With only 1–2 cards (e.g. a
+      // restricted role) they stay a sensible size, left-aligned, not stretched.
+      final maxPerRow = wide ? 3 : 2;
+      final perRow = cards.length < maxPerRow ? cards.length : maxPerRow;
+      const gap = 12.0;
+      double cardW = (constraints.maxWidth - gap * (perRow - 1)) / perRow;
+      if (wide && cards.length < 3 && cardW > 360) cardW = 360;
       return Wrap(
-        spacing: 10, runSpacing: 10,
+        alignment: WrapAlignment.start,
+        spacing: gap, runSpacing: gap,
         children: cards.map((c) => SizedBox(width: cardW, child: c)).toList(),
       );
     }),
   );
+
+  // ── Quick Actions — create shortcuts ──────────────────────────────
+  Widget _quickActions(BuildContext ctx) {
+    const actions = [
+      (icon: Icons.person_add_alt_1_outlined, label: 'Add Donor',    bg: _brand100,  fg: _brand600,  route: '/donors/new',    module: 'donors'),
+      (icon: Icons.volunteer_activism_outlined, label: 'Add Donation', bg: _amber100, fg: _amber600,  route: '/donations/new', module: 'donations'),
+      (icon: Icons.school_outlined,           label: 'Add Student',  bg: _violet100, fg: _violet500, route: '/students/new',  module: 'students'),
+      (icon: Icons.link_rounded,              label: 'Payment Link', bg: _sky100,    fg: _sky500,    route: '/payment-links', module: 'payments'),
+    ];
+    // Only show actions the current user can access.
+    final visible = actions.where((a) => canAccess(a.module)).toList();
+    if (visible.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Padding(padding: EdgeInsets.only(left: 2, bottom: 10),
+          child: Text('Quick Actions', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800))),
+        LayoutBuilder(builder: (_, c) {
+          final maxPerRow = c.maxWidth >= 560 ? 4 : 2;
+          final perRow = visible.length < maxPerRow ? visible.length : maxPerRow;
+          const gap = 12.0;
+          double w = (c.maxWidth - gap * (perRow - 1)) / perRow;
+          if (c.maxWidth >= 560 && visible.length < 4 && w > 240) w = 240;
+          return Wrap(alignment: WrapAlignment.start, spacing: gap, runSpacing: gap, children: visible.map((a) => SizedBox(
+            width: w,
+            child: GestureDetector(
+              onTap: () => ctx.go(a.route),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+                decoration: BoxDecoration(
+                  color: ctx.cardBg,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: ctx.border),
+                  boxShadow: const [BoxShadow(color: Color(0x0A0D2822), blurRadius: 8, offset: Offset(0, 3))],
+                ),
+                child: Column(children: [
+                  Container(width: 46, height: 46,
+                    decoration: BoxDecoration(color: a.bg, borderRadius: BorderRadius.circular(14)),
+                    child: Icon(a.icon, color: a.fg, size: 23)),
+                  const SizedBox(height: 10),
+                  Text(a.label, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: ctx.textPrimary)),
+                ]),
+              ),
+            ),
+          )).toList());
+        }),
+      ]),
+    );
+  }
 
   // ── Reminders strip ───────────────────────────────────────────────
   Widget _remindersStrip(BuildContext ctx) => GestureDetector(
@@ -194,43 +468,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ),
   );
 
-  // ── Quick Actions (new section below KPIs) ────────────────────────
-  Widget _quickActions(BuildContext ctx) => Padding(
-    padding: const EdgeInsets.fromLTRB(18, 0, 18, 4),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Quick Actions', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: ctx.textSub, letterSpacing: 0.3)),
-      const SizedBox(height: 10),
-      LayoutBuilder(builder: (_, constraints) {
-        final wide = constraints.maxWidth >= 500;
-        final actions = [
-          _QuickAction(icon: Icons.person_add_outlined, label: 'Add Donor', color: const Color(0xFF0E8C76), bg: const Color(0xFFD6F3EC), onTap: () => ctx.go('/donors/new')),
-          _QuickAction(icon: Icons.receipt_long_outlined, label: 'Record Donation', color: const Color(0xFFE0921A), bg: const Color(0xFFFFF1D6), onTap: () => ctx.go('/donations/new')),
-          _QuickAction(icon: Icons.school_outlined, label: 'Add Student', color: const Color(0xFF7C6CF0), bg: const Color(0xFFE7E3FD), onTap: () => ctx.go('/students/new')),
-          _QuickAction(icon: Icons.campaign_outlined, label: 'New Campaign', color: const Color(0xFF2D9CDB), bg: const Color(0xFFDCEFFB), onTap: () => _showCampaignDialog(ctx)),
-        ];
-        if (wide) {
-          return Row(children: actions.expand((a) => [Expanded(child: a), const SizedBox(width: 10)]).toList()..removeLast());
-        }
-        return Column(children: [
-          Row(children: [Expanded(child: actions[0]), const SizedBox(width: 10), Expanded(child: actions[1])]),
-          const SizedBox(height: 10),
-          Row(children: [Expanded(child: actions[2]), const SizedBox(width: 10), Expanded(child: actions[3])]),
-        ]);
-      }),
-    ]),
-  );
-
-  void _showCampaignDialog(BuildContext ctx) {
-    showDialog(context: ctx, builder: (_) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Coming Soon', style: TextStyle(fontWeight: FontWeight.w800)),
-      content: const Text('Campaign management will be available in the next update.', style: TextStyle(fontSize: 14)),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
-    ));
-  }
-
   // ── Recent Donations ──────────────────────────────────────────────
-  Widget _recentSection(BuildContext ctx) => Column(
+  Widget _recentSection(BuildContext ctx, List<_Donation> recentList) => Column(
     children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
@@ -253,16 +492,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 18),
         child: _card(
           ctx: ctx,
-          child: Column(
-            children: _recentDonations.asMap().entries.map((e) {
-              final i = e.key; final d = e.value;
-              return _DonationTile(
-                donation: d,
-                showDivider: i < _recentDonations.length - 1,
-                onTap: () {},
-              );
-            }).toList(),
-          ),
+          child: recentList.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 26, horizontal: 16),
+                child: Center(child: Text('No donations yet.', style: TextStyle(fontSize: 13.5, color: Color(0xFF5A6B67), fontWeight: FontWeight.w500))),
+              )
+            : Column(
+                children: recentList.asMap().entries.map((e) {
+                  final i = e.key; final d = e.value;
+                  return _DonationTile(
+                    donation: d,
+                    showDivider: i < recentList.length - 1,
+                    onTap: () {},
+                  );
+                }).toList(),
+              ),
         ),
       ),
     ],
@@ -273,8 +517,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 // BRAND HEADER
 // ══════════════════════════════════════════════════════════════════════
 class _BrandHeader extends StatelessWidget {
-  const _BrandHeader({required this.onNotif});
+  const _BrandHeader({required this.onNotif, this.raised, this.todayRaised});
   final VoidCallback onNotif;
+  final int? raised, todayRaised;
+
+  static String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Good morning,';
+    if (h < 17) return 'Good afternoon,';
+    if (h < 21) return 'Good evening,';
+    return 'Good night,';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -296,54 +549,58 @@ class _BrandHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // avatar + greeting + bell
-            Row(children: [
-              _Avatar(name: 'Farhan Ansari', size: 44, ring: true),
-              const SizedBox(width: 12),
-              const Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Good morning,', style: TextStyle(fontSize: 12.5, color: Colors.white70, fontWeight: FontWeight.w500)),
-                  Text('Farhan Ansari',  style: TextStyle(fontSize: 17.5, color: Colors.white,  fontWeight: FontWeight.w800, letterSpacing: -0.2)),
-                ],
-              )),
-              _NotifBtn(onTap: onNotif),
-            ]),
+            ValueListenableBuilder<ProfileData>(
+              valueListenable: adminProfile,
+              builder: (context, profile, _) {
+                // Show the currently logged-in person: a role member sees their
+                // own name + role; the admin sees the org profile.
+                final member = currentLoggedInRole;
+                final name = member?.name ?? profile.name;
+                final photo = isAdmin ? profile.photoBytes : null;
+                final roleLabel = member == null
+                    ? null
+                    : (member.roleName.isNotEmpty ? member.roleName : 'Team Member');
+                return Row(children: [
+                  _Avatar(name: name, size: 44, ring: true, image: photo, logoFallback: isAdmin),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_greeting(), style: const TextStyle(fontSize: 12.5, color: Colors.white70, fontWeight: FontWeight.w500)),
+                      Text(name, style: const TextStyle(fontSize: 17.5, color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: -0.2), overflow: TextOverflow.ellipsis),
+                      if (roleLabel != null)
+                        Text(roleLabel, style: const TextStyle(fontSize: 11.5, color: Colors.white70, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                    ],
+                  )),
+                  _NotifBtn(onTap: onNotif),
+                ]);
+              },
+            ),
 
-            const SizedBox(height: 20),
-
-            // today's donations hero
-            Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: const [
-                    Icon(Icons.account_balance_wallet_outlined, size: 15, color: Colors.white),
-                    SizedBox(width: 6),
-                    Text("Today's Donations", style: TextStyle(fontSize: 12.5, color: Colors.white, fontWeight: FontWeight.w600)),
-                  ]),
-                  const SizedBox(height: 4),
-                  Text(_inr(26000), style: const TextStyle(fontSize: 36, color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: -1)),
-                ],
-              )),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(9)),
-                child: const Row(children: [
-                  Icon(Icons.trending_up, size: 13, color: Colors.white),
-                  SizedBox(width: 3),
-                  Text('+18%', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w800)),
-                ]),
-              ),
-            ]),
-
-            const SizedBox(height: 16),
-
-            // Month + Year pills
-            Row(children: [
-              Expanded(child: _StatPill(label: 'This Month', value: _inr(155000, compact: true))),
-              const SizedBox(width: 10),
-              const Expanded(child: _StatPill(label: 'This Year', value: '₹56.1L')),
-            ]),
+            // Today's Donations hero — only for roles that can see donations.
+            if (canAccess('donations') || canAccess('reports')) ...[
+              const SizedBox(height: 20),
+              Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: const [
+                      Icon(Icons.account_balance_wallet_outlined, size: 15, color: Colors.white),
+                      SizedBox(width: 6),
+                      Text("Today's Donations", style: TextStyle(fontSize: 12.5, color: Colors.white, fontWeight: FontWeight.w600)),
+                    ]),
+                    const SizedBox(height: 4),
+                    Text(_inr(todayRaised ?? 0), style: const TextStyle(fontSize: 36, color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: -1)),
+                  ],
+                )),
+              ]),
+              const SizedBox(height: 16),
+              Row(children: [
+                Expanded(child: _StatPill(label: 'Total Raised', value: _inr(raised ?? 0, compact: true))),
+                const SizedBox(width: 10),
+                Expanded(child: _StatPill(label: "Today", value: _inr(todayRaised ?? 0, compact: true))),
+              ]),
+            ],
           ],
         ),
       ),
@@ -366,9 +623,12 @@ class _NotifBtn extends StatelessWidget {
           child: const Icon(Icons.notifications_outlined, color: Colors.white, size: 21),
         ),
         Positioned(top: 8, right: 9,
-          child: Container(
-            width: 9, height: 9,
-            decoration: BoxDecoration(color: _coral500, shape: BoxShape.circle, border: Border.all(color: _brand600, width: 2)),
+          child: ValueListenableBuilder<int>(
+            valueListenable: unreadNotifCount,
+            builder: (_, count, __) => count == 0 ? const SizedBox.shrink() : Container(
+              width: 9, height: 9,
+              decoration: BoxDecoration(color: _coral500, shape: BoxShape.circle, border: Border.all(color: _brand600, width: 2)),
+            ),
           ),
         ),
       ]),
@@ -393,59 +653,32 @@ class _StatPill extends StatelessWidget {
 
 // ── Avatar ────────────────────────────────────────────────────────────
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.name, required this.size, this.ring = false});
+  const _Avatar({required this.name, required this.size, this.ring = false, this.image, this.logoFallback = false});
   final String name;
   final double size;
   final bool ring;
+  final Uint8List? image;
+  final bool logoFallback; // show the foundation logo when there's no photo
   @override
   Widget build(BuildContext context) {
     final color = _avColor(name);
     return Container(
       width: size, height: size,
+      clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(colors: [color, Color.lerp(color, Colors.black, 0.22)!], begin: Alignment.topLeft, end: Alignment.bottomRight),
-        boxShadow: ring ? [BoxShadow(color: Colors.white, blurRadius: 0, spreadRadius: 2), BoxShadow(color: color, blurRadius: 0, spreadRadius: 4)] : [],
+        boxShadow: ring ? [const BoxShadow(color: Colors.white, blurRadius: 0, spreadRadius: 2), BoxShadow(color: color, blurRadius: 0, spreadRadius: 4)] : [],
       ),
-      child: Center(
-        child: Text(_initials(name), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: size * 0.36)),
-      ),
+      child: image != null
+          ? Image.memory(image!, fit: BoxFit.cover, width: size, height: size)
+          : logoFallback
+              ? Container(color: Colors.white, child: Image.asset(brandLogoAsset, fit: BoxFit.cover, alignment: Alignment.centerLeft, width: size, height: size))
+              : Center(
+                  child: Text(_initials(name), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: size * 0.36)),
+                ),
     );
   }
-}
-
-// ── Quick Action tile ─────────────────────────────────────────────────
-class _QA extends StatelessWidget {
-  const _QA({required this.label, required this.icon, required this.bg, required this.fg, required this.onTap});
-  final String label;
-  final IconData icon;
-  final Color bg, fg;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => Expanded(
-    child: GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
-        decoration: BoxDecoration(
-          color: context.cardBg,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: context.border),
-          boxShadow: const [BoxShadow(color: Color(0x0D0D2822), blurRadius: 4, offset: Offset(0, 2))],
-        ),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Container(
-            width: 46, height: 46, decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
-            child: Icon(icon, color: fg, size: 22),
-          ),
-          const SizedBox(height: 8),
-          Text(label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: context.textPrimary, height: 1.3)),
-        ]),
-      ),
-    ),
-  );
 }
 
 // ── KPI Card ──────────────────────────────────────────────────────────
@@ -460,23 +693,23 @@ class _KPICard extends StatelessWidget {
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
     child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
       decoration: BoxDecoration(
         color: emphasis ? fg.withValues(alpha: 0.07) : context.cardBg,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: emphasis ? fg.withValues(alpha: 0.35) : context.border, width: emphasis ? 1.5 : 1),
-        boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 6, offset: Offset(0, 2))],
+        boxShadow: const [BoxShadow(color: Color(0x0A0D2822), blurRadius: 8, offset: Offset(0, 3))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Container(
-          width: 40, height: 40,
-          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(11)),
-          child: Icon(icon, color: fg, size: 20),
+          width: 48, height: 48,
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+          child: Icon(icon, color: fg, size: 24),
         ),
-        const SizedBox(height: 10),
-        Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5, color: emphasis ? fg : context.textPrimary, height: 1)),
-        const SizedBox(height: 4),
-        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.textSub)),
+        const SizedBox(height: 14),
+        Text(value, style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: -0.5, color: emphasis ? fg : context.textPrimary, height: 1)),
+        const SizedBox(height: 6),
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.textSub)),
       ]),
     ),
   );
@@ -510,15 +743,17 @@ class _ReminderChip extends StatelessWidget {
 
 // ── Trend Chart Card ──────────────────────────────────────────────────
 class _TrendCard extends StatelessWidget {
-  const _TrendCard({required this.period, required this.onPeriodChange});
+  const _TrendCard({required this.period, required this.onPeriodChange, required this.trend7M, required this.trend1Y, this.padded = true});
   final String period;
   final ValueChanged<String> onPeriodChange;
+  final List<MapEntry<String, double>> trend7M, trend1Y;
+  final bool padded;
 
   @override
   Widget build(BuildContext context) {
-    final data = period == '7M' ? _trend7M : _trend1Y;
+    final data = period == '7M' ? trend7M : trend1Y;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18),
+      padding: EdgeInsets.symmetric(horizontal: padded ? 18 : 0),
       child: _card(
         ctx: context,
         padding: const EdgeInsets.fromLTRB(14, 16, 14, 10),
@@ -549,7 +784,7 @@ class _TrendCard extends StatelessWidget {
           const SizedBox(height: 8),
           SizedBox(
             height: 150,
-            child: _LineChart(data: data),
+            child: _TrendBarChart(data: data),
           ),
         ]),
       ),
@@ -557,29 +792,33 @@ class _TrendCard extends StatelessWidget {
   }
 }
 
-class _LineChart extends StatelessWidget {
-  const _LineChart({required this.data});
+class _TrendBarChart extends StatelessWidget {
+  const _TrendBarChart({required this.data});
   final List<MapEntry<String, double>> data;
 
   @override
   Widget build(BuildContext context) {
+    if (data.isEmpty) {
+      return const Center(child: Text('No trend data available'));
+    }
     final maxV = data.map((e) => e.value).reduce((a, b) => a > b ? a : b) * 1.15;
-    final spots = data.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.value)).toList();
-    return LineChart(LineChartData(
+    // Narrower bars when more months are shown (1Y) so they don't crowd.
+    final barWidth = data.length > 8 ? 12.0 : 20.0;
+    return BarChart(BarChartData(
       minY: 0,
-      maxY: maxV,
-      clipData: const FlClipData.all(),
+      maxY: maxV > 0 ? maxV : 10,
+      alignment: BarChartAlignment.spaceAround,
       gridData: FlGridData(
         show: true,
         drawVerticalLine: false,
-        horizontalInterval: maxV * 0.33,
+        horizontalInterval: maxV > 0 ? maxV * 0.33 : 3,
         getDrawingHorizontalLine: (_) => FlLine(color: context.border, strokeWidth: 1, dashArray: [2, 5]),
       ),
       borderData: FlBorderData(show: false),
       titlesData: FlTitlesData(
-        leftTitles:   AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        topTitles:    AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        rightTitles:  AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        leftTitles:   const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        topTitles:    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles:  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         bottomTitles: AxisTitles(sideTitles: SideTitles(
           showTitles: true,
           interval: 1,
@@ -593,43 +832,54 @@ class _LineChart extends StatelessWidget {
           },
         )),
       ),
-      lineBarsData: [
-        LineChartBarData(
-          spots: spots,
-          isCurved: true,
-          curveSmoothness: 0.3,
-          color: _brand600,
-          barWidth: 3,
-          isStrokeCapRound: true,
-          dotData: FlDotData(
-            show: true,
-            getDotPainter: (spot, _, __, i) => FlDotCirclePainter(
-              radius: i == data.length - 1 ? 5 : 3,
-              color: Colors.white,
-              strokeWidth: 2.5,
-              strokeColor: _brand600,
-            ),
-          ),
-          belowBarData: BarAreaData(
-            show: true,
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0x47147A6A), Color(0x00147A6A)],
-            ),
+      barTouchData: BarTouchData(
+        touchTooltipData: BarTouchTooltipData(
+          getTooltipColor: (_) => const Color(0xFF15211E),
+          tooltipRoundedRadius: 8,
+          getTooltipItem: (group, _, rod, __) => BarTooltipItem(
+            '₹${rod.toY.toStringAsFixed(0)}K',
+            const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
           ),
         ),
-      ],
+      ),
+      barGroups: data.asMap().entries.map((e) {
+        final isLast = e.key == data.length - 1;
+        return BarChartGroupData(
+          x: e.key,
+          barRods: [
+            BarChartRodData(
+              toY: e.value.value,
+              width: barWidth,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: isLast
+                    ? const [Color(0xFF14A98C), Color(0xFF0B6E5D)]
+                    : const [Color(0xFF3FBFA6), Color(0xFF14A98C)],
+              ),
+              backDrawRodData: BackgroundBarChartRodData(
+                show: true,
+                toY: maxV > 0 ? maxV : 10,
+                color: _brand600.withValues(alpha: 0.06),
+              ),
+            ),
+          ],
+        );
+      }).toList(),
     ));
   }
 }
 
 // ── Donut Card ────────────────────────────────────────────────────────
 class _DonutCard extends StatelessWidget {
-  const _DonutCard();
+  const _DonutCard({required this.slices, required this.totalAmount, this.padded = true});
+  final List<_TypeSlice> slices;
+  final int totalAmount;
+  final bool padded;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 18),
+    padding: EdgeInsets.symmetric(horizontal: padded ? 18 : 0),
     child: _card(
       ctx: context,
       padding: const EdgeInsets.all(16),
@@ -641,7 +891,9 @@ class _DonutCard extends StatelessWidget {
             width: 134, height: 134,
             child: Stack(alignment: Alignment.center, children: [
               PieChart(PieChartData(
-                sections: _typeSplit.map((t) => PieChartSectionData(
+                sections: slices.isEmpty
+                    ? [PieChartSectionData(color: Colors.grey.shade300, value: 100, title: '', radius: 28)]
+                    : slices.map((t) => PieChartSectionData(
                   color: t.color,
                   value: t.value.toDouble(),
                   title: '',
@@ -652,7 +904,7 @@ class _DonutCard extends StatelessWidget {
                 startDegreeOffset: -90,
               )),
               Column(mainAxisSize: MainAxisSize.min, children: [
-                const Text('₹56.1L', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: -0.5, height: 1)),
+                Text(_inr(totalAmount, compact: true), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: -0.5, height: 1)),
                 const SizedBox(height: 2),
                 Text('this year', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: context.textSub)),
               ]),
@@ -661,7 +913,9 @@ class _DonutCard extends StatelessWidget {
           const SizedBox(width: 16),
           Expanded(child: Column(
             mainAxisSize: MainAxisSize.min,
-            children: _typeSplit.map((t) => Padding(
+            children: slices.isEmpty 
+              ? [const Text('No data available')]
+              : slices.map((t) => Padding(
               padding: const EdgeInsets.only(bottom: 9),
               child: Row(children: [
                 Container(width: 10, height: 10, decoration: BoxDecoration(color: t.color, borderRadius: BorderRadius.circular(3))),
@@ -730,31 +984,3 @@ Widget _card({required BuildContext ctx, required Widget child, EdgeInsets? padd
   ),
   child: child,
 );
-
-// ── Quick Action card (new) ───────────────────────────────────────────
-class _QuickAction extends StatelessWidget {
-  const _QuickAction({required this.icon, required this.label, required this.color, required this.bg, required this.onTap});
-  final IconData icon;
-  final String label;
-  final Color color, bg;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Row(children: [
-        Container(width: 36, height: 36, decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-          child: Icon(icon, size: 19, color: color)),
-        const SizedBox(width: 10),
-        Flexible(child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color), overflow: TextOverflow.ellipsis)),
-      ]),
-    ),
-  );
-}

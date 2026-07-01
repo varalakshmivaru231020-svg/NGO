@@ -18,12 +18,16 @@ class PhotoPickerCircle extends StatefulWidget {
     this.size = 88,
     this.label = 'Photo',
     this.initials,
+    this.initialImage,
+    this.placeholderAsset,
     this.onImageChanged,
   });
 
   final double size;
   final String label;
   final String? initials;
+  final Uint8List? initialImage;
+  final String? placeholderAsset; // shown when no photo is set
   final void Function(Uint8List?)? onImageChanged;
 
   @override
@@ -33,6 +37,12 @@ class PhotoPickerCircle extends StatefulWidget {
 class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
   Uint8List? _bytes;
   bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _bytes = widget.initialImage;
+  }
 
   bool get _isMobile {
     final ua = html.window.navigator.userAgent.toLowerCase();
@@ -64,7 +74,7 @@ class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
               ),
               const Divider(height: 1, color: Color(0xFFE5EBE9)),
               InkWell(
-                onTap: () { Navigator.pop(ctx); _pickImage(camera: true); },
+                onTap: () { Navigator.pop(ctx); _openFilePicker(camera: true); },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                   child: Row(children: [
@@ -84,31 +94,8 @@ class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
               const Divider(height: 1, color: Color(0xFFE5EBE9)),
               InkWell(
                 borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
-                onTap: () {
-                  // Create & click file input synchronously within user gesture (browser security requirement)
-                  final input = html.FileUploadInputElement()..accept = 'image/*';
-                  input.click();
-                  Navigator.pop(ctx);
-                  setState(() => _loading = true);
-                  input.onChange.first.then((_) {
-                    final files = input.files;
-                    if (files != null && files.isNotEmpty && mounted) {
-                      final reader = html.FileReader();
-                      reader.readAsArrayBuffer(files[0]);
-                      reader.onLoadEnd.first.then((_) {
-                        final buffer = reader.result;
-                        if (buffer is ByteBuffer && mounted) {
-                          setState(() { _bytes = buffer.asUint8List(); _loading = false; });
-                          widget.onImageChanged?.call(_bytes);
-                        } else {
-                          if (mounted) setState(() => _loading = false);
-                        }
-                      });
-                    } else {
-                      if (mounted) setState(() => _loading = false);
-                    }
-                  });
-                },
+                // Open the file picker synchronously within the user gesture (browser requirement).
+                onTap: () { Navigator.pop(ctx); _openFilePicker(camera: false); },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                   child: Row(children: [
@@ -132,31 +119,53 @@ class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
     );
   }
 
-  Future<void> _pickImage({required bool camera}) async {
+  // Opens the native file chooser. The <input> is attached to the DOM so the
+  // change event fires reliably across browsers, and is removed afterwards.
+  void _openFilePicker({required bool camera}) {
+    // On desktop the "camera" option uses the in-app webcam dialog instead.
     if (camera && !_isMobile) {
-      await _openWebcam();
+      _openWebcam();
       return;
     }
-    setState(() => _loading = true);
-    try {
-      final input = html.FileUploadInputElement()..accept = 'image/*';
-      if (camera) input.setAttribute('capture', 'environment');
-      input.click();
-      await input.onChange.first;
+    final input = html.FileUploadInputElement()..accept = 'image/*';
+    if (camera) input.setAttribute('capture', 'environment');
+    input.style.display = 'none';
+    html.document.body?.append(input);
+    input.onChange.listen((_) {
       final files = input.files;
-      if (files != null && files.isNotEmpty && mounted) {
-        final reader = html.FileReader();
-        reader.readAsArrayBuffer(files[0]);
-        await reader.onLoadEnd.first;
-        final buffer = reader.result;
-        if (buffer is ByteBuffer && mounted) {
-          final bytes = buffer.asUint8List();
-          setState(() => _bytes = bytes);
-          widget.onImageChanged?.call(bytes);
+      if (files != null && files.isNotEmpty) {
+        _readFile(files.first);
+      }
+      input.remove();
+    });
+    input.click();
+  }
+
+  // Reads a picked file as a data URL and decodes it to bytes. Data-URL avoids
+  // the fragile ArrayBuffer type checks that silently dropped images before.
+  void _readFile(html.File file) {
+    setState(() => _loading = true);
+    final reader = html.FileReader();
+    reader.onLoadEnd.listen((_) {
+      Uint8List? bytes;
+      final result = reader.result;
+      if (result is String) {
+        final comma = result.indexOf(',');
+        if (comma != -1) {
+          try { bytes = base64Decode(result.substring(comma + 1)); } catch (_) {}
         }
       }
-    } catch (_) {}
-    if (mounted) setState(() => _loading = false);
+      if (!mounted) return;
+      setState(() {
+        if (bytes != null) _bytes = bytes;
+        _loading = false;
+      });
+      if (bytes != null) widget.onImageChanged?.call(bytes);
+    });
+    reader.onError.listen((_) {
+      if (mounted) setState(() => _loading = false);
+    });
+    reader.readAsDataUrl(file);
   }
 
   Future<void> _openWebcam() async {
@@ -165,7 +174,8 @@ class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
       stream = await html.window.navigator.mediaDevices!
           .getUserMedia({'video': {'facingMode': 'user'}, 'audio': false});
     } catch (_) {
-      await _pickImage(camera: false);
+      // Camera unavailable / denied → fall back to the file chooser.
+      _openFilePicker(camera: false);
       return;
     }
     if (!mounted) {
@@ -208,10 +218,12 @@ class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
                         child: CircularProgressIndicator(color: _brand600, strokeWidth: 2.5)))
                     : _bytes != null
                         ? Image.memory(_bytes!, fit: BoxFit.cover, width: widget.size, height: widget.size)
-                        : Center(
-                            child: widget.initials != null
-                                ? Text(widget.initials!, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: widget.size * 0.28))
-                                : Icon(Icons.add_a_photo_outlined, size: widget.size * 0.35, color: Colors.white)),
+                        : widget.placeholderAsset != null
+                            ? Container(color: Colors.white, child: Image.asset(widget.placeholderAsset!, fit: BoxFit.cover, alignment: Alignment.centerLeft, width: widget.size, height: widget.size))
+                            : Center(
+                                child: widget.initials != null
+                                    ? Text(widget.initials!, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: widget.size * 0.28))
+                                    : Icon(Icons.add_a_photo_outlined, size: widget.size * 0.35, color: Colors.white)),
               ),
               Positioned(
                 bottom: 0, right: 0,

@@ -42,70 +42,20 @@ String _initials(String name) {
 
 
 const _trendLabels = ['Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-const _trendValues = [340000.0, 520000.0, 280000.0, 610000.0, 490000.0, 730000.0, 890000.0];
+// Analytics/report data — empty until real records exist.
+const _trendValues = <double>[];
 
-const _allocation = [
-  ('Education Fund', 0.34, _violet500),
-  ('Child Sponsorship', 0.28, _brand600),
-  ('General Fund', 0.18, _sky500),
-  ('Medical Aid', 0.12, _coral500),
-  ('Food Drive', 0.08, _amber600),
-];
+const _allocation = <(String, double, Color)>[];
 
-const _officePerf = [
-  ('Sulibele', 890000, 1200000),
-  ('Medahalli', 640000, 900000),
-  ('Yelahanka', 320000, 600000),
-  ('Electronic City', 180000, 500000),
-];
+const _officePerf = <(String, int, int)>[];
 
-const _topDonors = [
-  ('Rajesh Khanna', 'Corporate', 320000),
-  ('Arjun Mehta', 'Recurring', 210000),
-  ('Priya Sharma', 'Recurring', 185000),
-  ('Vikram Singh', 'One-Time', 150000),
-  ('Deepak Nair', 'Corporate', 125000),
-];
+const _topDonors = <(String, String, int)>[];
 
-// ── Mock data for exports ──────────────────────────────────────────────
-const _donationRows = [
-  ('Rajesh Khanna',  'Jun 2026', 'Education Fund',   'Bank Transfer', 50000),
-  ('Arjun Mehta',   'Jun 2026', 'Child Sponsorship', 'UPI',           35000),
-  ('Priya Sharma',  'Jun 2026', 'General Fund',       'Cheque',        28000),
-  ('Vikram Singh',  'May 2026', 'Medical Aid',        'Bank Transfer', 22000),
-  ('Deepak Nair',   'May 2026', 'Education Fund',     'UPI',           18500),
-  ('Sunita Joshi',  'May 2026', 'Child Sponsorship',  'Cash',          15000),
-  ('Kavitha Rao',   'Apr 2026', 'Food Drive',         'UPI',           12000),
-  ('Suresh Nair',   'Apr 2026', 'Education Fund',     'Bank Transfer', 45000),
-  ('Deepak Joshi',  'Apr 2026', 'General Fund',       'Cheque',        30000),
-  ('Meena Gupta',   'Mar 2026', 'Child Sponsorship',  'UPI',           25000),
-];
+const _donationRows = <(String, String, String, String, int)>[];
 
-const _studentRows = [
-  ('SKT-C-0001', 'Aarav Kumar',    'Sulibele',    'Class 6',  'Active',    'Male',   12, 'Rajesh Khanna', '+91 98765 11001', 'Sulibele Village'),
-  ('SKT-C-0002', 'Sneha Patil',    'Yelahanka',   'Class 5',  'Active',    'Female', 11, 'Kavitha Rao',   '+91 98765 11002', 'Yelahanka Layout'),
-  ('SKT-C-0003', 'Ravi Shankar',   'Sulibele',    'Class 8',  'Active',    'Male',   14, '-',             '+91 98765 11003', 'Sulibele Village'),
-  ('SKT-C-0004', 'Lakshmi Devi',   'Yelahanka',   'Class 7',  'Active',    'Female', 13, 'Priya Sharma',  '+91 98765 11004', 'Yelahanka Main'),
-  ('SKT-C-0005', 'Kiran Reddy',    'Devanahalli', 'Class 4',  'Active',    'Male',   10, '-',             '+91 98765 11005', 'Devanahalli Town'),
-  ('SKT-C-0006', 'Pooja Nair',     'Sulibele',    'Class 10', 'Graduated', 'Female', 16, 'Suresh Nair',   '+91 98765 11006', 'Sulibele Village'),
-  ('SKT-C-0007', 'Ajay Verma',     'Devanahalli', 'Class 6',  'Active',    'Male',   12, '-',             '+91 98765 11007', 'Devanahalli Layout'),
-  ('SKT-C-0008', 'Divya Rao',      'Yelahanka',   'Class 3',  'Active',    'Female',  9, '-',             '+91 98765 11008', 'Yelahanka Village'),
-  ('SKT-C-0009', 'Mohan Lal',      'Sulibele',    'Class 7',  'Active',    'Male',   13, 'Deepak Joshi',  '+91 98765 11009', 'Sulibele Town'),
-  ('SKT-C-0010', 'Geetha Kumari',  'Devanahalli', 'Class 5',  'Active',    'Female', 11, '-',             '+91 98765 11010', 'Devanahalli Village'),
-];
+const _studentRows = <(String, String, String, String, String, String, int, String, String, String)>[];
 
-const _donorRows = [
-  ('SKT-D-001', 'Rajesh Khanna',  '+91 98765 43210', 'Mumbai, Maharashtra',   'Corporate',  320000, 'Jun 2026'),
-  ('SKT-D-002', 'Arjun Mehta',   '+91 98765 43211', 'Delhi, Delhi',           'Recurring',  210000, 'Jun 2026'),
-  ('SKT-D-003', 'Priya Sharma',  '+91 98765 43212', 'Bangalore, Karnataka',   'Recurring',  185000, 'Jun 2026'),
-  ('SKT-D-004', 'Vikram Singh',  '+91 98765 43213', 'Hyderabad, Telangana',   'One-Time',   150000, 'May 2026'),
-  ('SKT-D-005', 'Deepak Nair',   '+91 98765 43214', 'Chennai, Tamil Nadu',    'Corporate',  125000, 'May 2026'),
-  ('SKT-D-006', 'Sunita Joshi',  '+91 98765 43215', 'Pune, Maharashtra',      'Recurring',   98000, 'May 2026'),
-  ('SKT-D-007', 'Kavitha Rao',   '+91 98765 43216', 'Bangalore, Karnataka',   'One-Time',    75000, 'Apr 2026'),
-  ('SKT-D-008', 'Suresh Nair',   '+91 98765 43217', 'Kochi, Kerala',          'Corporate',   45000, 'Apr 2026'),
-  ('SKT-D-009', 'Deepak Joshi',  '+91 98765 43218', 'Jaipur, Rajasthan',      'Recurring',   30000, 'Apr 2026'),
-  ('SKT-D-010', 'Meena Gupta',   '+91 98765 43219', 'Ahmedabad, Gujarat',     'One-Time',    25000, 'Mar 2026'),
-];
+const _donorRows = <(String, String, String, String, String, int, String)>[];
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -329,10 +279,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
             // KPI — 4 cards: single row on wide, 2×2 on narrow
             Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: LayoutBuilder(builder: (_, constraints) {
               final wide = constraints.maxWidth > 580;
-              final card1 = _KPICard(label: 'Total Raised', value: _inrC(2860000), sub: '+18% vs last period', subColor: _green500, icon: Icons.account_balance_wallet_outlined, iconBg: _brand100, iconFg: _brand600);
-              final card2 = _KPICard(label: 'Unique Donors', value: '836', sub: '↑ 42 new this period', subColor: _brand600, icon: Icons.people_outlined, iconBg: _brand100, iconFg: _brand600);
-              final card3 = _KPICard(label: 'Avg Gift', value: '₹3,421', sub: '↑ ₹280 vs last period', subColor: _green500, icon: Icons.trending_up_rounded, iconBg: const Color(0xFFE7E3FD), iconFg: _violet500);
-              final card4 = _KPICard(label: 'Children Supported', value: '178', sub: '12 graduated this period', subColor: _onSurface3, icon: Icons.child_care_outlined, iconBg: const Color(0xFFFFF1D6), iconFg: _amber600);
+              final card1 = _KPICard(label: 'Total Raised', value: _inrC(0), sub: 'No data yet', subColor: _onSurface3, icon: Icons.account_balance_wallet_outlined, iconBg: _brand100, iconFg: _brand600);
+              final card2 = _KPICard(label: 'Unique Donors', value: '0', sub: 'No data yet', subColor: _onSurface3, icon: Icons.people_outlined, iconBg: _brand100, iconFg: _brand600);
+              final card3 = _KPICard(label: 'Avg Gift', value: '₹0', sub: 'No data yet', subColor: _onSurface3, icon: Icons.trending_up_rounded, iconBg: const Color(0xFFE7E3FD), iconFg: _violet500);
+              final card4 = _KPICard(label: 'Children Supported', value: '0', sub: 'No data yet', subColor: _onSurface3, icon: Icons.child_care_outlined, iconBg: const Color(0xFFFFF1D6), iconFg: _amber600);
               if (wide) {
                 return Row(children: [
                   Expanded(child: card1), const SizedBox(width: 10),

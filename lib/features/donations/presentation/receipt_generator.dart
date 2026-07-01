@@ -1,5 +1,16 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import '../../../core/utils/native_file_saver.dart';
+
+// Receipt palette (shared by the on-screen sheet + the PDF export).
+const _orange   = Color(0xFFE87722);
+const _orangeLt = Color(0xFFFFF3E8);
+const _grey     = Color(0xFF5A7068);
+const _dark     = Color(0xFF1A2A24);
+const _border   = Color(0xFFE5E7EB);
 
 class DonationReceipt {
   const DonationReceipt({
@@ -76,6 +87,122 @@ ${r.taxExemption ? '✓ 80G Tax Exemption Applicable\n' : ''}══════�
 Thanks for your support!
 ''';
 
+// ── PDF receipt (branded, with logo) ──────────────────────────────────────────
+// Uses "Rs." instead of the ₹ glyph because the default PDF font (Helvetica)
+// can't render the rupee symbol.
+Future<Uint8List> buildReceiptPdf(DonationReceipt r) async {
+  final doc = pw.Document();
+  final logoData = await rootBundle.load('assets/images/sket-logo.png');
+  final logo = pw.MemoryImage(logoData.buffer.asUint8List());
+
+  final orange   = PdfColor.fromInt(0xFFE87722);
+  final orangeLt = PdfColor.fromInt(0xFFFFF3E8);
+  final grey     = PdfColor.fromInt(0xFF5A7068);
+  final dark     = PdfColor.fromInt(0xFF1A2A24);
+  final brd      = PdfColor.fromInt(0xFFE5E7EB);
+  final amtStr   = 'Rs. ${_fmt(r.amount)}.00';
+
+  doc.addPage(pw.Page(
+    pageFormat: PdfPageFormat.a4,
+    margin: const pw.EdgeInsets.all(34),
+    build: (ctx) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+      // Header: logo + org | receipt badge
+      pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+          pw.Image(logo, height: 46),
+          pw.SizedBox(height: 8),
+          pw.Text('Sri Krishnashraya Educational Trust', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: dark)),
+          pw.SizedBox(height: 2),
+          pw.Text('# 88/1, 84/1, 84/5, Sant Baba Hardas Ram Dam,\nThammarasanahalli, Chikka Haralagere, Sulibele,\nBangalore - 562129.',
+              style: pw.TextStyle(fontSize: 8.5, color: grey, lineSpacing: 2)),
+        ])),
+        pw.SizedBox(width: 16),
+        pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+          pw.Container(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: pw.BoxDecoration(color: orange, borderRadius: pw.BorderRadius.circular(6)),
+            child: pw.Text('Receipt #${r.receiptNo}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.white))),
+          pw.SizedBox(height: 6),
+          pw.Text('Date: ${r.date}', style: pw.TextStyle(fontSize: 9, color: grey)),
+          pw.Text('Payment: ${r.paymentMode}', style: pw.TextStyle(fontSize: 9, color: grey)),
+        ]),
+      ]),
+      pw.SizedBox(height: 16),
+      pw.Divider(color: brd, thickness: 1),
+      pw.SizedBox(height: 10),
+      // Donor
+      pw.Text('DONOR', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: grey)),
+      pw.SizedBox(height: 3),
+      pw.Text(r.donorName, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: orange)),
+      if (r.donorCity.isNotEmpty) pw.Text(r.donorCity, style: pw.TextStyle(fontSize: 10, color: grey)),
+      if (r.donorPhone.isNotEmpty) pw.Text(r.donorPhone, style: pw.TextStyle(fontSize: 10, color: grey)),
+      if (r.donorPan.isNotEmpty) pw.Text('PAN: ${r.donorPan}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: orange)),
+      pw.SizedBox(height: 16),
+      // Line-item table
+      pw.Table(border: pw.TableBorder.all(color: brd, width: 0.5), columnWidths: {0: const pw.FlexColumnWidth(3), 1: const pw.FlexColumnWidth(1)}, children: [
+        pw.TableRow(decoration: pw.BoxDecoration(color: orange), children: [
+          _pdfCell('DESCRIPTION', bold: true, color: PdfColors.white),
+          _pdfCell('AMOUNT', bold: true, color: PdfColors.white, align: pw.TextAlign.right),
+        ]),
+        pw.TableRow(children: [
+          _pdfCell('${r.donationType}\nContribution towards trust operational support, community educational aid, and welfare programs.', color: dark),
+          _pdfCell(amtStr, color: dark, align: pw.TextAlign.right),
+        ]),
+      ]),
+      pw.SizedBox(height: 14),
+      // Totals
+      pw.Align(alignment: pw.Alignment.centerRight, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+        _totRowPdf('Subtotal', amtStr, grey),
+        _totRowPdf('Tax (0%)', 'Rs. 0.00', grey),
+        pw.SizedBox(height: 4),
+        _totRowPdf('Total', amtStr, dark, bold: true),
+      ])),
+      pw.SizedBox(height: 14),
+      pw.Container(
+        width: double.infinity,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: pw.BoxDecoration(color: orangeLt, borderRadius: pw.BorderRadius.circular(6)),
+        child: pw.Text(_amountInWords(r.amount), style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: orange))),
+      pw.SizedBox(height: 14),
+      pw.Text('Thanks for your support!', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: dark)),
+      pw.SizedBox(height: 12),
+      pw.Container(
+        width: double.infinity,
+        padding: const pw.EdgeInsets.all(12),
+        decoration: pw.BoxDecoration(color: orangeLt, borderRadius: pw.BorderRadius.circular(6)),
+        child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+          pw.Text('STATUTORY REGISTRATION DETAILS (TAX BENEFITS)', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: orange)),
+          pw.SizedBox(height: 6),
+          pw.Text('Trust PAN: AATTS6672D   |   12AA Registration: ITBA/EXM/S/12AA/2018-19/A/10252   |   80G Certification: ATTS6672DF20221',
+              style: pw.TextStyle(fontSize: 9, color: grey)),
+          if (r.taxExemption) ...[
+            pw.SizedBox(height: 4),
+            pw.Text('80G Tax Exemption Applicable', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: orange)),
+          ],
+          pw.SizedBox(height: 4),
+          pw.Text('This is an electronically generated receipt. No physical signature is required.', style: pw.TextStyle(fontSize: 8.5, color: grey)),
+        ])),
+    ]),
+  ));
+  return doc.save();
+}
+
+pw.Widget _pdfCell(String text, {bool bold = false, PdfColor? color, pw.TextAlign align = pw.TextAlign.left}) =>
+    pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: pw.Text(text, textAlign: align,
+          style: pw.TextStyle(fontSize: 10, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: color)));
+
+pw.Widget _totRowPdf(String label, String value, PdfColor color, {bool bold = false}) =>
+    pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+      child: pw.Row(mainAxisSize: pw.MainAxisSize.min, children: [
+        pw.Text(label, style: pw.TextStyle(fontSize: bold ? 12 : 10, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: color)),
+        pw.SizedBox(width: 30),
+        pw.SizedBox(width: 90, child: pw.Text(value, textAlign: pw.TextAlign.right,
+            style: pw.TextStyle(fontSize: bold ? 12 : 10, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: color))),
+      ]));
+
 // ── Receipt Bottom Sheet ──────────────────────────────────────────────────────
 
 Future<void> showReceiptSheet(BuildContext context, DonationReceipt receipt) async {
@@ -90,13 +217,6 @@ Future<void> showReceiptSheet(BuildContext context, DonationReceipt receipt) asy
 class _ReceiptSheet extends StatelessWidget {
   const _ReceiptSheet({required this.receipt});
   final DonationReceipt receipt;
-
-  // YSKET orange palette
-  static const _orange     = Color(0xFFE87722);
-  static const _orangeLt   = Color(0xFFFFF3E8);
-  static const _grey       = Color(0xFF5A7068);
-  static const _dark       = Color(0xFF1A2A24);
-  static const _border     = Color(0xFFE5E7EB);
 
   @override
   Widget build(BuildContext context) {
@@ -123,20 +243,12 @@ class _ReceiptSheet extends StatelessWidget {
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 // Logo block
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  // Colorful logo icon
-                  Container(
-                    width: 58, height: 58,
-                    decoration: BoxDecoration(
-                      color: _orangeLt,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: _orange.withValues(alpha: 0.3)),
-                    ),
-                    child: const Center(child: Text('SF',
-                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: _orange, letterSpacing: -1))),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text('Saksham Foundation',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _dark)),
+                  // Foundation logo
+                  Image.asset('assets/images/sket-logo.png',
+                      height: 50, fit: BoxFit.contain, alignment: Alignment.centerLeft),
+                  const SizedBox(height: 8),
+                  const Text('Sri Krishnashraya Educational Trust',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: _dark)),
                   const SizedBox(height: 2),
                   const Text('# 88/1, 84/1, 84/5, Sant Baba Hardas Ram Dam,\nThammarasanahalli, Chikka Haralagere,\nSulibele, Bangalore – 562129.',
                       style: TextStyle(fontSize: 9.5, color: _grey, height: 1.5)),
@@ -298,14 +410,25 @@ class _ReceiptSheet extends StatelessWidget {
             child: Row(children: [
               Expanded(child: OutlinedButton.icon(
                 onPressed: () async {
-                  final filename = 'Receipt_${receipt.receiptNo.replaceAll('/', '-')}.txt';
-                  final ok = await NativeFileSaver.saveText(filename, buildReceiptText(receipt));
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(ok ? '✓ Receipt saved' : 'Failed to save'),
-                      backgroundColor: _orange,
-                      behavior: SnackBarBehavior.floating,
-                    ));
+                  try {
+                    final bytes = await buildReceiptPdf(receipt);
+                    final filename = 'Receipt_${receipt.receiptNo.replaceAll('/', '-')}.pdf';
+                    final ok = await NativeFileSaver.saveBytes(filename, bytes, 'application/pdf');
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(ok ? 'Receipt saved as PDF' : 'Failed to save'),
+                        backgroundColor: _orange,
+                        behavior: SnackBarBehavior.floating,
+                      ));
+                    }
+                  } catch (_) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Could not generate PDF'),
+                        backgroundColor: Color(0xFFF2685E),
+                        behavior: SnackBarBehavior.floating,
+                      ));
+                    }
                   }
                 },
                 icon: const Icon(Icons.download_outlined, size: 16),

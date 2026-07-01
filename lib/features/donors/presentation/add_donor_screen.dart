@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:dio/dio.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import 'package:file_picker/file_picker.dart';
@@ -21,6 +23,30 @@ const _donorCategories = [
 ];
 
 const _preferredMethods = ['Call', 'WhatsApp', 'Email'];
+
+void _toast(BuildContext ctx, String msg, {bool error = false}) {
+  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+    content: Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(error ? Icons.error_outline : Icons.check_circle_outline, color: Colors.white, size: 18),
+      const SizedBox(width: 8),
+      Flexible(child: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700))),
+    ]),
+    backgroundColor: error ? _errorColor : _brand600,
+    behavior: SnackBarBehavior.floating,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  ));
+}
+
+String _donorSaveError(Object e) {
+  if (e is DioException) {
+    final code = e.response?.statusCode;
+    final data = e.response?.data;
+    final msg = (data is Map && data['message'] != null) ? data['message'].toString() : null;
+    if (code == 401 || code == 403) return 'Saved locally — log in as admin to sync to server';
+    return msg != null ? 'Not saved to server: $msg' : 'Saved locally (server unavailable)';
+  }
+  return 'Saved locally (server unavailable)';
+}
 
 // ══════════════════════════════════════════════════════════════════════
 class AddDonorScreen extends ConsumerStatefulWidget {
@@ -116,62 +142,74 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
   Future<void> _save() async {
     if (!_form.currentState!.validate()) return;
     setState(() => _saving = true);
-    final donorNum = demoLocalDonors.length + 13;
-    final newId = 'local_${_name.text.trim().hashCode.abs()}';
-    final newDonor = <String, dynamic>{
-      'id':     newId,
-      'donorId': 'SF-D-${donorNum.toString().padLeft(4, '0')}',
+
+    // Only fields the backend CreateDonorDto accepts (others → 400 rejection).
+    final avatarB64 = _photoBytes != null ? base64Encode(_photoBytes!) : null;
+    final payload = <String, dynamic>{
       'name':   _name.text.trim(),
       'mobile': _mobile.text.trim(),
       'gender': _gender == 'Male' ? 'MALE' : 'FEMALE',
-      'whatsapp':   _whatsapp.text.trim(),
-      'email':      _email.text.trim(),
-      'city':       _city.text.trim(),
-      'state':      _state.text.trim(),
-      'pincode':    _pincode.text.trim(),
-      'occupation': _occupation.text.trim(),
-      'company':    _org.text.trim(),
-      'notes':      _notes.text.trim(),
-      'address':    _street.text.trim(),
-      'pan':        _pan.text.trim(),
-      'aadhaar':    _aadhaar.text.trim(),
-      'country':    _country.text.trim(),
-      'tier':       'SILVER',
-      '_count':     {'donations': 0},
-      if (_dob.text.trim().isNotEmpty)   'dob':         _toIso(_dob.text.trim()),
-      if (_anniv.text.trim().isNotEmpty) 'anniversary': _toIso(_anniv.text.trim()),
-      'categories': _category != null
-          ? [{'category': {'name': _category!, 'color': '#0E8C76'}}]
-          : <dynamic>[],
+      'tier':   'SILVER',
+      if (_whatsapp.text.trim().isNotEmpty)   'whatsapp':   _whatsapp.text.trim(),
+      if (_email.text.trim().isNotEmpty)       'email':      _email.text.trim(),
+      if (_city.text.trim().isNotEmpty)        'city':       _city.text.trim(),
+      if (_state.text.trim().isNotEmpty)       'state':      _state.text.trim(),
+      if (_pincode.text.trim().isNotEmpty)     'pincode':    _pincode.text.trim(),
+      if (_occupation.text.trim().isNotEmpty)  'occupation': _occupation.text.trim(),
+      if (_org.text.trim().isNotEmpty)         'company':    _org.text.trim(),
+      if (_notes.text.trim().isNotEmpty)       'notes':      _notes.text.trim(),
+      if (_street.text.trim().isNotEmpty)      'address':    _street.text.trim(),
+      if (_dob.text.trim().isNotEmpty)         'dob':         _toIso(_dob.text.trim()),
+      if (_anniv.text.trim().isNotEmpty)       'anniversary': _toIso(_anniv.text.trim()),
+      if (avatarB64 != null)                   'avatar':     avatarB64,
+      if (_category != null && _categoryNameToId.containsKey(_category))
+        'categoryIds': [_categoryNameToId[_category]!],
     };
-    // Persist locally (survives navigation, cleared on restart)
-    demoLocalDonors.insert(0, newDonor);
-    if (_photoBytes != null) localDonorPhotos[newId] = _photoBytes!;
 
+    String? savedId;
     try {
-      await apiClient.post('/donors', {
-        ...newDonor,
-        if (_category != null && _categoryNameToId.containsKey(_category))
-          'categoryIds': [_categoryNameToId[_category]!],
+      final res = await apiClient.post('/donors', payload);
+      // Non-Super-Admins: queued for approval — don't add locally.
+      if ((res['meta'] as Map?)?['pendingApproval'] == true) {
+        if (mounted) {
+          setState(() => _saving = false);
+          _toast(context, 'Submitted for Super Admin approval');
+          context.go('/donors');
+        }
+        return;
+      }
+      final created = (res['data'] as Map).cast<String, dynamic>();
+      savedId = created['id'] as String?;
+    } catch (e) {
+      // Backend rejected/unreachable — fall back to a local-only donor so the
+      // user isn't blocked, but tell them it wasn't saved to the server.
+      final localId = 'local_${DateTime.now().microsecondsSinceEpoch}';
+      demoLocalDonors.insert(0, {
+        ...payload,
+        'id': localId,
+        '_count': {'donations': 0},
+        'categories': _category != null
+            ? [{'category': {'name': _category!, 'color': '#0E8C76'}}]
+            : <dynamic>[],
       });
-    } catch (_) {
-      // No backend in demo mode — local store is source of truth
+      if (_photoBytes != null) localDonorPhotos[localId] = _photoBytes!;
+      if (mounted) {
+        ref.read(donorRefreshProvider.notifier).state++;
+        setState(() => _saving = false);
+        _toast(context, _donorSaveError(e), error: true);
+        context.go('/donors');
+      }
+      return;
     }
+
+    // Saved to the database. Cache the photo by its real id for instant display.
+    if (savedId != null && _photoBytes != null) localDonorPhotos[savedId] = _photoBytes!;
     if (mounted) {
-      // Increment refresh counter → donorsProvider re-runs and picks up new donor
-      ref.read(donorRefreshProvider.notifier).state++;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
-          SizedBox(width: 8),
-          Text('Donor saved successfully!', style: TextStyle(fontWeight: FontWeight.w700)),
-        ]),
-        backgroundColor: _brand600,
-        behavior: SnackBarBehavior.floating,
-        width: 280,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ));
-      context.go('/donors');
+      ref.read(donorRefreshProvider.notifier).state++; // refetch list from backend
+      setState(() => _saving = false);
+      _toast(context, 'Donor saved successfully!');
+      // Open the new donor so it's clearly created & viewable.
+      context.go(savedId != null ? '/donors/$savedId' : '/donors');
     }
   }
 

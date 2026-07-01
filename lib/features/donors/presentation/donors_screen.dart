@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -38,12 +39,25 @@ class _Donor {
             .toList(),
         categoryColor = (j['categories'] as List<dynamic>? ?? []).isNotEmpty
             ? (j['categories'][0]['category']?['color'] as String?)
-            : null;
+            : null,
+        avatar = j['avatar'] as String?;
 
   final String id, name, mobile, city, tier, gender;
   final int donationCount;
   final List<String> categories;
   final String? categoryColor;
+  final String? avatar;
+
+  // Profile photo bytes: locally-cached image (instant) or the DB avatar.
+  Uint8List? get photoBytes {
+    final local = localDonorPhotos[id];
+    if (local != null) return local;
+    final a = avatar;
+    if (a != null && a.isNotEmpty) {
+      try { return base64Decode(a); } catch (_) {}
+    }
+    return null;
+  }
 
   String get displayCategory =>
       categories.isNotEmpty ? categories.first : _tierLabel(tier);
@@ -123,13 +137,13 @@ final donorsProvider = FutureProvider<List<_Donor>>((ref) async {
   try {
     final res = await apiClient.get('/donors', params: {'limit': '100', 'page': '1'});
     final list = (res['data'] as List<dynamic>? ?? []);
-    if (list.isNotEmpty) {
-      return [
-        ...demoLocalDonors.map(_Donor.fromJson),
-        ...list.map((e) => _Donor.fromJson(e as Map<String, dynamic>)),
-      ];
-    }
+    // Backend is the source of truth even when empty (clean DB = empty list).
+    return [
+      ...demoLocalDonors.map(_Donor.fromJson),
+      ...list.map((e) => _Donor.fromJson(e as Map<String, dynamic>)),
+    ];
   } catch (_) {}
+  // Backend unreachable → demo/mock so the app still works offline.
   return [
     ...demoLocalDonors.map(_Donor.fromJson),
     ...mockDonorData.map(_Donor.fromJson),
@@ -169,6 +183,55 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
 
   @override
   void dispose() { _searchCtrl.dispose(); super.dispose(); }
+
+  Future<void> _confirmDelete(_Donor d) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        icon: const Icon(Icons.delete_outline, color: _coral500, size: 40),
+        title: const Text('Delete donor?', style: TextStyle(fontWeight: FontWeight.w800), textAlign: TextAlign.center),
+        content: Text('Remove ${d.name}? This cannot be undone.', textAlign: TextAlign.center, style: const TextStyle(fontSize: 13.5)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: _coral500, fontWeight: FontWeight.w800))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    // Soft-delete on the server for real (backend) donors first, so a
+    // non-Super-Admin's delete goes to approval instead of vanishing locally.
+    if (!d.id.startsWith('local_')) {
+      try {
+        final res = await apiClient.delete('/donors/${d.id}');
+        if ((res?['meta'] as Map?)?['pendingApproval'] == true) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: const Text('Submitted for Super Admin approval', style: TextStyle(fontWeight: FontWeight.w700)),
+              backgroundColor: const Color(0xFFE0921A), behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ));
+          }
+          return; // don't remove locally — it's only pending
+        }
+      } catch (_) {}
+    }
+
+    // Remove from local stores so the UI updates instantly.
+    demoLocalDonors.removeWhere((m) => m['id'] == d.id);
+    mockDonorData.removeWhere((m) => m['id'] == d.id);
+    localDonorPhotos.remove(d.id);
+    ref.read(donorRefreshProvider.notifier).state++;
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('${d.name} deleted', style: const TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor: _coral500, behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ));
+    }
+  }
 
   List<_Donor> _filtered(List<_Donor> all) {
     return all.where((d) {
@@ -357,7 +420,11 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
                       padding: const EdgeInsets.fromLTRB(18, 0, 18, 100),
                       itemCount: donors.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (ctx, i) => _DonorCard(donor: donors[i], onTap: () => ctx.go('/donors/${donors[i].id}')),
+                      itemBuilder: (ctx, i) => _DonorCard(
+                        donor: donors[i],
+                        onTap: () => ctx.go('/donors/${donors[i].id}'),
+                        onDelete: () => _confirmDelete(donors[i]),
+                      ),
                     ),
               ),
             ]),
@@ -475,13 +542,15 @@ class _ShimmerState extends State<_Shimmer> with SingleTickerProviderStateMixin 
 
 // ── Donor card ────────────────────────────────────────────────────────
 class _DonorCard extends StatelessWidget {
-  const _DonorCard({required this.donor, required this.onTap});
+  const _DonorCard({required this.donor, required this.onTap, this.onDelete});
   final _Donor donor;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
     final color = _avColor(donor.name);
+    final photo = donor.photoBytes;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -495,11 +564,14 @@ class _DonorCard extends StatelessWidget {
         child: Row(children: [
           Container(
             width: 52, height: 52,
+            clipBehavior: Clip.hardEdge,
             decoration: BoxDecoration(
               gradient: LinearGradient(colors: [color, Color.lerp(color, Colors.black, 0.2)!], begin: Alignment.topLeft, end: Alignment.bottomRight),
               shape: BoxShape.circle,
             ),
-            child: Center(child: Text(_initials(donor.name), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18))),
+            child: photo != null
+              ? Image.memory(photo, fit: BoxFit.cover, width: 52, height: 52)
+              : Center(child: Text(_initials(donor.name), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18))),
           ),
           const SizedBox(width: 13),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -524,8 +596,23 @@ class _DonorCard extends StatelessWidget {
               Text('${donor.donationCount} donations', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.textSub)),
             ]),
           ])),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Flexible(child: Text(donor.mobile, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _brand700), overflow: TextOverflow.ellipsis, textAlign: TextAlign.end)),
+          if (onDelete != null)
+            PopupMenuButton<String>(
+              icon: Icon(Icons.more_vert, size: 20, color: context.textHint),
+              padding: EdgeInsets.zero,
+              splashRadius: 18,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              onSelected: (v) { if (v == 'delete') onDelete!.call(); },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'delete', child: Row(children: [
+                  Icon(Icons.delete_outline, size: 18, color: _coral500),
+                  SizedBox(width: 8),
+                  Text('Delete', style: TextStyle(fontWeight: FontWeight.w700)),
+                ])),
+              ],
+            ),
         ]),
       ),
     );

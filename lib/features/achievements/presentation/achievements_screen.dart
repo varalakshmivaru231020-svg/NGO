@@ -21,13 +21,7 @@ class _Ach {
   final bool hasMedia, hasCert;
 }
 
-final _achievements = [
-  _Ach(id:'a1', student:'Imran Qureshi',  title:'Gold Medal – District Athletics',  desc:'Won gold in the 100m sprint at District School Athletics 2026, clocking 11.2 seconds.',     cat:'Sports',    date:'02 Jun 2026', hasMedia:true,  hasCert:true),
-  _Ach(id:'a2', student:'Diya Reddy',     title:'State Science Olympiad – Rank 3',   desc:'Secured 3rd rank across Karnataka in the State-level Science Olympiad, Class 9 category.',  cat:'Academics', date:'28 May 2026', hasMedia:false, hasCert:true),
-  _Ach(id:'a3', student:'Ravi Kumar',     title:'Classical Dance Recital',           desc:'Performed Bharatanatyam at the Rajyotsava Cultural Evening, received standing ovation.',      cat:'Arts',      date:'21 May 2026', hasMedia:true,  hasCert:false),
-  _Ach(id:'a4', student:'Ananya Patil',   title:'Zero Attendance Miss – 12 Months',  desc:'Maintained 100% attendance for an entire academic year, a first in Sulibele centre.',       cat:'Discipline', date:'15 May 2026', hasMedia:false, hasCert:true),
-  _Ach(id:'a5', student:'Rohan Gowda',    title:'SSLC Distinction',                  desc:'Scored 94.6% in SSLC board exams; highest in Medahalli centre history.',                      cat:'Academics', date:'10 May 2026', hasMedia:true,  hasCert:true),
-];
+final _achievements = <_Ach>[];
 
 const _cats = ['All', 'Sports', 'Academics', 'Arts', 'Discipline'];
 

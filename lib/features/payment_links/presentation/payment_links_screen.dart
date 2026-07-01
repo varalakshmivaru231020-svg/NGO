@@ -35,12 +35,18 @@ class _Link {
   final int amount;
 }
 
-const _recentLinks = [
-  _Link(id:'p1', donor:'Rajesh Khanna',  amount:100000, purpose:'Education Fund',   status:'Paid',    via:'WhatsApp', created:'26 May 2026'),
-  _Link(id:'p2', donor:'Meera Iyer',     amount:15000,  purpose:'General Donation', status:'Paid',    via:'SMS',      created:'01 Jun 2026'),
-  _Link(id:'p3', donor:'Kavya Reddy',    amount:11000,  purpose:'Food Drive',       status:'Viewed',  via:'WhatsApp', created:'02 Jun 2026'),
-  _Link(id:'p4', donor:'Arjun Mehta',    amount:50000,  purpose:'Corporate Match',  status:'Sent',    via:'Email',    created:'03 Jun 2026'),
-  _Link(id:'p5', donor:'Deepak Nair',    amount:5000,   purpose:'Ramzan Ration Kit',status:'Expired', via:'SMS',      created:'12 May 2026'),
+// ── Foundation bank account — shown beside the QR on a generated link ──
+const _bankDetails = <(String, String, bool)>[
+  ('Bank Name',          'ICICI BANK',                          false),
+  ('Account Name',       'Sri Krishnashraya Educational Trust', false),
+  ('Account No',         '390405000044',                        true),
+  ('IFSC Code',          'ICIC0003904',                         true),
+  ('Branch',             'Ulsoor Road',                         false),
+  ('UPI / Paytm / GPay', '+91 70199 77341',                     true),
+];
+
+const _recentLinks = <_Link>[
+  // Starts empty — generated links will appear here.
 ];
 
 
@@ -146,31 +152,40 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
                   Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(color: _green100, borderRadius: BorderRadius.circular(10)),
                     child: const Row(children: [Icon(Icons.circle, size: 8, color: _green600), SizedBox(width: 6), Text('Link Active', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: _green600))])),
+                  const Spacer(),
+                  Text('₹${_amountCtrl.text.isEmpty ? "25,000" : NumberFormat("#,##,###","en_IN").format(int.tryParse(_amountCtrl.text) ?? 0)}',
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: _brand700, letterSpacing: -1)),
                 ]),
-                const SizedBox(height: 16),
-                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  // QR
-                  Container(width: 120, height: 120, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border, width: 2)),
-                    child: Padding(padding: const EdgeInsets.all(8), child: CustomPaint(painter: _QRPainter(_generatedUrl), size: const Size(104, 104)))),
+                const SizedBox(height: 4),
+                Text(_purpose, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: _onSurface2)),
+                const SizedBox(height: 12),
+                // ── QR scanner + bank details, side by side ───────────
+                IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Column(children: [
+                    Container(width: 120, height: 120, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border, width: 2)),
+                      child: Padding(padding: const EdgeInsets.all(8), child: CustomPaint(painter: _QRPainter(_generatedUrl), size: const Size(104, 104)))),
+                    const SizedBox(height: 6),
+                    const Text('Scan to pay', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _onSurface3)),
+                  ]),
                   const SizedBox(width: 16),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('₹${_amountCtrl.text.isEmpty ? "25,000" : NumberFormat("#,##,###","en_IN").format(int.tryParse(_amountCtrl.text) ?? 0)}',
-                      style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: _brand700, letterSpacing: -1)),
-                    const SizedBox(height: 4),
-                    Text(_purpose, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: _onSurface2)),
-                    const SizedBox(height: 12),
-                    GestureDetector(
-                      onTap: () { Clipboard.setData(ClipboardData(text: _generatedUrl)); _toast('Link copied!'); },
-                      child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(10), border: Border.all(color: _border)),
-                        child: Row(children: [
-                          Expanded(child: Text(_generatedUrl, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _brand600), overflow: TextOverflow.ellipsis)),
-                          const SizedBox(width: 6),
-                          const Icon(Icons.copy_rounded, size: 15, color: _onSurface3),
-                        ])),
-                    ),
-                  ])),
-                ]),
+                  Expanded(child: _BankDetailsPanel(onCopy: _toast)),
+                ])),
+                const SizedBox(height: 14),
+                // ── Donation link (below QR + details) — tap anywhere to copy ─
+                GestureDetector(
+                  onTap: () { Clipboard.setData(ClipboardData(text: _generatedUrl)); _toast('Link copied!'); },
+                  child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(10), border: Border.all(color: _border)),
+                    child: Row(children: [
+                      const Icon(Icons.link_rounded, size: 16, color: _brand600),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(_generatedUrl, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand600), overflow: TextOverflow.ellipsis)),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.copy_rounded, size: 16, color: _brand600),
+                      const SizedBox(width: 3),
+                      const Text('Copy', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _brand600)),
+                    ])),
+                ),
                 const SizedBox(height: 16),
                 const Divider(height: 1, color: _border),
                 const SizedBox(height: 12),
@@ -192,6 +207,13 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
             // ── Recent links ──────────────────────────────────────
             const Text('Recent Links', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800)),
             const SizedBox(height: 10),
+            if (_recentLinks.isEmpty)
+              _card(child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 26, horizontal: 16),
+                child: Center(child: Text('No payment links yet. Generate one above.',
+                  style: TextStyle(fontSize: 13.5, color: _onSurface2, fontWeight: FontWeight.w500))),
+              ))
+            else
             _card(child: Column(children: _recentLinks.asMap().entries.map((e) {
               final i = e.key; final l = e.value;
               return Container(
@@ -222,6 +244,59 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
       ]),
     );
   }
+}
+
+// ── Bank details panel — sits beside the QR on a generated link ───────
+class _BankDetailsPanel extends StatelessWidget {
+  const _BankDetailsPanel({required this.onCopy});
+  final void Function(String) onCopy;
+
+  // The entire block as one copy-friendly string.
+  String get _allText => _bankDetails.map((r) => '${r.$1}: ${r.$2}').join('\n');
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+    decoration: BoxDecoration(
+      color: _surface2,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: _border),
+    ),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        const Icon(Icons.account_balance_outlined, size: 16, color: _brand600),
+        const SizedBox(width: 6),
+        const Text('Bank Details', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: _onSurface1)),
+        const Spacer(),
+        // Single button — copies ALL the bank details at once.
+        GestureDetector(
+          onTap: () { Clipboard.setData(ClipboardData(text: _allText)); onCopy('Bank details copied'); },
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8)),
+            child: const Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.copy_rounded, size: 13, color: _brand600),
+              SizedBox(width: 4),
+              Text('Copy', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: _brand600)),
+            ]),
+          ),
+        ),
+      ]),
+      const SizedBox(height: 10),
+      ..._bankDetails.map((row) {
+        final (label, value, _) = row;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 9),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: _onSurface3, letterSpacing: 0.2)),
+            const SizedBox(height: 1),
+            Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _onSurface1, height: 1.25)),
+          ]),
+        );
+      }),
+    ]),
+  );
 }
 
 class _ShareBtn extends StatelessWidget {

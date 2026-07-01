@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/api_client.dart';
@@ -32,7 +34,7 @@ class _Student {
   _Student({required this.id, required this.childId, required this.name,
     required this.gender, required this.dobRaw, required this.status,
     required this.classGrade, required this.school,
-    required this.centreName, required this.sponsorName});
+    required this.centreName, required this.sponsorName, this.photo});
 
   factory _Student.fromJson(Map<String, dynamic> j) => _Student(
     id:         j['id']      as String,
@@ -45,9 +47,19 @@ class _Student {
     school:     j['school']  as String? ?? '',
     centreName:  _centreFromJson(j),
     sponsorName: _sponsorFromJson(j),
+    photo:      j['photo']   as String?,
   );
 
   final String id, childId, name, gender, dobRaw, status, classGrade, school, centreName, sponsorName;
+  final String? photo;
+
+  Uint8List? get photoBytes {
+    final p = photo;
+    if (p != null && p.isNotEmpty) {
+      try { return base64Decode(p); } catch (_) {}
+    }
+    return null;
+  }
 
   int get age {
     try {
@@ -89,12 +101,25 @@ Color _statusBg(String s) => switch (s) {
 // Shared in-memory student list — new enrollments are appended here
 final demoLocalStudents = <Map<String, dynamic>>[];
 
+// Raw backend student records from the last list load, so the detail screen can
+// resolve a student opened by its backend id (keeps each profile its own data).
+final loadedStudents = <Map<String, dynamic>>[];
+
 // Shared centres list — admin can add/remove via Manage Centres
 final demoCentres = <({String id, String name})>[
   (id: 'c1', name: 'Sulibele'),
   (id: 'c2', name: 'Yelahanka'),
   (id: 'c3', name: 'Devanahalli'),
 ];
+
+// Look up a single student record by id across newly-added enrollments and the
+// demo dataset. Used by the detail screen so each student opens its OWN data.
+Map<String, dynamic>? findStudentRecord(String id) {
+  for (final s in demoLocalStudents) { if (s['id'] == id) return s; }
+  for (final s in loadedStudents) { if (s['id'] == id) return s; }
+  for (final s in _StudentsScreenState._mockStudents) { if (s['id'] == id) return s; }
+  return null;
+}
 
 // ── avatar helpers ────────────────────────────────────────────────────
 Color _avColor(String seed) {
@@ -160,6 +185,10 @@ class _StudentsScreenState extends State<StudentsScreen> {
 
       final sRes = results[0];
       final sList = (sRes['data'] as List<dynamic>? ?? []);
+      // Cache the raw records so the detail screen resolves the right student.
+      loadedStudents
+        ..clear()
+        ..addAll(sList.map((e) => (e as Map).cast<String, dynamic>()));
       final students = sList.map((e) => _Student.fromJson(e as Map<String, dynamic>)).toList();
 
       final cRes = results[1];
@@ -169,12 +198,25 @@ class _StudentsScreenState extends State<StudentsScreen> {
         return (id: m['id'] as String, name: m['name'] as String);
       }).toList();
 
-      if (students.isNotEmpty && mounted) {
-        setState(() { _all = students; _centres = centres; _loading = false; });
+      // Backend is the source of truth even when empty (so a clean database
+      // shows an empty list, not demo data). Any not-yet-synced local
+      // enrollments show on top.
+      if (mounted) {
+        // Drop any optimistic local record the backend now returns (same id) so
+        // a just-added student doesn't appear twice.
+        final backendIds = students.map((s) => s.id).toSet();
+        final locals = demoLocalStudents
+            .where((m) => !backendIds.contains(m['id']))
+            .map(_Student.fromJson);
+        setState(() {
+          _all = [...locals, ...students];
+          _centres = centres;
+          _loading = false;
+        });
         return;
       }
     } catch (_) {}
-    // Fall back to mock data (new enrollments at top)
+    // Backend unreachable → demo/mock so the app still works offline.
     if (mounted) setState(() {
       _all     = [...demoLocalStudents.map(_Student.fromJson), ..._mockStudents.map(_Student.fromJson)];
       _centres = demoCentres;
@@ -531,11 +573,14 @@ class _ChildCard extends StatelessWidget {
         child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
           Container(
             width: 52, height: 52,
+            clipBehavior: Clip.hardEdge,
             decoration: BoxDecoration(
               gradient: LinearGradient(colors: [color, Color.lerp(color, Colors.black, 0.2)!], begin: Alignment.topLeft, end: Alignment.bottomRight),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Center(child: Text(_initials(student.name), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18))),
+            child: student.photoBytes != null
+              ? Image.memory(student.photoBytes!, fit: BoxFit.cover, width: 52, height: 52)
+              : Center(child: Text(_initials(student.name), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18))),
           ),
           const SizedBox(width: 13),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

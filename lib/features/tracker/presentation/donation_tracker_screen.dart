@@ -51,17 +51,7 @@ const _typeColors = {
   'Corporate Match': _sky500, 'Medical Aid': _coral500, 'Child Sponsorship': Color(0xFFEC5B8B),
 };
 
-const _allDonations = [
-  _DItem(id:'d1', donor:'Meera Iyer',    phone:'+91 98201 11001', category:'General Donation',  donationType:'One-time',   amount:15000,  method:'Payment Link',  receipt:'RCP-2026-0156', date:'Today',       daysBefore:0),
-  _DItem(id:'d2', donor:'Kavya Reddy',   phone:'+91 94501 22002', category:'Food Drive',         donationType:'One-time',   amount:11000,  method:'UPI',           receipt:'RCP-2026-0155', date:'02 Jun 2026', daysBefore:2),
-  _DItem(id:'d3', donor:'Vikram Singh',  phone:'+91 99001 33003', category:'Child Sponsorship',  donationType:'Recurring',  amount:30000,  method:'UPI',           receipt:'RCP-2026-0154', date:'02 Jun 2026', daysBefore:2),
-  _DItem(id:'d4', donor:'Arjun Mehta',   phone:'+91 87901 44004', category:'Corporate Match',    donationType:'Corporate',  amount:50000,  method:'Bank Transfer', receipt:'RCP-2026-0153', date:'01 Jun 2026', daysBefore:3),
-  _DItem(id:'d5', donor:'Rajesh Khanna', phone:'+91 98765 55005', category:'Education Fund',     donationType:'One-time',   amount:100000, method:'Bank Transfer', receipt:'RCP-2026-0149', date:'26 May 2026', daysBefore:9),
-  _DItem(id:'d6', donor:'Priya Sharma',  phone:'+91 91234 66006', category:'Child Sponsorship',  donationType:'Recurring',  amount:18000,  method:'UPI',           receipt:'RCP-2026-0148', date:'25 May 2026', daysBefore:10),
-  _DItem(id:'d7', donor:'Deepak Nair',   phone:'+91 80001 77007', category:'Food Drive',         donationType:'One-time',   amount:5000,   method:'UPI',           receipt:'RCP-2026-0140', date:'12 May 2026', daysBefore:23),
-  _DItem(id:'d8', donor:'Sunita Iyer',   phone:'+91 98451 88008', category:'Medical Aid',        donationType:'One-time',   amount:8500,   method:'Cash',          receipt:'RCP-2026-0130', date:'05 May 2026', daysBefore:30),
-  _DItem(id:'d9', donor:'Kiran Reddy',   phone:'+91 99876 99009', category:'General Donation',   donationType:'Pledge',     amount:2000,   method:'UPI',           receipt:'RCP-2026-0110', date:'10 Apr 2026', daysBefore:55),
-];
+const _allDonations = <_DItem>[];
 
 const _ranges = ['All', 'Today', 'This Week', 'This Month', 'Last Month'];
 

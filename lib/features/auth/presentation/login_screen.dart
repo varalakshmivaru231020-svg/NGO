@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/auth/role_auth.dart';
+import '../../settings/profile_store.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -17,8 +18,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _obscure = true;
   String? _error;
 
-  static const _adminEmail    = 'admin@saksham.org';
-  static const _adminPassword = 'Admin@1234';
+  static const _adminEmail    = 'admin@sket.org';
+  static const _adminPassword = 'Sket@2026';
 
   static const _bg      = Color(0xFF0B6E5D);
   static const _brand   = Color(0xFF0E8C76);
@@ -242,41 +243,83 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
     setState(() { _loading = true; _error = null; });
 
-    // 1. Admin credentials
-    if (name.trim() == _adminEmail && password == _adminPassword) {
+    // 1. Backend login — accounts persist server-side, so they work across
+    //    devices/browsers. Email logins are tried here first.
+    if (name.contains('@')) {
+      try {
+        final response = await apiClient.post('/auth/login', {'email': name, 'password': password});
+        final tokens = (response['data'] as Map).cast<String, dynamic>();
+        await apiClient.saveTokens(tokens['accessToken'] as String, tokens['refreshToken'] as String);
+        final meResp = await apiClient.get('/auth/me');
+        final me = (meResp['data'] as Map).cast<String, dynamic>();
+        final route = _applyBackendUser(me);
+        if (mounted) { setState(() => _loading = false); context.go(route); }
+        return;
+      } catch (_) {
+        // Not a backend account (or backend unreachable) → fall back to local.
+        await apiClient.clearTokens();
+      }
+    }
+
+    // 2. Local admin credentials (offline fallback)
+    if (name == _adminEmail && password == _adminPassword) {
       currentLoggedInRole = null;
       if (mounted) { setState(() => _loading = false); context.go('/dashboard'); }
       return;
     }
 
-    // 2. Role credentials (by name or email, case-insensitive)
+    // 3. Local role accounts (seeded / created offline, by name or email)
     final role = appRoles.where(
-      (r) => (r.name.toLowerCase() == name.trim().toLowerCase() || r.email.toLowerCase() == name.trim().toLowerCase()) && r.password == password,
+      (r) => (r.name.toLowerCase() == name.toLowerCase() || r.email.toLowerCase() == name.toLowerCase()) && r.password == password,
     ).firstOrNull;
-
     if (role != null) {
-      currentLoggedInRole = role;
-      final firstRoute = role.modules.isNotEmpty
-          ? (moduleToRoute[role.modules.first] ?? '/dashboard')
-          : '/dashboard';
+      // An "Admin" role has full access — treat it as a full admin so Settings,
+      // Approvals, etc. stay visible even when signing in offline.
+      final fullAdmin = role.roleName.toLowerCase() == 'admin';
+      currentLoggedInRole = fullAdmin ? null : role;
+      if (fullAdmin) updateProfile(adminProfile.value.copyWith(name: role.name, email: role.email));
+      final firstRoute = fullAdmin
+          ? '/dashboard'
+          : (role.modules.isNotEmpty ? (moduleToRoute[role.modules.first] ?? '/dashboard') : '/dashboard');
       if (mounted) { setState(() => _loading = false); context.go(firstRoute); }
       return;
     }
 
-    // 3. API login
-    try {
-      final response = await apiClient.post('/auth/login', {'email': name, 'password': password});
-      final data = response['data'] as Map<String, dynamic>;
-      await apiClient.saveTokens(data['accessToken'] as String, data['refreshToken'] as String);
-      currentLoggedInRole = null;
-      if (mounted) context.go('/dashboard');
-    } catch (_) {
-      if (mounted) setState(() {
-        _loading = false;
-        _error = 'Invalid credentials. Please try again.';
-      });
-    }
+    // 4. Nothing matched
+    if (mounted) setState(() {
+      _loading = false;
+      _error = 'Invalid credentials. Please try again.';
+    });
   }
+
+  // Maps a backend /auth/me user onto the frontend session and returns the
+  // landing route. Admins get full access; everyone else is restricted to the
+  // modules stored on their account.
+  String _applyBackendUser(Map<String, dynamic> me) {
+    final role  = (me['role'] as String?) ?? 'STAFF';
+    final email = (me['email'] as String?) ?? '';
+    final nm    = (me['name'] as String?);
+    final mName = (nm != null && nm.trim().isNotEmpty) ? nm : email;
+    final csv   = me['modules'] as String?;
+
+    if (role == 'SUPER_ADMIN' || role == 'ADMIN') {
+      currentLoggedInRole = null; // full access
+      updateProfile(adminProfile.value.copyWith(name: mName, email: email));
+      return '/dashboard';
+    }
+    final modules = (csv != null && csv.trim().isNotEmpty)
+        ? csv.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toSet()
+        : _modulesForBackendRole(role);
+    currentLoggedInRole = AppRole(name: mName, email: email, password: '', roleName: role, modules: modules);
+    return modules.isNotEmpty ? (moduleToRoute[modules.first] ?? '/dashboard') : '/dashboard';
+  }
+
+  Set<String> _modulesForBackendRole(String role) => switch (role) {
+    'MANAGER'   => {'donors', 'donations', 'students', 'reports', 'reminders', 'tracker'},
+    'STAFF'     => {'students', 'reports', 'reminders'},
+    'VOLUNTEER' => {'reports'},
+    _           => {'reports'},
+  };
 
   @override
   void dispose() { _nameCtrl.dispose(); _passCtrl.dispose(); super.dispose(); }

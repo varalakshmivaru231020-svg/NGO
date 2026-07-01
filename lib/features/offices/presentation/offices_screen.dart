@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/network/api_client.dart';
 
 const _brand600 = Color(0xFF0E8C76);
 const _brand100 = Color(0xFFD6F3EC);
@@ -12,10 +13,10 @@ const _border = Color(0xFFE5EBE9);
 const _surface2 = Color(0xFFF4F7F6);
 
 class _Office {
-  _Office({required this.id, required this.name, required this.city, required this.students});
+  _Office({required this.id, required this.name, required this.city, required this.members});
   final String id;
   String name, city;
-  int students;
+  int members;
 }
 
 class OfficesScreen extends StatefulWidget {
@@ -25,19 +26,49 @@ class OfficesScreen extends StatefulWidget {
 }
 
 class _OfficesScreenState extends State<OfficesScreen> {
-  final _offices = [
-    _Office(id: 'of1', name: 'Mumbai Head Office',   city: 'Mumbai',    students: 86),
-    _Office(id: 'of2', name: 'Pune Regional Centre', city: 'Pune',      students: 42),
-    _Office(id: 'of3', name: 'Hyderabad Branch',     city: 'Hyderabad', students: 38),
-    _Office(id: 'of4', name: 'Delhi Liaison Office', city: 'New Delhi', students: 12),
-  ];
-
+  final List<_Office> _offices = [];
+  bool _loading = true;
   String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  // Load offices from the backend so add / edit / delete persist and stay in
+  // sync across devices.
+  Future<void> _load() async {
+    if (mounted) setState(() => _loading = true);
+    try {
+      final res = await apiClient.get('/offices');
+      final list = (res['data'] as List?) ?? const [];
+      _offices
+        ..clear()
+        ..addAll(list.map((e) {
+          final m = (e as Map).cast<String, dynamic>();
+          final count = ((m['_count'] as Map?)?['users'] as int?) ?? 0;
+          return _Office(
+            id: m['id'] as String,
+            name: (m['name'] ?? '') as String,
+            city: (m['city'] ?? '') as String,
+            members: count,
+          );
+        }));
+    } catch (_) {
+      // leave the list as-is; the empty state / a toast will inform the user
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  bool _isPending(Map<String, dynamic>? res) =>
+      res != null && (res['meta'] as Map?)?['pendingApproval'] == true;
 
   void _showSheet({_Office? office}) {
     final nameCtrl = TextEditingController(text: office?.name ?? '');
     final cityCtrl = TextEditingController(text: office?.city ?? '');
     final formKey = GlobalKey<FormState>();
+    bool saving = false;
 
     showModalBottomSheet(
       context: context,
@@ -64,40 +95,60 @@ class _OfficesScreenState extends State<OfficesScreen> {
                 ),
             ]),
             const SizedBox(height: 6),
-            const Text('Note: No. of students updates automatically as children are enrolled here.',
+            const Text('Note: No. of members updates automatically as staff are assigned here.',
               style: TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w500, height: 1.4)),
             const SizedBox(height: 18),
             _label('Office Name'),
-            _field(nameCtrl, 'e.g. Chennai Regional Centre', validator: (v) => v!.isEmpty ? 'Required' : null),
+            _field(nameCtrl, 'e.g. Chennai Regional Centre', validator: (v) => v!.trim().isEmpty ? 'Required' : null),
             const SizedBox(height: 14),
             _label('Location / City'),
-            _field(cityCtrl, 'e.g. Chennai', validator: (v) => v!.isEmpty ? 'Required' : null),
+            _field(cityCtrl, 'e.g. Chennai', validator: (v) => v!.trim().isEmpty ? 'Required' : null),
             const SizedBox(height: 22),
             Row(children: [
               Expanded(child: OutlinedButton(
-                onPressed: () => Navigator.pop(ctx),
+                onPressed: saving ? null : () => Navigator.pop(ctx),
                 style: OutlinedButton.styleFrom(foregroundColor: _onSurface2, side: const BorderSide(color: _border, width: 1.5),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: const EdgeInsets.symmetric(vertical: 15)),
                 child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),
               )),
               const SizedBox(width: 12),
               Expanded(flex: 2, child: ElevatedButton(
-                onPressed: () {
+                onPressed: saving ? null : () async {
                   if (!formKey.currentState!.validate()) return;
-                  setState(() {
+                  final name = nameCtrl.text.trim();
+                  final city = cityCtrl.text.trim();
+                  ss(() => saving = true);
+                  try {
                     if (office == null) {
-                      _offices.add(_Office(id: 'of${_offices.length + 1}', name: nameCtrl.text.trim(), city: cityCtrl.text.trim(), students: 0));
+                      final res = await apiClient.post('/offices', {'name': name, 'city': city});
+                      if (_isPending(res)) {
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        _showToast('Submitted for Super Admin approval');
+                        return;
+                      }
+                      final m = (res['data'] as Map).cast<String, dynamic>();
+                      setState(() => _offices.add(_Office(id: m['id'] as String, name: name, city: city, members: 0)));
                     } else {
-                      office.name = nameCtrl.text.trim();
-                      office.city = cityCtrl.text.trim();
+                      final res = await apiClient.put('/offices/${office.id}', {'name': name, 'city': city});
+                      if (_isPending(res)) {
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        _showToast('Submitted for Super Admin approval');
+                        return;
+                      }
+                      setState(() { office.name = name; office.city = city; });
                     }
-                  });
-                  Navigator.pop(ctx);
-                  _showToast(office == null ? 'Office added!' : 'Office updated!');
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    _showToast(office == null ? 'Office added!' : 'Office updated!');
+                  } catch (_) {
+                    ss(() => saving = false);
+                    _showToast('Could not save office. Check your connection.');
+                  }
                 },
                 style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: const EdgeInsets.symmetric(vertical: 15), elevation: 0),
-                child: Text(office == null ? 'Add Office' : 'Save', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                child: saving
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                  : Text(office == null ? 'Add Office' : 'Save', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
               )),
             ]),
           ]),
@@ -109,14 +160,25 @@ class _OfficesScreenState extends State<OfficesScreen> {
   void _confirmDelete(_Office office, VoidCallback onDone) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Delete Office?', style: TextStyle(fontWeight: FontWeight.w800)),
         content: Text('Remove "${office.name}"? This cannot be undone.', style: const TextStyle(color: _onSurface2, fontSize: 14)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: _onSurface2))),
+          TextButton(onPressed: () => Navigator.pop(dctx), child: const Text('Cancel', style: TextStyle(color: _onSurface2))),
           ElevatedButton(
-            onPressed: () { setState(() => _offices.removeWhere((o) => o.id == office.id)); Navigator.pop(context); onDone(); _showToast('Office removed.'); },
+            onPressed: () async {
+              Navigator.pop(dctx);
+              try {
+                final res = await apiClient.delete('/offices/${office.id}');
+                if (_isPending(res)) { onDone(); _showToast('Submitted for Super Admin approval'); return; }
+                setState(() => _offices.removeWhere((o) => o.id == office.id));
+                onDone();
+                _showToast('Office deleted');
+              } catch (_) {
+                _showToast('Could not delete office. Check your connection.');
+              }
+            },
             style: ElevatedButton.styleFrom(backgroundColor: _coral500, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
             child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.w800)),
           ),
@@ -135,7 +197,7 @@ class _OfficesScreenState extends State<OfficesScreen> {
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
-    final totalStudents = _offices.fold(0, (s, o) => s + o.students);
+    final totalMembers = _offices.fold(0, (s, o) => s + o.members);
     final filtered = _offices.where((o) =>
       _searchQuery.isEmpty ||
       o.name.toLowerCase().contains(_searchQuery) ||
@@ -154,7 +216,7 @@ class _OfficesScreenState extends State<OfficesScreen> {
             const SizedBox(width: 10),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Offices', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: context.textPrimary)),
-              Text('${_offices.length} Locations  •  $totalStudents Students Total', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
+              Text('${_offices.length} Locations  •  $totalMembers Members Total', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
             ])),
             GestureDetector(
               onTap: () => _showSheet(),
@@ -192,7 +254,9 @@ class _OfficesScreenState extends State<OfficesScreen> {
           ),
         ),
         // ── Content ───────────────────────────────────────────────
-        if (filtered.isEmpty)
+        if (_loading)
+          const Expanded(child: Center(child: CircularProgressIndicator(color: _brand600)))
+        else if (filtered.isEmpty)
           Expanded(
             child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
               Container(width: 80, height: 80, decoration: const BoxDecoration(color: _brand100, shape: BoxShape.circle),
@@ -201,7 +265,7 @@ class _OfficesScreenState extends State<OfficesScreen> {
               Text(_searchQuery.isEmpty ? 'No Offices Added Yet' : 'No results found',
                 style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Color(0xFF15211E))),
               const SizedBox(height: 6),
-              Text(_searchQuery.isEmpty ? 'Create your first office to start managing students.' : 'Try a different search term.',
+              Text(_searchQuery.isEmpty ? 'Create your first office to start managing your team.' : 'Try a different search term.',
                 style: const TextStyle(fontSize: 13.5, color: _onSurface2, fontWeight: FontWeight.w500)),
               if (_searchQuery.isEmpty) ...[
                 const SizedBox(height: 20),
@@ -221,11 +285,12 @@ class _OfficesScreenState extends State<OfficesScreen> {
             ])),
           )
         else
-          Expanded(child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
-            child: Center(child: ConstrainedBox(
-              constraints: const BoxConstraints(),
+          Expanded(child: RefreshIndicator(
+            onRefresh: _load,
+            color: _brand600,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
               child: Column(children: [
                 ...filtered.map((o) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
@@ -252,7 +317,7 @@ class _OfficesScreenState extends State<OfficesScreen> {
                           child: Row(mainAxisSize: MainAxisSize.min, children: [
                             const Icon(Icons.people_outline, size: 13, color: _brand600),
                             const SizedBox(width: 5),
-                            Text('${o.students} Students', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _brand600)),
+                            Text('${o.members} Members', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _brand600)),
                           ]),
                         ),
                       ])),
@@ -277,7 +342,7 @@ class _OfficesScreenState extends State<OfficesScreen> {
                   ),
                 )),
               ]),
-            )),
+            ),
           )),
       ]),
     );

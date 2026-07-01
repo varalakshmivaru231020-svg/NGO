@@ -22,6 +22,7 @@ import '../../features/achievements/presentation/achievements_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/settings/presentation/settings_sub_screens.dart';
 import '../../features/roles/presentation/roles_screen.dart';
+import '../../features/approvals/presentation/approvals_screen.dart';
 import '../shell/main_shell.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -67,7 +68,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/settings/centres',         builder: (ctx, state) => const ManageCentresScreen()),
           GoRoute(path: '/settings/manage-roles',    builder: (ctx, state) => const ManageRolesScreen()),
           GoRoute(path: '/settings/admin-panel',     builder: (ctx, state) => const AdminPanelScreen()),
+          GoRoute(path: '/centres',         builder: (ctx, state) => const ManageCentresScreen()),
           GoRoute(path: '/roles',           builder: (ctx, state) => const RolesScreen()),
+          GoRoute(path: '/approvals',       builder: (ctx, state) => const ApprovalsScreen()),
           GoRoute(path: '/help',            builder: (ctx, state) => const HelpSupportScreen()),
         ],
       ),
