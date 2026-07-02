@@ -611,7 +611,8 @@ class _TeamMembersState extends State<TeamMembersScreen> {
               decoration: BoxDecoration(color: ctx.surface2, borderRadius: BorderRadius.circular(12)),
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: DropdownButtonHideUnderline(child: DropdownButton<String>(
-                value: selectedRole,
+                value: selectedRole.isEmpty ? null : selectedRole,
+                hint: Text('Create a role first', style: TextStyle(fontSize: 14, color: ctx.textHint, fontWeight: FontWeight.w600)),
                 isExpanded: true,
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 dropdownColor: ctx.cardBg,
@@ -634,6 +635,7 @@ class _TeamMembersState extends State<TeamMembersScreen> {
                 if (password.isEmpty) newErrors['Password'] = 'Password is required';
                 else if (password.length < 8) newErrors['Password'] = 'Min 8 characters';
                 if (newErrors.isNotEmpty) { setSheet(() => errors = newErrors); return; }
+                if (selectedRole.isEmpty) { if (mounted) _snack(context, 'Create a role in Manage Roles first'); return; }
 
                 final modules = modulesForRoleName(selectedRole);
                 final backendRole = selectedRole.toLowerCase() == 'admin' ? 'ADMIN' : 'STAFF';

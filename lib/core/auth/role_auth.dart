@@ -69,7 +69,7 @@ final appRoles = _loadRoles();
 // current build (org logo + admin profile are kept). Bump the version to force
 // another reset.
 const _dataVersionKey = 'saksham_data_version';
-const _currentDataVersion = '2026-07-clean';
+const _currentDataVersion = '2026-07-clean-2';
 bool _migrated = false;
 void _ensureMigrated() {
   if (_migrated) return;
@@ -141,25 +141,8 @@ const _templateKeyToModule = <String, String>{
   'achievements':    'achievements',
 };
 
-List<Map<String, dynamic>> _defaultTemplates() => [
-  {
-    'name': 'Admin', 'desc': 'Full access to all features and settings',
-    'isSystem': true,
-    'perms': <String, dynamic>{
-      'donors':          {'view': true, 'add': true, 'edit': true, 'delete': true},
-      'donations':       {'view': true, 'add': true, 'edit': true, 'delete': true},
-      'students':        {'view': true, 'add': true, 'edit': true, 'delete': true},
-      'offices':         {'view': true, 'add': true, 'edit': true, 'delete': true},
-      'reports':         {'view': true, 'export': true},
-      'reminders':       {'view': true, 'add': true, 'edit': true, 'delete': true},
-      'donationTracker': {'view': true, 'add': true, 'edit': true, 'delete': true},
-      'paymentLinks':    {'view': true, 'add': true, 'edit': true, 'delete': true},
-      'achievements':    {'view': true, 'add': true, 'edit': true, 'delete': true},
-      'settings':        {'access': true},
-    },
-  },
-  // Only the system Admin role ships by default — create the rest in Manage Roles.
-];
+// No default roles — the Super Admin creates every role in Manage Roles.
+List<Map<String, dynamic>> _defaultTemplates() => [];
 
 const _templatesKey = 'saksham_role_templates';
 
