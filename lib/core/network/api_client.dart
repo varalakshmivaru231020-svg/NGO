@@ -3,9 +3,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'ssl_bypass.dart' if (dart.library.io) 'ssl_bypass_io.dart';
 
 class ApiClient {
-  // NOTE: points at the local backend for development/testing. For production,
-  // set this to the deployed API URL (e.g. https://ngo.bestprime.live/api/v1).
-  static const defaultBaseUrl = 'http://localhost:3001/api/v1';
+  // Auto-detects the API URL so the SAME build works everywhere:
+  //  • local dev (localhost / 127.0.0.1)  -> http://localhost:3001/api/v1
+  //  • production (any other host)         -> https://<that host>/api/v1
+  //    (the site reverse-proxies /api to the backend, so it's same-origin).
+  static String get defaultBaseUrl {
+    final host = Uri.base.host;
+    if (host.isEmpty || host == 'localhost' || host == '127.0.0.1') {
+      return 'http://localhost:3001/api/v1';
+    }
+    return '${Uri.base.origin}/api/v1';
+  }
+
   static const serverUrlKey = 'server_url';
   late final Dio _dio;
 

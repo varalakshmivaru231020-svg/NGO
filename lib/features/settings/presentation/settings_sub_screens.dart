@@ -2605,7 +2605,8 @@ class _ManageCentresScreenState extends State<ManageCentresScreen> {
         final m = c as Map<String, dynamic>;
         return (id: m['id'] as String, name: (m['name'] ?? '') as String);
       }).toList();
-      if (mounted && centres.isNotEmpty) {
+      // Backend is the source of truth even when empty (clean DB = no centres).
+      if (mounted) {
         setState(() { demoCentres..clear()..addAll(centres); });
       }
     } catch (_) {/* keep existing list if backend unreachable */}

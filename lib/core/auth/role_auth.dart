@@ -64,7 +64,27 @@ final _seededRoles = <AppRole>[];
 // includes the seeded accounts.
 final appRoles = _loadRoles();
 
+// One-time cleanup: when the app's built-in defaults change, old locally-saved
+// roles/team members from a previous version are cleared so the lists match the
+// current build (org logo + admin profile are kept). Bump the version to force
+// another reset.
+const _dataVersionKey = 'saksham_data_version';
+const _currentDataVersion = '2026-07-clean';
+bool _migrated = false;
+void _ensureMigrated() {
+  if (_migrated) return;
+  _migrated = true;
+  try {
+    if (readKv(_dataVersionKey) != _currentDataVersion) {
+      writeRoleStorage('');          // clear saved team members
+      writeKv(_templatesKey, '');    // clear saved role templates
+      writeKv(_dataVersionKey, _currentDataVersion);
+    }
+  } catch (_) {}
+}
+
 List<AppRole> _loadRoles() {
+  _ensureMigrated();
   List<AppRole> roles;
   try {
     final raw = readRoleStorage();
@@ -146,6 +166,7 @@ const _templatesKey = 'saksham_role_templates';
 final roleTemplates = _loadTemplates();
 
 List<Map<String, dynamic>> _loadTemplates() {
+  _ensureMigrated();
   try {
     final raw = readKv(_templatesKey);
     if (raw != null && raw.isNotEmpty) {

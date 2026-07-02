@@ -105,12 +105,9 @@ final demoLocalStudents = <Map<String, dynamic>>[];
 // resolve a student opened by its backend id (keeps each profile its own data).
 final loadedStudents = <Map<String, dynamic>>[];
 
-// Shared centres list — admin can add/remove via Manage Centres
-final demoCentres = <({String id, String name})>[
-  (id: 'c1', name: 'Sulibele'),
-  (id: 'c2', name: 'Yelahanka'),
-  (id: 'c3', name: 'Devanahalli'),
-];
+// Shared centres list — loaded live from the backend (Manage Centres / Add
+// Student). Starts empty so a clean database shows no demo centres.
+final demoCentres = <({String id, String name})>[];
 
 // Look up a single student record by id across newly-added enrollments and the
 // demo dataset. Used by the detail screen so each student opens its OWN data.
@@ -160,18 +157,8 @@ class _StudentsScreenState extends State<StudentsScreen> {
   @override
   void dispose() { _searchCtrl.dispose(); super.dispose(); }
 
-  static final _mockStudents = <Map<String, dynamic>>[
-    {'id':'s1','childId':'SKT-C-0001','name':'Aarav Kumar',   'gender':'MALE',  'dob':'2013-09-14','status':'ACTIVE',   'class':'Class 6', 'school':'Govt High School, Sulibele',   'center':{'name':'Sulibele'},    'sponsorships':[{'donor':{'name':'Rajesh Khanna'}}]},
-    {'id':'s2','childId':'SKT-C-0002','name':'Sneha Patil',   'gender':'FEMALE','dob':'2014-03-22','status':'ACTIVE',   'class':'Class 5', 'school':'Govt Primary School',          'center':{'name':'Yelahanka'},   'sponsorships':[{'donor':{'name':'Kavitha Rao'}}]},
-    {'id':'s3','childId':'SKT-C-0003','name':'Ravi Shankar',  'gender':'MALE',  'dob':'2011-11-05','status':'ACTIVE',   'class':'Class 8', 'school':'Govt High School',             'center':{'name':'Sulibele'},    'sponsorships':[]},
-    {'id':'s4','childId':'SKT-C-0004','name':'Lakshmi Devi',  'gender':'FEMALE','dob':'2012-07-18','status':'ACTIVE',   'class':'Class 7', 'school':'Govt High School, Yelahanka',  'center':{'name':'Yelahanka'},   'sponsorships':[{'donor':{'name':'Priya Sharma'}}]},
-    {'id':'s5','childId':'SKT-C-0005','name':'Kiran Reddy',   'gender':'MALE',  'dob':'2015-01-30','status':'ACTIVE',   'class':'Class 4', 'school':'Govt Primary School',          'center':{'name':'Devanahalli'},'sponsorships':[]},
-    {'id':'s6','childId':'SKT-C-0006','name':'Pooja Nair',    'gender':'FEMALE','dob':'2010-04-12','status':'GRADUATED','class':'Class 10','school':'Govt High School',             'center':{'name':'Sulibele'},    'sponsorships':[{'donor':{'name':'Suresh Nair'}}]},
-    {'id':'s7','childId':'SKT-C-0007','name':'Ajay Verma',    'gender':'MALE',  'dob':'2013-08-25','status':'ACTIVE',   'class':'Class 6', 'school':'Govt High School',             'center':{'name':'Devanahalli'},'sponsorships':[]},
-    {'id':'s8','childId':'SKT-C-0008','name':'Divya Rao',     'gender':'FEMALE','dob':'2016-12-03','status':'ACTIVE',   'class':'Class 3', 'school':'Govt Primary School',          'center':{'name':'Yelahanka'},   'sponsorships':[]},
-    {'id':'s9','childId':'SKT-C-0009','name':'Mohan Lal',     'gender':'MALE',  'dob':'2012-05-17','status':'ACTIVE',   'class':'Class 7', 'school':'Govt High School',             'center':{'name':'Sulibele'},    'sponsorships':[{'donor':{'name':'Deepak Joshi'}}]},
-    {'id':'s10','childId':'SKT-C-0010','name':'Geetha Kumari','gender':'FEMALE','dob':'2014-09-08','status':'ACTIVE',   'class':'Class 5', 'school':'Govt Primary School',          'center':{'name':'Devanahalli'},'sponsorships':[]},
-  ];
+  // No demo students — the list reflects only real backend data.
+  static final _mockStudents = <Map<String, dynamic>>[];
 
   static const _mockCentres = <({String id, String name})>[];
 

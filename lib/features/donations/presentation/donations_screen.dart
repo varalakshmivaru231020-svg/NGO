@@ -108,17 +108,8 @@ class _DonationsScreenState extends State<DonationsScreen> {
     _load();
   }
 
-  static final _mockData = <Map<String, dynamic>>[
-    {'id':'dn1','donor':{'id':'d2','name':'Priya Sharma'},   'amount':18000,  'type':{'label':'Child Sponsorship'},'paymentMode':'UPI',          'receiptNo':'RCP-2025-001','date':'2025-06-04T10:30:00Z','status':'COMPLETED'},
-    {'id':'dn2','donor':{'id':'d1','name':'Rajesh Khanna'},  'amount':75000,  'type':{'label':'Education Fund'},   'paymentMode':'BANK_TRANSFER','receiptNo':'RCP-2025-002','date':'2025-06-04T09:00:00Z','status':'COMPLETED'},
-    {'id':'dn3','donor':{'id':'d3','name':'Vikram Singh'},   'amount':30000,  'type':{'label':'Healthcare'},       'paymentMode':'UPI',          'receiptNo':'RCP-2025-003','date':'2025-06-03T15:00:00Z','status':'COMPLETED'},
-    {'id':'dn4','donor':{'id':'d5','name':'Arjun Mehta'},    'amount':22000,  'type':{'label':'General Donation'}, 'paymentMode':'PAYMENT_LINK', 'receiptNo':'RCP-2025-004','date':'2025-05-31T11:00:00Z','status':'COMPLETED'},
-    {'id':'dn5','donor':{'id':'d7','name':'Suresh Nair'},    'amount':50000,  'type':{'label':'Education Fund'},   'paymentMode':'CHEQUE',       'receiptNo':'RCP-2025-005','date':'2025-05-28T14:00:00Z','status':'COMPLETED'},
-    {'id':'dn6','donor':{'id':'d8','name':'Kavitha Rao'},    'amount':100000, 'type':{'label':'Child Sponsorship'},'paymentMode':'BANK_TRANSFER','receiptNo':'RCP-2025-006','date':'2025-05-25T10:00:00Z','status':'COMPLETED'},
-    {'id':'dn7','donor':{'id':'d4','name':'Sunita Patel'},   'amount':15000,  'type':{'label':'Food & Nutrition'},  'paymentMode':'UPI',          'receiptNo':'RCP-2025-007','date':'2025-05-20T09:30:00Z','status':'COMPLETED'},
-    {'id':'dn8','donor':{'id':'d6','name':'Anita Desai'},    'amount':45000,  'type':{'label':'Education Fund'},   'paymentMode':'UPI',          'receiptNo':'RCP-2025-008','date':'2025-05-15T12:00:00Z','status':'COMPLETED'},
-    {'id':'dn9','donor':{'id':'d11','name':'Deepak Joshi'},  'amount':25000,  'type':{'label':'Child Sponsorship'},'paymentMode':'BANK_TRANSFER','receiptNo':'RCP-2025-009','date':'2025-05-10T10:00:00Z','status':'COMPLETED'},
-  ];
+  // No demo donations — the list reflects only real backend data.
+  static final _mockData = <Map<String, dynamic>>[];
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });

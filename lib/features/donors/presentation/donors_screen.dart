@@ -116,20 +116,8 @@ final localDonorPhotos = <String, Uint8List>{};
 final donorRefreshProvider = StateProvider<int>((ref) => 0);
 
 // ── Mock data (used when API is unreachable) ──────────────────────────
-final mockDonorData = <Map<String, dynamic>>[
-  {'id': 'd1', 'name': 'Rajesh Khanna',  'mobile': '+91 98765 43210', 'city': 'Mumbai',    'tier': 'GOLD',     'gender': 'MALE',   '_count': {'donations': 8},  'categories': [{'category': {'name': 'Child Sponsor', 'color': '#0E8C76'}}]},
-  {'id': 'd2', 'name': 'Priya Sharma',   'mobile': '+91 98451 23456', 'city': 'Delhi',     'tier': 'PLATINUM', 'gender': 'FEMALE', '_count': {'donations': 15}, 'categories': [{'category': {'name': 'Education',    'color': '#7C6CF0'}}]},
-  {'id': 'd3', 'name': 'Vikram Singh',   'mobile': '+91 97123 45678', 'city': 'Bengaluru', 'tier': 'SILVER',   'gender': 'MALE',   '_count': {'donations': 3},  'categories': []},
-  {'id': 'd4', 'name': 'Sunita Patel',   'mobile': '+91 99887 76543', 'city': 'Ahmedabad', 'tier': 'GOLD',     'gender': 'FEMALE', '_count': {'donations': 6},  'categories': [{'category': {'name': 'Healthcare',   'color': '#F2685E'}}]},
-  {'id': 'd5', 'name': 'Arjun Mehta',    'mobile': '+91 80001 23456', 'city': 'Pune',      'tier': 'BRONZE',   'gender': 'MALE',   '_count': {'donations': 2},  'categories': []},
-  {'id': 'd6', 'name': 'Anita Desai',    'mobile': '+91 99011 22334', 'city': 'Hyderabad', 'tier': 'SILVER',   'gender': 'FEMALE', '_count': {'donations': 4},  'categories': [{'category': {'name': 'Education',    'color': '#7C6CF0'}}]},
-  {'id': 'd7', 'name': 'Suresh Nair',    'mobile': '+91 94432 11223', 'city': 'Chennai',   'tier': 'GOLD',     'gender': 'MALE',   '_count': {'donations': 9},  'categories': [{'category': {'name': 'Child Sponsor', 'color': '#0E8C76'}}]},
-  {'id': 'd8', 'name': 'Kavitha Rao',    'mobile': '+91 90012 34567', 'city': 'Bengaluru', 'tier': 'PLATINUM', 'gender': 'FEMALE', '_count': {'donations': 20}, 'categories': [{'category': {'name': 'Education',    'color': '#7C6CF0'}}]},
-  {'id': 'd9', 'name': 'Ramesh Kumar',   'mobile': '+91 76543 21098', 'city': 'Kolkata',   'tier': 'BRONZE',   'gender': 'MALE',   '_count': {'donations': 1},  'categories': []},
-  {'id': 'd10','name': 'Meena Iyer',     'mobile': '+91 96541 23789', 'city': 'Chennai',   'tier': 'SILVER',   'gender': 'FEMALE', '_count': {'donations': 5},  'categories': [{'category': {'name': 'Healthcare',   'color': '#F2685E'}}]},
-  {'id': 'd11','name': 'Deepak Joshi',   'mobile': '+91 91234 56789', 'city': 'Jaipur',    'tier': 'GOLD',     'gender': 'MALE',   '_count': {'donations': 7},  'categories': [{'category': {'name': 'Child Sponsor', 'color': '#0E8C76'}}]},
-  {'id': 'd12','name': 'Rekha Gupta',    'mobile': '+91 88876 54321', 'city': 'Lucknow',   'tier': 'SILVER',   'gender': 'FEMALE', '_count': {'donations': 3},  'categories': []},
-];
+// No demo donors — the list reflects only real backend data.
+final mockDonorData = <Map<String, dynamic>>[];
 
 // ── Provider ──────────────────────────────────────────────────────────
 final donorsProvider = FutureProvider<List<_Donor>>((ref) async {
