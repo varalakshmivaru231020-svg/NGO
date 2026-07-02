@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/auth/role_auth.dart';
+import '../../../core/auth/session.dart';
 import '../../settings/profile_store.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -252,7 +253,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         await apiClient.saveTokens(tokens['accessToken'] as String, tokens['refreshToken'] as String);
         final meResp = await apiClient.get('/auth/me');
         final me = (meResp['data'] as Map).cast<String, dynamic>();
-        final route = _applyBackendUser(me);
+        final route = applyBackendUser(me);
         if (mounted) { setState(() => _loading = false); context.go(route); }
         return;
       } catch (_) {
@@ -264,6 +265,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     // 2. Local admin credentials (offline fallback)
     if (name == _adminEmail && password == _adminPassword) {
       currentLoggedInRole = null;
+      isLoggedIn = true;
       if (mounted) { setState(() => _loading = false); context.go('/dashboard'); }
       return;
     }
@@ -277,6 +279,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // Approvals, etc. stay visible even when signing in offline.
       final fullAdmin = role.roleName.toLowerCase() == 'admin';
       currentLoggedInRole = fullAdmin ? null : role;
+      isLoggedIn = true;
       if (fullAdmin) updateProfile(adminProfile.value.copyWith(name: role.name, email: role.email));
       final firstRoute = fullAdmin
           ? '/dashboard'
@@ -292,34 +295,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
   }
 
-  // Maps a backend /auth/me user onto the frontend session and returns the
-  // landing route. Admins get full access; everyone else is restricted to the
-  // modules stored on their account.
-  String _applyBackendUser(Map<String, dynamic> me) {
-    final role  = (me['role'] as String?) ?? 'STAFF';
-    final email = (me['email'] as String?) ?? '';
-    final nm    = (me['name'] as String?);
-    final mName = (nm != null && nm.trim().isNotEmpty) ? nm : email;
-    final csv   = me['modules'] as String?;
-
-    if (role == 'SUPER_ADMIN' || role == 'ADMIN') {
-      currentLoggedInRole = null; // full access
-      updateProfile(adminProfile.value.copyWith(name: mName, email: email));
-      return '/dashboard';
-    }
-    final modules = (csv != null && csv.trim().isNotEmpty)
-        ? csv.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toSet()
-        : _modulesForBackendRole(role);
-    currentLoggedInRole = AppRole(name: mName, email: email, password: '', roleName: role, modules: modules);
-    return modules.isNotEmpty ? (moduleToRoute[modules.first] ?? '/dashboard') : '/dashboard';
-  }
-
-  Set<String> _modulesForBackendRole(String role) => switch (role) {
-    'MANAGER'   => {'donors', 'donations', 'students', 'reports', 'reminders', 'tracker'},
-    'STAFF'     => {'students', 'reports', 'reminders'},
-    'VOLUNTEER' => {'reports'},
-    _           => {'reports'},
-  };
+  // (session mapping now lives in core/auth/session.dart -> applyBackendUser)
 
   @override
   void dispose() { _nameCtrl.dispose(); _passCtrl.dispose(); super.dispose(); }

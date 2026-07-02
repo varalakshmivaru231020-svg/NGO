@@ -30,8 +30,9 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
-# Allow web build for deployment
+# Ignore build/ EXCEPT the web bundle (deployed to the server, needs all assets).
+# Use /build/* (not /build/) so build/web/** can be re-included.
+/build/*
 !/build/web/
 /coverage/
 

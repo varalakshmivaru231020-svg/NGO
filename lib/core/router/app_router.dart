@@ -23,11 +23,19 @@ import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/settings/presentation/settings_sub_screens.dart';
 import '../../features/roles/presentation/roles_screen.dart';
 import '../../features/approvals/presentation/approvals_screen.dart';
+import '../auth/session.dart';
 import '../shell/main_shell.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/login',
+    // Signed-out users can only see the login screen — never an admin view.
+    redirect: (ctx, state) {
+      final onLogin = state.matchedLocation == '/login';
+      if (!isLoggedIn && !onLogin) return '/login';
+      if (isLoggedIn && onLogin) return '/dashboard';
+      return null;
+    },
     routes: [
       GoRoute(path: '/login', builder: (ctx, state) => const LoginScreen()),
       ShellRoute(

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../main.dart' show themeModeProvider;
 import '../../../core/theme/app_theme.dart';
 import '../../../core/auth/role_auth.dart';
+import '../../../core/auth/session.dart';
 import '../profile_store.dart';
 import '../org_store.dart';
 
@@ -286,7 +287,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
       ]),
       const SizedBox(height: 20),
       GestureDetector(
-        onTap: () => context.go('/login'),
+        onTap: () async { await logoutSession(); if (context.mounted) context.go('/login'); },
         child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(color: _coral100, borderRadius: BorderRadius.circular(18),
             border: Border.all(color: _coral500.withValues(alpha: 0.3))),
@@ -432,7 +433,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
             ]),
             const SizedBox(height: 24),
             GestureDetector(
-              onTap: () => context.go('/login'),
+              onTap: () async { await logoutSession(); if (context.mounted) context.go('/login'); },
               child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
                 decoration: BoxDecoration(color: _coral100, borderRadius: BorderRadius.circular(18),
                   border: Border.all(color: _coral500.withValues(alpha: 0.3))),

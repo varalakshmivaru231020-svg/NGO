@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/auth/session.dart';
 import '../../notifications/notification_store.dart';
 import '../../settings/profile_store.dart';
 
@@ -155,7 +156,7 @@ class _MoreScreenState extends State<MoreScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18),
             child: GestureDetector(
-              onTap: () => context.go('/login'),
+              onTap: () async { await logoutSession(); if (context.mounted) context.go('/login'); },
               child: Container(
                 width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
                 decoration: BoxDecoration(color: const Color(0xFFFFE3DF), borderRadius: BorderRadius.circular(18), border: Border.all(color: _coral500.withValues(alpha: 0.3))),
