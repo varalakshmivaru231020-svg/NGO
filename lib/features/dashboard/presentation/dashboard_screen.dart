@@ -136,7 +136,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Future<void> _loadCounts() async {
     Future<int?> count(String path) async {
       try {
-        final r = await apiClient.get(path, params: {'limit': '1000', 'page': '1'});
+        // Backend caps limit at 100; use the server's reported total for an
+        // accurate count regardless of page size.
+        final r = await apiClient.get(path, params: {'limit': '100', 'page': '1'});
+        final meta = r['meta'];
+        if (meta is Map && meta['total'] is int) return meta['total'] as int;
         final inner = r['data'];
         final list = inner is List ? inner : (inner is Map ? (inner['data'] as List? ?? const []) : const []);
         return list.length;
@@ -156,7 +160,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     int totalAmt = 0;
 
     try {
-      final r = await apiClient.get('/donations', params: {'limit': '1000', 'page': '1'});
+      final r = await apiClient.get('/donations', params: {'limit': '100', 'page': '1'});
       final inner = r['data'];
       final list = inner is List ? inner : (inner is Map ? (inner['data'] as List? ?? const []) : const []);
       
