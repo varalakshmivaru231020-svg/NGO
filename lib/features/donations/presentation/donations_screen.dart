@@ -125,16 +125,19 @@ class _DonationsScreenState extends State<DonationsScreen> {
         list = [];
       }
       // Backend is the source of truth even when empty (clean DB = empty list).
-      setState(() {
-        final apiDonations = list.map((j) => _Donation.fromApi(j as Map<String, dynamic>)).toList();
-        final localDonations = demoLocalDonations.map(_Donation.fromApi).toList();
-
-        final seenReceipts = apiDonations.map((d) => d.receipt.toLowerCase().trim()).toSet();
-        final uniqueLocal = localDonations.where((d) => !seenReceipts.contains(d.receipt.toLowerCase().trim())).toList();
-
-        _donations = [...uniqueLocal, ...apiDonations];
-        _loading = false;
-      });
+      final apiDonations = list.map((j) => _Donation.fromApi(j as Map<String, dynamic>)).toList();
+      // The logged-in user's own submissions awaiting approval — shown at the
+      // top with a "Pending Approval" badge (excluded from the totals).
+      final pending = await _loadMyPending();
+      final localDonations = demoLocalDonations.map(_Donation.fromApi).toList();
+      final seenReceipts = apiDonations.map((d) => d.receipt.toLowerCase().trim()).toSet();
+      final uniqueLocal = localDonations.where((d) => !seenReceipts.contains(d.receipt.toLowerCase().trim())).toList();
+      if (mounted) {
+        setState(() {
+          _donations = [...pending, ...uniqueLocal, ...apiDonations];
+          _loading = false;
+        });
+      }
       return;
     } catch (_) {}
     // Backend unreachable → demo/mock so the app still works offline.
@@ -150,14 +153,85 @@ class _DonationsScreenState extends State<DonationsScreen> {
     });
   }
 
+  /// The current user's own submissions awaiting Super-Admin approval.
+  /// Backend-driven (`GET /approvals/mine`) so they survive reloads and vanish
+  /// once approved/rejected. Rendered with a "Pending Approval" status and
+  /// excluded from the collected totals.
+  Future<List<_Donation>> _loadMyPending() async {
+    try {
+      final r = await apiClient.get('/approvals/mine');
+      final inner = r['data'];
+      final reqs = inner is List
+          ? inner
+          : (inner is Map ? (inner['data'] as List<dynamic>? ?? const []) : const []);
+      final donationReqs = reqs.whereType<Map<String, dynamic>>().where((q) =>
+          (q['module'] as String?)?.toLowerCase() == 'donations' &&
+          (q['action'] as String?)?.toUpperCase() == 'CREATE' &&
+          (q['status'] as String?)?.toUpperCase() == 'PENDING').toList();
+      if (donationReqs.isEmpty) return const [];
+
+      // The stored payload only has donorId/typeId (extra fields are stripped by
+      // the DTO) — resolve them to display names/labels.
+      final donorNames = <String, String>{};
+      final typeLabels = <String, String>{};
+      try {
+        final dr = await apiClient.get('/donors', params: {'limit': '100', 'page': '1'});
+        final di = dr['data'];
+        final dl = di is Map ? (di['data'] as List<dynamic>? ?? const []) : (di is List ? di : const []);
+        for (final d in dl.whereType<Map<String, dynamic>>()) {
+          donorNames[d['id'] as String? ?? ''] = d['name'] as String? ?? 'Unknown';
+        }
+      } catch (_) {}
+      try {
+        final tr = await apiClient.get('/donations/types');
+        final ti = tr['data'];
+        final tl = ti is Map ? (ti['data'] as List<dynamic>? ?? const []) : (ti is List ? ti : const []);
+        for (final t in tl.whereType<Map<String, dynamic>>()) {
+          typeLabels[t['id'] as String? ?? ''] = t['label'] as String? ?? '';
+        }
+      } catch (_) {}
+
+      const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return donationReqs.map((q) {
+        final payload = (q['payload'] as Map?)?.cast<String, dynamic>() ?? const {};
+        final donorId = payload['donorId'] as String? ?? '';
+        final typeId  = payload['typeId'] as String? ?? '';
+        final rawMode = payload['paymentMode'] as String? ?? 'CASH';
+        String date = '';
+        try {
+          final dt = DateTime.parse(q['createdAt'] as String? ?? '').toLocal();
+          date = '${dt.day.toString().padLeft(2,'0')} ${m[dt.month-1]} ${dt.year}';
+        } catch (_) {}
+        return _Donation(
+          id:      'pending-${q['id']}',
+          donorId: donorId,
+          name:    donorNames[donorId] ?? 'Unknown',
+          amount:  (payload['amount'] as num?)?.toInt() ?? 0,
+          type:    typeLabels[typeId] ?? 'General Donation',
+          method:  _modeLabels[rawMode] ?? rawMode,
+          receipt: '',
+          date:    date,
+          status:  'Pending Approval',
+          attach:  0,
+        );
+      }).toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
   List<String> get _types => ['All', ..._typeInfo.keys];
 
   List<_Donation> get _filtered =>
     _filter == 'All' ? _donations : _donations.where((d) => d.type == _filter).toList();
 
-  int get _monthTotal => _donations.fold(0, (s, d) => s + d.amount);
-  int get _uniqueDonors => _donations.map((d) => d.donorId).toSet().length;
-  int get _avgGift => _donations.isEmpty ? 0 : _monthTotal ~/ _donations.length;
+  // Real (recorded) donations only — pending-approval submissions are shown in
+  // the list but excluded from the collected totals.
+  List<_Donation> get _real => _donations.where((d) => d.status != 'Pending Approval').toList();
+
+  int get _monthTotal => _real.fold(0, (s, d) => s + d.amount);
+  int get _uniqueDonors => _real.map((d) => d.donorId).toSet().length;
+  int get _avgGift => _real.isEmpty ? 0 : _monthTotal ~/ _real.length;
 
   @override
   Widget build(BuildContext context) {
@@ -170,7 +244,7 @@ class _DonationsScreenState extends State<DonationsScreen> {
             Row(children: [
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text('Donations', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
-                Text('${_donations.length} donations', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
+                Text('${_real.length} donations', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
               ])),
               GestureDetector(
                 onTap: () => context.go('/donations/new'),
@@ -205,7 +279,7 @@ class _DonationsScreenState extends State<DonationsScreen> {
                 Align(alignment: Alignment.centerLeft, child: Text(_inr(_monthTotal), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.8))),
                 const SizedBox(height: 14),
                 Row(children: [
-                  Expanded(child: _SumStat('Donations', '${_donations.length}')),
+                  Expanded(child: _SumStat('Donations', '${_real.length}')),
                   Container(width: 1, height: 34, color: Colors.white24),
                   Expanded(child: _SumStat('Avg Gift', _inrC(_avgGift))),
                   Container(width: 1, height: 34, color: Colors.white24),
@@ -336,35 +410,39 @@ class _DonationCard extends StatelessWidget {
             return Row(children: [
             if (!narrow) Expanded(child: Text(d.receipt, style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w600, letterSpacing: 0.2), overflow: TextOverflow.ellipsis)),
             if (!narrow) const SizedBox(width: 6),
-            // View Invoice button
-            GestureDetector(
-              onTap: () => showReceiptSheet(context, DonationReceipt(
-                receiptNo:    d.receipt,
-                donorName:    d.name,
-                donorPhone:   '',
-                donorCity:    '',
-                donorPan:     '',
-                donationType: d.type,
-                amount:       d.amount,
-                paymentMode:  d.method,
-                date:         d.date,
-                taxExemption: true,
-              )),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _brand100,
-                  borderRadius: BorderRadius.circular(7),
-                  border: Border.all(color: _brand600.withValues(alpha: 0.25)),
+            // View Invoice button — only for recorded donations (a pending
+            // submission has no receipt/invoice until it's approved).
+            if (d.status == 'Received') ...[
+              GestureDetector(
+                onTap: () => showReceiptSheet(context, DonationReceipt(
+                  receiptNo:    d.receipt,
+                  donorName:    d.name,
+                  donorPhone:   '',
+                  donorCity:    '',
+                  donorPan:     '',
+                  donationType: d.type,
+                  amount:       d.amount,
+                  paymentMode:  d.method,
+                  date:         d.date,
+                  taxExemption: true,
+                )),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _brand100,
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(color: _brand600.withValues(alpha: 0.25)),
+                  ),
+                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.receipt_long_outlined, size: 11, color: _brand600),
+                    SizedBox(width: 4),
+                    Text('Invoice', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: _brand600)),
+                  ]),
                 ),
-                child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.receipt_long_outlined, size: 11, color: _brand600),
-                  SizedBox(width: 4),
-                  Text('Invoice', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: _brand600)),
-                ]),
               ),
-            ),
-            const SizedBox(width: 6),
+              const SizedBox(width: 6),
+            ] else
+              const Spacer(),
             Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
               decoration: BoxDecoration(color: d.status == 'Received' ? _green100 : _amber100.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(7)),
               child: Row(mainAxisSize: MainAxisSize.min, children: [

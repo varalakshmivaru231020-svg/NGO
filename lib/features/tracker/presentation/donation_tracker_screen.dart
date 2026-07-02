@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:excel/excel.dart' as xl;
 import '../../../core/utils/app_launcher.dart';
 import '../../../core/utils/native_file_saver.dart';
+import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 
 const _brand700 = Color(0xFF0B6E5D);
@@ -51,7 +52,10 @@ const _typeColors = {
   'Corporate Match': _sky500, 'Medical Aid': _coral500, 'Child Sponsorship': Color(0xFFEC5B8B),
 };
 
-const _allDonations = <_DItem>[];
+const _modeLabels = {
+  'CASH': 'Cash', 'UPI': 'UPI', 'CARD': 'Card', 'NET_BANKING': 'Net Banking',
+  'CHEQUE': 'Cheque', 'BANK_TRANSFER': 'Bank Transfer', 'DD': 'Demand Draft',
+};
 
 const _ranges = ['All', 'Today', 'This Week', 'This Month', 'Last Month'];
 
@@ -66,11 +70,55 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
   String _range = 'All';
   String _typeFilter = 'All';
 
+  List<_DItem> _all = [];
+  bool _loading = true;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    if (mounted) setState(() => _loading = true);
+    try {
+      final r = await apiClient.get('/donations', params: {'limit': '100', 'page': '1'});
+      final inner = r['data'];
+      final list = inner is Map
+          ? (inner['data'] as List<dynamic>? ?? const [])
+          : (inner is List ? inner : const []);
+      final now = DateTime.now();
+      const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      final items = <_DItem>[];
+      for (final e in list.whereType<Map<String, dynamic>>()) {
+        final donor = (e['donor'] as Map?)?.cast<String, dynamic>() ?? const {};
+        final type  = (e['type']  as Map?)?.cast<String, dynamic>() ?? const {};
+        final rawDate = e['date'] as String? ?? '';
+        DateTime? dt;
+        try { dt = DateTime.parse(rawDate).toLocal(); } catch (_) {}
+        final label = type['label'] as String? ?? 'General Donation';
+        final mode  = e['paymentMode'] as String? ?? 'CASH';
+        items.add(_DItem(
+          id:           e['id'] as String? ?? '',
+          donor:        donor['name']   as String? ?? 'Unknown',
+          phone:        donor['mobile'] as String? ?? '',
+          category:     label,
+          donationType: label,
+          amount:       (e['amount'] as num?)?.toInt() ?? 0,
+          method:       _modeLabels[mode] ?? mode,
+          receipt:      e['receiptNo'] as String? ?? '',
+          date:         dt != null ? '${dt.day.toString().padLeft(2,'0')} ${m[dt.month-1]} ${dt.year}' : rawDate,
+          daysBefore:   dt != null ? now.difference(dt).inDays : 0,
+        ));
+      }
+      if (mounted) setState(() { _all = items; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() { _all = []; _loading = false; });
+    }
+  }
+
   List<_DItem> get _filtered {
     const maxDays = {'All': 9999, 'Today': 0, 'This Week': 7, 'This Month': 30, 'Last Month': 60};
     final max = maxDays[_range] ?? 9999;
     final min = _range == 'Last Month' ? 31 : 0;
-    var list = _allDonations.where((d) => d.daysBefore >= min && d.daysBefore <= max).toList();
+    var list = _all.where((d) => d.daysBefore >= min && d.daysBefore <= max).toList();
     if (_typeFilter != 'All') list = list.where((d) => d.category == _typeFilter).toList();
     return list;
   }
@@ -90,7 +138,7 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
     return _RangeSummary(total: total, count: items.length, donors: donors, avg: avg);
   }
 
-  Set<String> get _types => {'All', ..._allDonations.map((d) => d.category)};
+  Set<String> get _types => {'All', ..._all.map((d) => d.category)};
 
   @override
   Widget build(BuildContext context) {
@@ -212,7 +260,9 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
             const SizedBox(height: 16),
 
             // grouped list
-            if (items.isEmpty)
+            if (_loading)
+              const Padding(padding: EdgeInsets.all(48), child: Center(child: CircularProgressIndicator(color: _brand600)))
+            else if (items.isEmpty)
               Padding(padding: const EdgeInsets.all(40), child: Center(child: Column(children: [
                 Icon(Icons.receipt_long_outlined, size: 48, color: context.textHint),
                 const SizedBox(height: 12),

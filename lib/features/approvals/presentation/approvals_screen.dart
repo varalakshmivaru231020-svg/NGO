@@ -35,6 +35,12 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
   String _moduleFilter = 'All';
   final Set<String> _selected = {};
 
+  // Lookups so the ids stored in a request payload (donorId, typeId, centerId)
+  // render as human-readable names in the diff view and the card subject.
+  Map<String, String> _donorNames = {};
+  Map<String, String> _typeLabels = {};
+  Map<String, String> _centreNames = {};
+
   static const _statuses = ['PENDING', 'APPROVED', 'REJECTED'];
 
   @override
@@ -61,10 +67,44 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
         'approved': (sd['approved'] as int?) ?? 0,
         'rejected': (sd['rejected'] as int?) ?? 0,
       };
+      await _loadLookups();
     } catch (_) {
       // leave existing data; a toast on actions will surface errors
     }
     if (mounted) setState(() => _loading = false);
+  }
+
+  // Best-effort id → name maps used to humanise donation/student payloads.
+  Future<void> _loadLookups() async {
+    Future<List<Map<String, dynamic>>> fetch(String path, [Map<String, String>? params]) async {
+      try {
+        final r = await apiClient.get(path, params: params);
+        final inner = r['data'];
+        final l = inner is Map
+            ? (inner['data'] as List<dynamic>? ?? const [])
+            : (inner is List ? inner : const []);
+        return l.whereType<Map<String, dynamic>>().toList();
+      } catch (_) { return const []; }
+    }
+    final donors  = await fetch('/donors', {'limit': '100', 'page': '1'});
+    final types   = await fetch('/donations/types');
+    final centres = await fetch('/students/centers');
+    _donorNames  = {for (final d in donors)  (d['id'] as String? ?? ''): (d['name'] as String? ?? '')};
+    _typeLabels  = {for (final t in types)   (t['id'] as String? ?? ''): (t['label'] as String? ?? '')};
+    _centreNames = {for (final c in centres) (c['id'] as String? ?? ''): (c['name'] as String? ?? '')};
+  }
+
+  // Resolve an id-bearing field to its display name (falls back to the raw value).
+  String _resolveField(String key, dynamic raw) {
+    final v = _fmt(raw);
+    if (v.isEmpty) return v;
+    switch (key) {
+      case 'donorId':  return _donorNames[v] ?? v;
+      case 'typeId':   return _typeLabels[v] ?? v;
+      case 'centerId':
+      case 'centreId': return _centreNames[v] ?? v;
+      default:         return v;
+    }
   }
 
   List<Map<String, dynamic>> _forStatus(String status) {
@@ -173,8 +213,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
       ..removeWhere((k) => _hiddenKeys.contains(k) || k.startsWith('_'));
     final rows = <Widget>[];
     for (final k in keys) {
-      final oldV = _fmt(prev[k]);
-      final newV = _fmt(payload[k]);
+      final oldV = _resolveField(k, prev[k]);
+      final newV = _resolveField(k, payload[k]);
       if (action == 'DELETE') {
         if (oldV.isEmpty) continue;
         rows.add(_diffRow(k, oldV, '(removed)', _coral500));
@@ -218,7 +258,12 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
     ]),
   );
 
+  static const _labelOverrides = {
+    'donorId': 'Donor', 'typeId': 'Donation Type', 'centerId': 'Centre',
+    'centreId': 'Centre', 'paymentMode': 'Payment Mode', 'sponsorId': 'Sponsor',
+  };
   String _label(String k) {
+    if (_labelOverrides.containsKey(k)) return _labelOverrides[k]!;
     final s = k.replaceAllMapped(RegExp(r'([A-Z])'), (m) => ' ${m[1]}');
     return s.isEmpty ? k : '${s[0].toUpperCase()}${s.substring(1)}';
   }
@@ -394,7 +439,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
     // Super Admin sees WHO/what they're approving, not just the module.
     final payload = (r['payload'] as Map?)?.cast<String, dynamic>() ?? {};
     final prev = (r['previousData'] as Map?)?.cast<String, dynamic>() ?? {};
-    final subject = (payload['name'] ?? prev['name'] ?? payload['donorName'] ?? '').toString();
+    final donorId = (payload['donorId'] ?? prev['donorId'] ?? '').toString();
+    final subject = (payload['name'] ?? prev['name'] ?? payload['donorName']
+        ?? (donorId.isNotEmpty ? _donorNames[donorId] : null) ?? '').toString();
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
