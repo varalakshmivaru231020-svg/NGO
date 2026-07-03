@@ -14,7 +14,7 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
     if (res.status === 401 && typeof window !== 'undefined') {
       localStorage.removeItem('saksham_token')
       token = null
-      if (!window.location.pathname.includes('/login')) window.location.href = '/login'
+      if (!window.location.pathname.includes('/login')) window.location.href = '/admin/login'
     }
     const err = await res.json().catch(() => ({ message: res.statusText }))
     throw new Error(err.message ?? 'Request failed')
