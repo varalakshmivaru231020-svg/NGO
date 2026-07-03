@@ -270,6 +270,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
         _settingsItem(Icons.category_outlined, 'Donation Types', 'Manage categories', onTap: () => context.go('/settings/donation-types')),
         _settingsItem(Icons.location_city_outlined, 'Manage Centres', 'Add and manage centres', onTap: () => context.go('/settings/centres')),
         _settingsItem(Icons.business_outlined, 'Offices', 'Manage office locations', onTap: () => context.go('/offices')),
+        _settingsItem(Icons.chat_outlined, 'WhatsApp Business API', 'Donation & receipt messaging', onTap: () => context.go('/settings/whatsapp')),
       ]),
       const SizedBox(height: 16),
       _settingsSection('Data', [

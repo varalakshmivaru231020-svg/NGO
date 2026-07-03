@@ -1622,6 +1622,169 @@ class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
 }
 
 // ════════════════════════════════════════════════════════════════
+// WhatsApp Business API — BotSyncWA credentials (Super Admin only).
+// Backend-persisted (not local), same GET/PATCH /settings/whatsapp used by
+// the WhatsappService that actually sends donation_received, receipt_generated,
+// payment_failed, birthday_wishes and donation_anniversary templates.
+// ════════════════════════════════════════════════════════════════
+class WhatsappSettingsScreen extends StatefulWidget {
+  const WhatsappSettingsScreen({super.key});
+  @override
+  State<WhatsappSettingsScreen> createState() => _WhatsappSettingsState();
+}
+
+class _WhatsappSettingsState extends State<WhatsappSettingsScreen> {
+  final _storeNumberCtrl   = TextEditingController();
+  final _phoneNumberIdCtrl = TextEditingController();
+  final _apiTokenCtrl      = TextEditingController();
+  final _apiUrlCtrl        = TextEditingController();
+  final _apiVersionCtrl    = TextEditingController();
+  final _wabaIdCtrl        = TextEditingController();
+  final _businessIdCtrl    = TextEditingController();
+
+  bool _loading = true;
+  bool _saving  = false;
+  bool _obscureToken = true;
+
+  // Native-Meta passthrough mode (API Version / WABA ID / Business ID) only
+  // applies when the configured API URL contains "/api/meta".
+  bool get _isMetaMode => _apiUrlCtrl.text.toLowerCase().contains('/api/meta');
+
+  @override
+  void initState() { super.initState(); _load(); _apiUrlCtrl.addListener(() => setState(() {})); }
+
+  @override
+  void dispose() {
+    _storeNumberCtrl.dispose(); _phoneNumberIdCtrl.dispose(); _apiTokenCtrl.dispose();
+    _apiUrlCtrl.dispose(); _apiVersionCtrl.dispose(); _wabaIdCtrl.dispose(); _businessIdCtrl.dispose();
+    super.dispose();
+  }
+
+  void _apply(Map<String, dynamic> d) {
+    _storeNumberCtrl.text   = d['storeNumber'] as String? ?? '';
+    _phoneNumberIdCtrl.text = d['phoneNumberId'] as String? ?? '';
+    _apiTokenCtrl.text      = d['apiToken'] as String? ?? '';
+    _apiUrlCtrl.text        = d['apiUrl'] as String? ?? '';
+    _apiVersionCtrl.text    = d['apiVersion'] as String? ?? '';
+    _wabaIdCtrl.text        = d['wabaId'] as String? ?? '';
+    _businessIdCtrl.text    = d['businessId'] as String? ?? '';
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await apiClient.get('/settings/whatsapp');
+      final d = (r['data'] as Map?)?.cast<String, dynamic>() ?? {};
+      if (mounted) setState(() { _apply(d); _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      final r = await apiClient.patch('/settings/whatsapp', {
+        'storeNumber':   _storeNumberCtrl.text.trim(),
+        'phoneNumberId': _phoneNumberIdCtrl.text.trim(),
+        'apiToken':      _apiTokenCtrl.text.trim(),
+        'apiUrl':        _apiUrlCtrl.text.trim(),
+        'apiVersion':    _apiVersionCtrl.text.trim(),
+        'wabaId':        _wabaIdCtrl.text.trim(),
+        'businessId':    _businessIdCtrl.text.trim(),
+      });
+      final d = (r['data'] as Map?)?.cast<String, dynamic>() ?? {};
+      if (mounted) { setState(() => _apply(d)); _snack(context, '✓ WhatsApp settings saved'); }
+    } catch (e) {
+      if (mounted) _snack(context, 'Could not save — check your connection and try again');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Widget _field(String label, TextEditingController ctrl, {String? hint, bool obscure = false, Widget? suffix, IconData? icon}) =>
+    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _buildSectionLabel(context, label),
+      _buildCard(context, child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: TextField(
+          controller: ctrl,
+          obscureText: obscure,
+          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
+          decoration: InputDecoration(
+            prefixIcon: icon != null ? Icon(icon, size: 18, color: _brand600) : null,
+            suffixIcon: suffix,
+            hintText: hint,
+            hintStyle: TextStyle(fontSize: 12, color: context.textHint),
+            filled: true, fillColor: context.surface2,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12)),
+        ),
+      )),
+      const SizedBox(height: 16),
+    ]);
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: Column(children: [
+      _buildHeader(context, 'WhatsApp Business API', sub: 'Donation & receipt messaging via BotSyncWA'),
+      if (_loading)
+        const Expanded(child: Center(child: CircularProgressIndicator()))
+      else
+        Expanded(child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(0, 20, 0, 40),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: Container(
+              padding: const EdgeInsets.all(14),
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: _brand100, borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _brand600.withValues(alpha: 0.3))),
+              child: const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Icon(Icons.info_outline, color: _brand600, size: 18),
+                SizedBox(width: 10),
+                Expanded(child: Text(
+                  'Auto-sends donation confirmation & receipt messages to donors via BotSyncWA. '
+                  'Requires approved templates (donation_received, receipt_generated, payment_failed, '
+                  'birthday_wishes, donation_anniversary) in Meta Business Manager.',
+                  style: TextStyle(fontSize: 12.5, color: _brand600, fontWeight: FontWeight.w600, height: 1.4))),
+              ]),
+            )),
+
+            _field('Store WhatsApp Number', _storeNumberCtrl, hint: '919832399399', icon: Icons.phone_outlined),
+            _field('Phone Number ID', _phoneNumberIdCtrl, hint: '1129335896919323', icon: Icons.tag_outlined),
+            _field('API Token', _apiTokenCtrl, hint: '••••••••••••••••', obscure: _obscureToken, icon: Icons.vpn_key_outlined,
+              suffix: IconButton(
+                icon: Icon(_obscureToken ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: context.textHint),
+                onPressed: () => setState(() => _obscureToken = !_obscureToken))),
+            _field('API URL (optional override)', _apiUrlCtrl, hint: 'https://crmapp.botsyncwa.com/api/v1/messages', icon: Icons.link),
+            if (_isMetaMode) ...[
+              _field('API Version', _apiVersionCtrl, hint: 'v19.0', icon: Icons.numbers_outlined),
+              _field('WABA ID', _wabaIdCtrl, hint: '1951565062163055', icon: Icons.badge_outlined),
+              _field('Business ID', _businessIdCtrl, hint: '1075079811743037', icon: Icons.apartment_outlined),
+            ],
+
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child:
+              ElevatedButton.icon(
+                onPressed: _saving ? null : _save,
+                icon: _saving
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Icon(Icons.save_outlined, size: 16),
+                label: const Text('Save Changes'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _brand600, foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(48),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              )),
+          ]),
+        )),
+    ]),
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
 // Server URL Screen — update backend URL without rebuilding APK
 // ════════════════════════════════════════════════════════════════
 class ServerUrlScreen extends StatefulWidget {
