@@ -1,26 +1,96 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Brand — teal/emerald */
+  --brand-900: #064E40;
+  --brand-800: #0A6253;
+  --brand-700: #0B6E5D;
+  --brand-600: #0E8C76;
+  --brand-500: #14A98C;
+  --brand-400: #34C3A6;
+  --brand-300: #6FD7C2;
+  --brand-100: #D6F3EC;
+  --brand-50:  #EAFBF6;
+
+  /* Accents */
+  --amber-600: #E0921A;
+  --amber-500: #F6A723;
+  --amber-100: #FFF1D6;
+  --coral-500: #F2685E;
+  --coral-100: #FFE3DF;
+  --violet-500: #7C6CF0;
+  --violet-100: #E7E3FD;
+  --sky-500: #2D9CDB;
+  --sky-100: #DCEFFB;
+  --rose-500: #EC5B8B;
+
+  /* Status */
+  --success: #1FA971;
+  --warning: #E0921A;
+  --danger:  #E2503B;
+  --info:    #2D9CDB;
+
+  font-family: 'Plus Jakarta Sans', -apple-system, system-ui, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Light theme */
+:root, [data-theme="light"] {
+  --bg: #EEF2F1;
+  --surface: #FFFFFF;
+  --surface-2: #F4F7F6;
+  --surface-3: #EAEFEE;
+  --on-surface: #15211E;
+  --on-surface-2: #5A6B67;
+  --on-surface-3: #93A29F;
+  --border: #E5EBE9;
+  --border-strong: #D4DEDB;
+  --primary: #0E8C76;
+  --on-primary: #FFFFFF;
+  --sidebar-bg: #0B2A24;
+  --sidebar-text: rgba(255,255,255,0.85);
+  --sidebar-active: rgba(255,255,255,0.12);
+  --sidebar-active-text: #FFFFFF;
+  --shadow-sm: 0 1px 3px rgba(13,40,34,0.06);
+  --shadow-md: 0 4px 16px rgba(13,40,34,0.08);
+  --shadow-lg: 0 10px 32px rgba(13,40,34,0.12);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Dark theme */
+[data-theme="dark"] {
+  --bg: #0A1110;
+  --surface: #121C1A;
+  --surface-2: #18241F;
+  --surface-3: #1F2D29;
+  --on-surface: #ECF3F1;
+  --on-surface-2: #9DB0AC;
+  --on-surface-3: #6B7E7A;
+  --border: #233330;
+  --border-strong: #2E423D;
+  --primary: #34C3A6;
+  --on-primary: #04241D;
+  --sidebar-bg: #081210;
+  --sidebar-text: rgba(255,255,255,0.75);
+  --sidebar-active: rgba(52,195,166,0.15);
+  --sidebar-active-text: #34C3A6;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.4);
+  --shadow-lg: 0 10px 32px rgba(0,0,0,0.5);
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg);
+  color: var(--on-surface);
+  font-family: 'Plus Jakarta Sans', -apple-system, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
+
+/* Focus ring */
+*:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
