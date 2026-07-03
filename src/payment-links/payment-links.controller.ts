@@ -2,6 +2,7 @@ import { Controller, Get, Post, Patch, Body, Param, UseGuards } from '@nestjs/co
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { PaymentLinksService } from './payment-links.service';
 import { CreatePaymentLinkDto } from './dto/create-payment-link.dto';
+import { UpdatePaymentLinkStatusDto } from './dto/update-status.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('payment-links')
@@ -22,4 +23,9 @@ export class PaymentLinksController {
 
   @Patch(':id/expire') @ApiOperation({ summary: 'Expire a payment link' })
   expire(@Param('id') id: string) { return this.svc.expire(id); }
+
+  @Patch(':id/status') @ApiOperation({ summary: 'Update payment link status (PAID/FAILED/…); FAILED sends payment_failed' })
+  updateStatus(@Param('id') id: string, @Body() dto: UpdatePaymentLinkStatusDto) {
+    return this.svc.updateStatus(id, dto.status);
+  }
 }

@@ -18,6 +18,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { PaymentLinksModule } from './payment-links/payment-links.module';
 import { WebsocketModule } from './websocket/websocket.module';
 import { ApprovalsModule } from './approvals/approvals.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { ApprovalsModule } from './approvals/approvals.module';
     PaymentLinksModule,
     WebsocketModule,
     ApprovalsModule,
+    SettingsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

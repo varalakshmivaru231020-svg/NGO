@@ -1,6 +1,12 @@
 import { Module } from '@nestjs/common';
 import { RemindersController } from './reminders.controller';
 import { RemindersService } from './reminders.service';
+import { WhatsappModule } from '../whatsapp/whatsapp.module';
 
-@Module({ controllers: [RemindersController], providers: [RemindersService], exports: [RemindersService] })
+@Module({
+  imports: [WhatsappModule],
+  controllers: [RemindersController],
+  providers: [RemindersService],
+  exports: [RemindersService],
+})
 export class RemindersModule {}

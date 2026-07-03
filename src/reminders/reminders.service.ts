@@ -1,11 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { CreateReminderDto } from './dto/create-reminder.dto';
 
 @Injectable()
 export class RemindersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private whatsapp: WhatsappService,
+  ) {}
 
   private include = {
     donor: { select: { id: true, name: true, mobile: true, whatsapp: true } },
@@ -65,6 +69,8 @@ export class RemindersService {
     return this.prisma.reminder.delete({ where: { id } });
   }
 
+  // Runs every morning: creates in-app birthday reminders AND sends the
+  // birthday_wishes WhatsApp template — on the birthday itself, once per donor.
   @Cron(CronExpression.EVERY_DAY_AT_8AM)
   async autoCreateBirthdayReminders() {
     const donors = await this.birthdaysToday();
@@ -86,7 +92,58 @@ export class RemindersService {
             dueDate: new Date(),
           },
         });
+        // The reminder-existence check above dedupes so we send at most once/day.
+        const to = donor.whatsapp || donor.mobile;
+        if (to) this.whatsapp.sendBirthdayWishes(to, donor.name).catch(() => undefined);
       }
+    }
+  }
+
+  // Runs every morning: sends the donation_anniversary template to donors whose
+  // FIRST donation was on this day in a prior year (once per donor per day).
+  @Cron(CronExpression.EVERY_DAY_AT_8AM)
+  async sendDonationAnniversaries() {
+    const today = new Date();
+    const mm = today.getMonth();
+    const dd = today.getDate();
+    const donors = await this.prisma.donor.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+        mobile: true,
+        whatsapp: true,
+        donations: { select: { date: true }, orderBy: { date: 'asc' }, take: 1 },
+      },
+    });
+    for (const donor of donors) {
+      const first = donor.donations[0]?.date;
+      if (!first) continue;
+      const fd = new Date(first);
+      if (fd.getMonth() !== mm || fd.getDate() !== dd) continue;
+      const years = today.getFullYear() - fd.getFullYear();
+      if (years < 1) continue;
+
+      // Dedupe with an ANNIVERSARY reminder gate (mirrors the birthday flow).
+      const existing = await this.prisma.reminder.findFirst({
+        where: {
+          donorId: donor.id,
+          type: 'ANNIVERSARY',
+          dueDate: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+        },
+      });
+      if (existing) continue;
+      await this.prisma.reminder.create({
+        data: {
+          donorId: donor.id,
+          type: 'ANNIVERSARY',
+          title: `Donation anniversary: ${donor.name}`,
+          message: `${years} year(s) since ${donor.name}'s first donation.`,
+          dueDate: new Date(),
+        },
+      });
+      const to = donor.whatsapp || donor.mobile;
+      if (to) this.whatsapp.sendDonationAnniversary(to, donor.name, years).catch(() => undefined);
     }
   }
 }

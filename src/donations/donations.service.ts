@@ -3,11 +3,17 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateDonationDto } from './dto/create-donation.dto';
 import { UpdateDonationDto } from './dto/update-donation.dto';
 import { DonationQueryDto } from './dto/donation-query.dto';
+import { ConfigService } from '@nestjs/config';
 import { paginate, paginatedResponse } from '../common/dto/pagination.dto';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 
 @Injectable()
 export class DonationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private whatsapp: WhatsappService,
+    private config: ConfigService,
+  ) {}
 
   private include = {
     donor: { select: { id: true, name: true, mobile: true, donorCode: true } },
@@ -22,7 +28,7 @@ export class DonationsService {
 
   async create(dto: CreateDonationDto) {
     const receiptNo = await this.nextReceipt();
-    return this.prisma.donation.create({
+    const donation = await this.prisma.donation.create({
       data: {
         ...dto,
         receiptNo,
@@ -30,6 +36,25 @@ export class DonationsService {
       },
       include: this.include,
     });
+
+    // Fire-and-forget WhatsApp messages to the donor. Never awaited / never
+    // throws, so they can't slow down or break the donation.
+    if (donation.donor?.mobile) {
+      const mobile = donation.donor.mobile;
+      const name = donation.donor.name;
+      // 1) Thank-you confirmation.
+      this.whatsapp.sendDonationReceived(mobile, name, donation.amount).catch(() => undefined);
+      // 2) Receipt with a tappable download link (needs a public base URL).
+      const base = (this.config.get<string>('PUBLIC_BASE_URL') || '').replace(/\/+$/, '');
+      if (base) {
+        const receiptUrl = `${base}/receipts/${donation.id}`;
+        this.whatsapp
+          .sendReceiptGenerated(mobile, name, donation.amount, receiptUrl)
+          .catch(() => undefined);
+      }
+    }
+
+    return donation;
   }
 
   async findAll(query: DonationQueryDto) {

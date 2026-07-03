@@ -411,3 +411,25 @@ model ApprovalRequest {
   @@index([requesterId])
   @@map("approval_requests")
 }
+
+// ─────────────────────────────────────────
+// APP SETTINGS — WhatsApp Business API (BotSyncWA)
+// Single-row config edited from the admin panel; read by WhatsappService.
+// ─────────────────────────────────────────
+
+model WhatsappSetting {
+  id            String   @id @default("singleton")
+  storeNumber   String?  // sender display number, e.g. 919832399399
+  phoneNumberId String?  // Meta Phone Number ID, sent with each message
+  apiToken      String?  // Bearer token
+  apiUrl        String?  // send endpoint (override); default botsyncwa messages URL
+  // Native-Meta-passthrough mode (apiUrl containing "/api/meta"): the send URL
+  // is built as `${apiUrl}/${apiVersion}/${phoneNumberId}/messages`. wabaId /
+  // businessId are stored for reference only — not sent in the request.
+  apiVersion    String?  // Meta Graph API version, e.g. v19.0
+  wabaId        String?  // WhatsApp Business Account ID
+  businessId    String?  // Meta Business ID
+  updatedAt     DateTime @updatedAt
+
+  @@map("whatsapp_settings")
+}
