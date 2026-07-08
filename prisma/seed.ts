@@ -19,12 +19,16 @@ async function main() {
   });
 
   // Single fresh SUPER_ADMIN — every other account (team members, roles) is
-  // created dynamically in the app.
-  const adminHash = await argon2.hash('Sket@2026');
+  // created dynamically in the app. Override via env for each new deployment
+  // (e.g. a new org/tenant) so every fresh instance doesn't ship with the
+  // same SKET-branded default login.
+  const adminEmail = process.env.SEED_ADMIN_EMAIL || 'admin@sket.org';
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'Sket@2026';
+  const adminHash = await argon2.hash(adminPassword);
   await prisma.user.upsert({
-    where: { email: 'admin@sket.org' },
+    where: { email: adminEmail },
     update: { role: 'SUPER_ADMIN', isActive: true, passwordHash: adminHash, name: 'Super Admin' },
-    create: { name: 'Super Admin', email: 'admin@sket.org', passwordHash: adminHash, role: 'SUPER_ADMIN' },
+    create: { name: 'Super Admin', email: adminEmail, passwordHash: adminHash, role: 'SUPER_ADMIN' },
   });
 
   // Donor Categories
@@ -167,7 +171,7 @@ async function main() {
   }
 
   console.log('Seed complete!');
-  console.log('Login: admin@saksham.org / Admin@1234');
+  console.log(`Login: ${adminEmail} / ${adminPassword}`);
 }
 
 main()
