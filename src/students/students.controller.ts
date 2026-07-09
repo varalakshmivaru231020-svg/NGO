@@ -6,6 +6,7 @@ import { UpdateStudentDto } from './dto/update-student.dto';
 import { StudentQueryDto } from './dto/student-query.dto';
 import { CreateSponsorshipDto } from './dto/create-sponsorship.dto';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
+import { CreateGrowthRecordDto } from './dto/create-growth-record.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('students')
@@ -63,5 +64,20 @@ export class StudentsController {
   @ApiQuery({ name: 'month', example: '2026-06', description: 'YYYY-MM' })
   getAttendance(@Param('id') id: string, @Query('month') month: string) {
     return this.svc.getAttendance(id, month);
+  }
+
+  @Post(':id/growth') @ApiOperation({ summary: 'Add/update a date-wise height & weight record' })
+  addGrowthRecord(@Param('id') id: string, @Body() dto: CreateGrowthRecordDto) {
+    return this.svc.addGrowthRecord(id, dto);
+  }
+
+  @Get(':id/growth') @ApiOperation({ summary: 'Get full growth (height/weight) history' })
+  getGrowthRecords(@Param('id') id: string) {
+    return this.svc.getGrowthRecords(id);
+  }
+
+  @Delete('growth/:recordId') @ApiOperation({ summary: 'Remove a growth record' })
+  removeGrowthRecord(@Param('recordId') recordId: string) {
+    return this.svc.removeGrowthRecord(recordId);
   }
 }

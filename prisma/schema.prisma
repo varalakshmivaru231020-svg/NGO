@@ -224,17 +224,53 @@ model Student {
   admissionDate DateTime  @default(now())
   exitDate      DateTime?
   notes         String?
+
+  // Identity / government IDs
+  aadhaarNumber    String?
+  satNumber        String?
+  penNumber        String?
+  cwcNumber        String?
+  abhaNumber       String?
+  rationCardNumber String?
+  missionVatsalyaNumber String?
+  caste            String?
+  subCaste         String?
+
+  // Financial / welfare
+  bankAccountDetails        String?
+  siblingNames              String?
+  incomeCertificateAmount   Int?
+  incomeCertificateRdNumber String?
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  center       Center        @relation(fields: [centerId], references: [id])
-  sponsorships Sponsorship[]
-  achievements Achievement[]
-  attendance   Attendance[]
+  center        Center         @relation(fields: [centerId], references: [id])
+  sponsorships  Sponsorship[]
+  achievements  Achievement[]
+  attendance    Attendance[]
+  growthRecords GrowthRecord[]
 
   @@index([name])
   @@index([centerId])
   @@map("students")
+}
+
+// Date-wise height/weight history — lets staff compare a child's growth
+// against previous records over time (see also the Progress tab chart).
+model GrowthRecord {
+  id        String   @id @default(cuid())
+  studentId String
+  date      DateTime
+  heightCm  Float?
+  weightKg  Float?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, date])
+  @@map("growth_records")
 }
 
 model Sponsorship {

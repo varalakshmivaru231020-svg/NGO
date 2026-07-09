@@ -20,4 +20,21 @@ export class CreateStudentDto {
   @ApiPropertyOptional() @IsOptional() @IsString() medicalNotes?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() admissionDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+
+  // Identity / government IDs
+  @ApiPropertyOptional() @IsOptional() @IsString() aadhaarNumber?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() satNumber?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() penNumber?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() cwcNumber?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() abhaNumber?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() rationCardNumber?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() missionVatsalyaNumber?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() caste?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() subCaste?: string;
+
+  // Financial / welfare
+  @ApiPropertyOptional() @IsOptional() @IsString() bankAccountDetails?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() siblingNames?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) incomeCertificateAmount?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() incomeCertificateRdNumber?: string;
 }

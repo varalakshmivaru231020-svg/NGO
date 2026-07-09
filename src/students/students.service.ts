@@ -5,6 +5,7 @@ import { UpdateStudentDto } from './dto/update-student.dto';
 import { StudentQueryDto } from './dto/student-query.dto';
 import { CreateSponsorshipDto } from './dto/create-sponsorship.dto';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
+import { CreateGrowthRecordDto } from './dto/create-growth-record.dto';
 import { paginate, paginatedResponse } from '../common/dto/pagination.dto';
 
 @Injectable()
@@ -124,6 +125,30 @@ export class StudentsService {
       where: { studentId, date: { gte: start, lte: end } },
       orderBy: { date: 'asc' },
     });
+  }
+
+  // One entry per day; re-adding the same date overwrites it rather than
+  // duplicating (matches markAttendance's upsert-by-date pattern).
+  async addGrowthRecord(studentId: string, dto: CreateGrowthRecordDto) {
+    await this.findOne(studentId);
+    return this.prisma.growthRecord.upsert({
+      where: { studentId_date: { studentId, date: new Date(dto.date) } },
+      create: { studentId, date: new Date(dto.date), heightCm: dto.heightCm, weightKg: dto.weightKg, notes: dto.notes },
+      update: { heightCm: dto.heightCm, weightKg: dto.weightKg, notes: dto.notes },
+    });
+  }
+
+  // Full history (small dataset — a handful of measurements over a
+  // childhood), oldest first so it plots directly on a chart.
+  async getGrowthRecords(studentId: string) {
+    return this.prisma.growthRecord.findMany({
+      where: { studentId },
+      orderBy: { date: 'asc' },
+    });
+  }
+
+  async removeGrowthRecord(recordId: string) {
+    return this.prisma.growthRecord.delete({ where: { id: recordId } });
   }
 
   async summary() {
