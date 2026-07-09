@@ -50,7 +50,10 @@ String _donorSaveError(Object e) {
 
 // ══════════════════════════════════════════════════════════════════════
 class AddDonorScreen extends ConsumerStatefulWidget {
-  const AddDonorScreen({super.key});
+  const AddDonorScreen({super.key, this.donorId});
+  // When set, the form loads and edits this donor (PUT) instead of creating
+  // a new one (POST).
+  final String? donorId;
   @override
   ConsumerState<AddDonorScreen> createState() => _AddDonorScreenState();
 }
@@ -86,11 +89,14 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
 
   // categories loaded from API: name → id
   Map<String, String> _categoryNameToId = {};
+  bool get _isEditing => widget.donorId != null;
+  bool _loadingDonor = false;
 
   @override
   void initState() {
     super.initState();
     _loadCategories();
+    if (_isEditing) _loadDonor();
   }
 
   Future<void> _loadCategories() async {
@@ -104,6 +110,55 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
       }
       if (mounted) setState(() => _categoryNameToId = map);
     } catch (_) {}
+  }
+
+  String _fromIso(String iso) {
+    final d = DateTime.tryParse(iso);
+    if (d == null) return '';
+    return '${d.day.toString().padLeft(2,'0')} / ${d.month.toString().padLeft(2,'0')} / ${d.year}';
+  }
+
+  Future<void> _loadDonor() async {
+    setState(() => _loadingDonor = true);
+    try {
+      final res = await apiClient.get('/donors/${widget.donorId}');
+      final d = (res['data'] as Map).cast<String, dynamic>();
+      String s(String k) => (d[k] ?? '').toString();
+      _name.text = s('name');
+      _mobile.text = s('mobile');
+      _whatsapp.text = s('whatsapp');
+      _email.text = s('email');
+      _pan.text = s('pan');
+      _aadhaar.text = s('aadhaar');
+      _street.text = s('address');
+      _city.text = s('city');
+      _state.text = s('state');
+      if (s('country').isNotEmpty) _country.text = s('country');
+      _pincode.text = s('pincode');
+      if (s('dob').isNotEmpty) _dob.text = _fromIso(s('dob'));
+      if (s('anniversary').isNotEmpty) _anniv.text = _fromIso(s('anniversary'));
+      _occupation.text = s('occupation');
+      _org.text = s('company');
+      _lang.text = s('preferredLanguage');
+      _notes.text = s('notes');
+      final gender = s('gender');
+      final categories = (d['categories'] as List?) ?? const [];
+      final firstCatName = categories.isNotEmpty ? (((categories.first as Map?)?['category'] as Map?)?['name'] as String?) : null;
+      Uint8List? avatar;
+      final avatarB64 = s('avatar');
+      if (avatarB64.isNotEmpty) {
+        try { avatar = base64Decode(avatarB64); } catch (_) {}
+      }
+      if (mounted) setState(() {
+        if (gender == 'FEMALE') _gender = 'Female';
+        if (gender == 'MALE') _gender = 'Male';
+        if (firstCatName != null && _donorCategories.contains(firstCatName)) _category = firstCatName;
+        if (avatar != null) _photoBytes = avatar;
+        _loadingDonor = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingDonor = false);
+    }
   }
 
   @override
@@ -166,23 +221,33 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
         'categoryIds': [_categoryNameToId[_category]!],
     };
 
-    String? savedId;
+    String? savedId = widget.donorId;
     try {
-      final res = await apiClient.post('/donors', payload);
-      // Non-Super-Admins: queued for approval — don't add locally.
+      final res = _isEditing
+          ? await apiClient.put('/donors/${widget.donorId}', payload)
+          : await apiClient.post('/donors', payload);
+      // Non-Super-Admins: queued for approval — don't add/update locally.
       if ((res['meta'] as Map?)?['pendingApproval'] == true) {
         if (mounted) {
           setState(() => _saving = false);
           _toast(context, 'Submitted for Super Admin approval');
-          context.go('/donors');
+          context.go(_isEditing ? '/donors/${widget.donorId}' : '/donors');
         }
         return;
       }
-      final created = (res['data'] as Map).cast<String, dynamic>();
-      savedId = created['id'] as String?;
+      final saved = (res['data'] as Map).cast<String, dynamic>();
+      savedId = saved['id'] as String? ?? savedId;
     } catch (e) {
-      // Backend rejected/unreachable — fall back to a local-only donor so the
-      // user isn't blocked, but tell them it wasn't saved to the server.
+      if (_isEditing) {
+        // Editing must reflect real backend state — don't fake a local save.
+        if (mounted) {
+          setState(() => _saving = false);
+          _toast(context, _donorSaveError(e), error: true);
+        }
+        return;
+      }
+      // Create: backend rejected/unreachable — fall back to a local-only
+      // donor so the user isn't blocked, but tell them it wasn't saved.
       final localId = 'local_${DateTime.now().microsecondsSinceEpoch}';
       demoLocalDonors.insert(0, {
         ...payload,
@@ -207,8 +272,8 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
     if (mounted) {
       ref.read(donorRefreshProvider.notifier).state++; // refetch list from backend
       setState(() => _saving = false);
-      _toast(context, 'Donor saved successfully!');
-      // Open the new donor so it's clearly created & viewable.
+      _toast(context, _isEditing ? 'Donor updated successfully!' : 'Donor saved successfully!');
+      // Open the donor so the change is clearly visible.
       context.go(savedId != null ? '/donors/$savedId' : '/donors');
     }
   }
@@ -229,8 +294,8 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
               onPressed: () => context.go('/donors'),
             ),
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Add Donor', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF15211E))),
-              Container(
+              Text(_isEditing ? 'Edit Donor' : 'Add Donor', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF15211E))),
+              if (!_isEditing) Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(6)),
                 child: const Text('ID  ·  SF-D-auto', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: _brand600)),
@@ -239,6 +304,9 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
           ]),
         ),
 
+        if (_loadingDonor)
+          const Expanded(child: Center(child: CircularProgressIndicator(color: _brand600)))
+        else
         // ── form ───────────────────────────────────────────────────
         Expanded(
           child: Form(
@@ -253,7 +321,7 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
 
                 // ── Photo + Personal ──────────────────────────────────
                 _Section(title: 'Personal Information', children: [
-                  Center(child: PhotoPickerCircle(label: 'Photo', size: 92, onImageChanged: (b) => setState(() => _photoBytes = b))),
+                  Center(child: PhotoPickerCircle(label: 'Photo', size: 92, initialImage: _photoBytes, onImageChanged: (b) => setState(() => _photoBytes = b))),
                   const SizedBox(height: 16),
                   _Row2(
                     left:  _Field(label: 'Full Name *', child: _textField(context, _name, hint: 'e.g. Rajesh Khanna', validator: (v) => v!.isEmpty ? 'Required' : null)),
@@ -372,7 +440,7 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
                       ),
                       child: _saving
                         ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                        : const Text('Save Donor', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                        : Text(_isEditing ? 'Update Donor' : 'Save Donor', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
                     ),
                   ),
                 ]),

@@ -59,6 +59,21 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   final _weight      = TextEditingController();
   final _medHistory  = TextEditingController();
 
+  // Identity / government IDs
+  final _penNo        = TextEditingController();
+  final _cwcNo        = TextEditingController();
+  final _abhaNo       = TextEditingController();
+  final _rationCardNo = TextEditingController();
+  final _missionVatsalyaNo = TextEditingController();
+  final _caste         = TextEditingController();
+  final _subCaste      = TextEditingController();
+
+  // Financial / welfare
+  final _bankDetails    = TextEditingController();
+  final _siblingNames   = TextEditingController();
+  final _incomeCertAmt  = TextEditingController();
+  final _incomeCertRdNo = TextEditingController();
+
   // pickers
   String _dob         = '';
   String _admDate     = '';
@@ -149,7 +164,9 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   void dispose() {
     for (final c in [_name,_aadhaar,_fatherName,_motherName,_guardian,_relation,
       _mobile,_address,_satNo,_familyNotes,_schoolName,_classGrade,_admissionNo,
-      _acadYear,_performance,_schoolAddr,_height,_weight,_medHistory]) { c.dispose(); }
+      _acadYear,_performance,_schoolAddr,_height,_weight,_medHistory,
+      _penNo,_cwcNo,_abhaNo,_rationCardNo,_missionVatsalyaNo,_caste,_subCaste,
+      _bankDetails,_siblingNames,_incomeCertAmt,_incomeCertRdNo]) { c.dispose(); }
     super.dispose();
   }
 
@@ -295,6 +312,19 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         if (_admDate.isNotEmpty)                'admissionDate': _toIso(_admDate),
         if (_medHistory.text.trim().isNotEmpty) 'medicalNotes': _medHistory.text.trim(),
         if (_familyNotes.text.trim().isNotEmpty) 'notes': _familyNotes.text.trim(),
+        if (_aadhaar.text.trim().isNotEmpty)    'aadhaarNumber': _aadhaar.text.trim(),
+        if (_satNo.text.trim().isNotEmpty)      'satNumber': _satNo.text.trim(),
+        if (_penNo.text.trim().isNotEmpty)      'penNumber': _penNo.text.trim(),
+        if (_cwcNo.text.trim().isNotEmpty)      'cwcNumber': _cwcNo.text.trim(),
+        if (_abhaNo.text.trim().isNotEmpty)     'abhaNumber': _abhaNo.text.trim(),
+        if (_rationCardNo.text.trim().isNotEmpty) 'rationCardNumber': _rationCardNo.text.trim(),
+        if (_missionVatsalyaNo.text.trim().isNotEmpty) 'missionVatsalyaNumber': _missionVatsalyaNo.text.trim(),
+        if (_caste.text.trim().isNotEmpty)      'caste': _caste.text.trim(),
+        if (_subCaste.text.trim().isNotEmpty)   'subCaste': _subCaste.text.trim(),
+        if (_bankDetails.text.trim().isNotEmpty) 'bankAccountDetails': _bankDetails.text.trim(),
+        if (_siblingNames.text.trim().isNotEmpty) 'siblingNames': _siblingNames.text.trim(),
+        if (_incomeCertAmt.text.trim().isNotEmpty) 'incomeCertificateAmount': int.tryParse(_incomeCertAmt.text.trim()),
+        if (_incomeCertRdNo.text.trim().isNotEmpty) 'incomeCertificateRdNumber': _incomeCertRdNo.text.trim(),
       };
       Map<String, dynamic>? res;
       try {
@@ -351,11 +381,39 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         'height':      _height.text.trim(),
         'weight':      _weight.text.trim(),
         'medHistory':  _medHistory.text.trim(),
+        'penNumber':        _penNo.text.trim(),
+        'cwcNumber':        _cwcNo.text.trim(),
+        'abhaNumber':       _abhaNo.text.trim(),
+        'rationCardNumber': _rationCardNo.text.trim(),
+        'missionVatsalyaNumber': _missionVatsalyaNo.text.trim(),
+        'caste':            _caste.text.trim(),
+        'subCaste':         _subCaste.text.trim(),
+        'bankAccountDetails': _bankDetails.text.trim(),
+        'siblingNames':       _siblingNames.text.trim(),
+        'incomeCertificateAmount':   _incomeCertAmt.text.trim(),
+        'incomeCertificateRdNumber': _incomeCertRdNo.text.trim(),
         if (photoB64 != null) 'photo': photoB64,
         'sponsorships': _sponsorId != null
             ? [{'donor': {'name': _sponsorName ?? ''}}]
             : <Map<String, dynamic>>[],
       });
+
+      // Seed the first dated growth record from the intake height/weight, so
+      // Growth History has a starting point instead of an ad-hoc snapshot.
+      final h = double.tryParse(_height.text.trim());
+      final w = double.tryParse(_weight.text.trim());
+      if (savedId != null && (h != null || w != null)) {
+        final today = DateTime.now();
+        final iso = '${today.year.toString().padLeft(4,'0')}-${today.month.toString().padLeft(2,'0')}-${today.day.toString().padLeft(2,'0')}';
+        try {
+          await apiClient.post('/students/$savedId/growth', {
+            'date': iso,
+            if (h != null) 'heightCm': h,
+            if (w != null) 'weightKg': w,
+          });
+        } catch (_) {}
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: const Row(mainAxisSize: MainAxisSize.min, children: [
@@ -488,6 +546,60 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                 ]),
                 const SizedBox(height: 14),
 
+                // ── Identity & Government IDs ────────────────────────
+                _SectionCard(title: 'Identity & Government IDs', children: [
+                  _FieldLabel('PEN Number'),
+                  _textField(context, _penNo, hint: 'Permanent Enrolment Number'),
+                  const SizedBox(height: 14),
+                  _FieldLabel('CWC Number'),
+                  _textField(context, _cwcNo, hint: 'Child Welfare Committee number'),
+                  const SizedBox(height: 14),
+                  _FieldLabel('ABHA Card Number'),
+                  _textField(context, _abhaNo, hint: 'Ayushman Bharat Health Account'),
+                  const SizedBox(height: 14),
+                  _FieldLabel('Ration Card Number'),
+                  _textField(context, _rationCardNo, hint: 'Ration card number'),
+                  const SizedBox(height: 14),
+                  _FieldLabel('Mission Vatsalya Number'),
+                  _textField(context, _missionVatsalyaNo, hint: 'Mission Vatsalya scheme number'),
+                  const SizedBox(height: 14),
+                  Row(children: [
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      _FieldLabel('Caste'),
+                      _textField(context, _caste, hint: 'Caste'),
+                    ])),
+                    const SizedBox(width: 12),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      _FieldLabel('Sub-caste'),
+                      _textField(context, _subCaste, hint: 'Sub-caste'),
+                    ])),
+                  ]),
+                ]),
+                const SizedBox(height: 14),
+
+                // ── Financial & Welfare Details ──────────────────────
+                _SectionCard(title: 'Financial & Welfare Details', children: [
+                  _FieldLabel('Sibling Name(s)'),
+                  _textField(context, _siblingNames, hint: 'If any, comma-separated'),
+                  const SizedBox(height: 14),
+                  _FieldLabel('Bank Account Details'),
+                  _textField(context, _bankDetails, hint: 'Account no., IFSC, bank name', maxLines: 2),
+                  const SizedBox(height: 14),
+                  Row(children: [
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      _FieldLabel('Income Certificate Amount'),
+                      _textField(context, _incomeCertAmt, hint: '₹ amount', keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+                    ])),
+                    const SizedBox(width: 12),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      _FieldLabel('Income Cert. RD Number'),
+                      _textField(context, _incomeCertRdNo, hint: 'RD number'),
+                    ])),
+                  ]),
+                ]),
+                const SizedBox(height: 14),
+
                 // ── Educational Details ──────────────────────────────
                 _SectionCard(title: 'Educational Details', children: [
                   _FieldLabel('School or College'),
@@ -532,15 +644,18 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                 _SectionCard(title: 'Health & Medical', children: [
                   Row(children: [
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _FieldLabel('Height'),
-                      _textField(context, _height, hint: 'e.g. 132 cm', keyboardType: TextInputType.number),
+                      _FieldLabel('Height (cm)'),
+                      _textField(context, _height, hint: 'e.g. 132', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
                     ])),
                     const SizedBox(width: 12),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _FieldLabel('Weight'),
-                      _textField(context, _weight, hint: 'e.g. 28 kg', keyboardType: TextInputType.number),
+                      _FieldLabel('Weight (kg)'),
+                      _textField(context, _weight, hint: 'e.g. 28', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
                     ])),
                   ]),
+                  Padding(padding: const EdgeInsets.only(top: 6), child: Text(
+                    'Saved as the first dated entry in Growth History (see the Progress tab).',
+                    style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w500))),
                   const SizedBox(height: 14),
                   _FieldLabel('Medical History'),
                   _textField(context, _medHistory, hint: 'Allergies, conditions, notes…', maxLines: 3),

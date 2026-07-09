@@ -205,7 +205,7 @@ class _DonorDetailScreenState extends State<DonorDetailScreen> with SingleTicker
                 child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
               ),
               GestureDetector(
-                onTap: () => context.go('/donors/new'),
+                onTap: () => context.go('/donors/${widget.id}/edit'),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                   decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.white.withValues(alpha: 0.4))),

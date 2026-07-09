@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../../../core/network/api_client.dart';
 import 'students_screen.dart' show findStudentRecord;
 
@@ -155,7 +156,6 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
       'sponsorshipAmt':   sponsorName.isNotEmpty ? '—' : '—',
       'achievementCount': '0',
       // Detail fields shown on the Profile tab (local + backend field names).
-      'aadhaar':     s('aadhaar'),
       'admDate':     pick('admDate', 'admissionDate'),
       'father':      s('fatherName'),
       'mother':      s('motherName'),
@@ -163,11 +163,25 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
       'relation':    s('relation'),
       'mobile':      pick('mobile', 'guardianPhone'),
       'address':     s('address'),
-      'sat':         s('sat'),
       'familyNotes': pick('familyNotes', 'notes'),
       'height':      s('height'),
       'weight':      s('weight'),
       'medHistory':  pick('medHistory', 'medicalNotes'),
+      // Identity & government IDs
+      'aadhaar':          pick('aadhaar', 'aadhaarNumber'),
+      'sat':              pick('sat', 'satNumber'),
+      'penNumber':        s('penNumber'),
+      'cwcNumber':        s('cwcNumber'),
+      'abhaNumber':       s('abhaNumber'),
+      'rationCardNumber': s('rationCardNumber'),
+      'missionVatsalyaNumber': s('missionVatsalyaNumber'),
+      'caste':            s('caste'),
+      'subCaste':         s('subCaste'),
+      // Financial / welfare
+      'bankAccountDetails': s('bankAccountDetails'),
+      'siblingNames':       s('siblingNames'),
+      'incomeCertificateAmount':   s('incomeCertificateAmount'),
+      'incomeCertificateRdNumber': s('incomeCertificateRdNumber'),
     };
   }
 
@@ -398,6 +412,120 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
     );
   }
 
+  // Persist identity/financial fields to the backend (unlike the general edit
+  // sheet above, this one actually calls PUT — these government-ID fields need
+  // to survive a reload, not just live in local state).
+  Future<void> _saveIdentityFields(Map<String, dynamic> body) async {
+    try {
+      await apiClient.put('/students/${widget.id}', body);
+    } catch (_) {
+      // Best-effort: still reflect the edit locally so the UI isn't stuck,
+      // even if the backend is briefly unreachable.
+    }
+    setState(() {
+      body.forEach((k, v) {
+        final val = v?.toString() ?? '';
+        switch (k) {
+          case 'aadhaarNumber': _data['aadhaar'] = val; break;
+          case 'satNumber': _data['sat'] = val; break;
+          default: _data[k] = val;
+        }
+      });
+    });
+    final rec = findStudentRecord(widget.id);
+    if (rec != null) body.forEach((k, v) => rec[k] = v);
+  }
+
+  void _showIdentityEditSheet(BuildContext context) {
+    final pen        = TextEditingController(text: _data['penNumber']);
+    final cwc        = TextEditingController(text: _data['cwcNumber']);
+    final abha       = TextEditingController(text: _data['abhaNumber']);
+    final ration     = TextEditingController(text: _data['rationCardNumber']);
+    final vatsalya   = TextEditingController(text: _data['missionVatsalyaNumber']);
+    final caste      = TextEditingController(text: _data['caste']);
+    final subCaste   = TextEditingController(text: _data['subCaste']);
+    final siblings   = TextEditingController(text: _data['siblingNames']);
+    final bankInfo   = TextEditingController(text: _data['bankAccountDetails']);
+    final incomeAmt  = TextEditingController(text: _data['incomeCertificateAmount']);
+    final incomeRdNo = TextEditingController(text: _data['incomeCertificateRdNumber']);
+    bool saving = false;
+
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
+        Widget field(String label, TextEditingController ctrl, {TextInputType? kb, int lines = 1}) => Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: ctrl, keyboardType: kb, maxLines: lines,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              decoration: InputDecoration(
+                filled: true, fillColor: _surface2,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12))),
+          ]));
+
+        return Container(
+          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+          padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(ctx).viewInsets.bottom + 28),
+          child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(2)))),
+            const Text('Edit Identity Details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 16),
+            field('PEN Number', pen),
+            field('CWC Number', cwc),
+            field('ABHA Card Number', abha),
+            field('Ration Card Number', ration),
+            field('Mission Vatsalya Number', vatsalya),
+            field('Caste', caste),
+            field('Sub-caste', subCaste),
+            field('Sibling Name(s)', siblings),
+            field('Bank Account Details', bankInfo, lines: 2),
+            field('Income Certificate Amount', incomeAmt, kb: TextInputType.number),
+            field('Income Certificate RD Number', incomeRdNo),
+            const SizedBox(height: 6),
+            SizedBox(width: double.infinity, child: ElevatedButton(
+              onPressed: saving ? null : () async {
+                setSheet(() => saving = true);
+                await _saveIdentityFields({
+                  'penNumber': pen.text.trim(),
+                  'cwcNumber': cwc.text.trim(),
+                  'abhaNumber': abha.text.trim(),
+                  'rationCardNumber': ration.text.trim(),
+                  'missionVatsalyaNumber': vatsalya.text.trim(),
+                  'caste': caste.text.trim(),
+                  'subCaste': subCaste.text.trim(),
+                  'siblingNames': siblings.text.trim(),
+                  'bankAccountDetails': bankInfo.text.trim(),
+                  'incomeCertificateAmount': int.tryParse(incomeAmt.text.trim()),
+                  'incomeCertificateRdNumber': incomeRdNo.text.trim(),
+                });
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: const Text('Identity details updated', style: TextStyle(fontWeight: FontWeight.w700)),
+                    backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                padding: const EdgeInsets.symmetric(vertical: 15)),
+              child: saving
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                : const Text('Save Changes', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+            )),
+          ])),
+        );
+      }),
+    );
+  }
+
   void _showStatusSheet(BuildContext context, String current) {
     String status = current;
     const statuses = [
@@ -565,12 +693,12 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
         body: TabBarView(
           controller: _tabs,
           children: [
-            _ProfileTab(data: data),
+            _ProfileTab(data: data, onEditIdentity: () => _showIdentityEditSheet(context)),
             _EducationTab(data: data),
             _SponsorTab(data: data, onAssign: () => _showSponsorPicker(context)),
             _AchievementsTab(studentId: name),
             const _DocumentsTab(),
-            _ProgressTab(data: data),
+            _ProgressTab(data: data, studentId: widget.id),
           ],
         ),
       ),
@@ -651,8 +779,9 @@ class _AppBarBottom extends StatelessWidget implements PreferredSizeWidget {
 // PROFILE TAB
 // ══════════════════════════════════════════════════════════════════════
 class _ProfileTab extends StatelessWidget {
-  const _ProfileTab({required this.data});
+  const _ProfileTab({required this.data, required this.onEditIdentity});
   final Map<String, String> data;
+  final VoidCallback onEditIdentity;
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
@@ -676,7 +805,8 @@ class _ProfileTab extends StatelessWidget {
         _InfoRow('Guardian',      '${(data['guardian'] ?? '').isNotEmpty ? data['guardian']! : '—'}${(data['relation'] ?? '').isNotEmpty ? ' (${data['relation']})' : ''}'),
         _InfoRow('Mobile Number', (data['mobile'] ?? '').isNotEmpty ? data['mobile']! : '—'),
         _InfoRow('Address',       (data['address'] ?? '').isNotEmpty ? data['address']! : '—'),
-        _InfoRow('SAT Number',    (data['sat'] ?? '').isNotEmpty ? data['sat']! : '—', last: true),
+        _InfoRow('SAT Number',    (data['sat'] ?? '').isNotEmpty ? data['sat']! : '—'),
+        _InfoRow('Sibling Name(s)', (data['siblingNames'] ?? '').isNotEmpty ? data['siblingNames']! : '—', last: true),
       ]),
       const SizedBox(height: 14),
       if (data['familyNotes'] != null && data['familyNotes']!.isNotEmpty)
@@ -691,10 +821,31 @@ class _ProfileTab extends StatelessWidget {
           ]),
         ),
       const SizedBox(height: 14),
+      // Identity & Government IDs
+      _CardSection(title: 'Identity & Government IDs', icon: Icons.badge_outlined,
+        trailing: _sectionEditBtn(onEditIdentity),
+        children: [
+        _InfoRow('PEN Number',        (data['penNumber'] ?? '').isNotEmpty ? data['penNumber']! : '—'),
+        _InfoRow('CWC Number',        (data['cwcNumber'] ?? '').isNotEmpty ? data['cwcNumber']! : '—'),
+        _InfoRow('ABHA Card Number',  (data['abhaNumber'] ?? '').isNotEmpty ? data['abhaNumber']! : '—'),
+        _InfoRow('Ration Card Number', (data['rationCardNumber'] ?? '').isNotEmpty ? data['rationCardNumber']! : '—'),
+        _InfoRow('Mission Vatsalya Number', (data['missionVatsalyaNumber'] ?? '').isNotEmpty ? data['missionVatsalyaNumber']! : '—'),
+        _InfoRow('Caste',             (data['caste'] ?? '').isNotEmpty ? data['caste']! : '—'),
+        _InfoRow('Sub-caste',         (data['subCaste'] ?? '').isNotEmpty ? data['subCaste']! : '—', last: true),
+      ]),
+      const SizedBox(height: 14),
+      // Financial & Welfare Details
+      _CardSection(title: 'Financial & Welfare Details', icon: Icons.account_balance_outlined,
+        trailing: _sectionEditBtn(onEditIdentity),
+        children: [
+        _InfoRow('Bank Account Details', (data['bankAccountDetails'] ?? '').isNotEmpty ? data['bankAccountDetails']! : '—'),
+        _InfoRow('Income Certificate Amount', (data['incomeCertificateAmount'] ?? '').isNotEmpty ? '₹${data['incomeCertificateAmount']}' : '—'),
+        _InfoRow('Income Cert. RD Number', (data['incomeCertificateRdNumber'] ?? '').isNotEmpty ? data['incomeCertificateRdNumber']! : '—', last: true),
+      ]),
+      const SizedBox(height: 14),
       // Health & Medical
       _CardSection(title: 'Health & Medical', icon: Icons.health_and_safety_outlined, children: [
-        _InfoRow('Height', (data['height'] ?? '').isNotEmpty ? data['height']! : '—'),
-        _InfoRow('Weight', (data['weight'] ?? '').isNotEmpty ? data['weight']! : '—', last: true),
+        _InfoRow('Growth History', 'See the Progress tab for date-wise height/weight and the growth chart', last: true),
       ]),
       if (data['medHistory'] != null && data['medHistory']!.isNotEmpty) ...[
         const SizedBox(height: 10),
@@ -1504,8 +1655,8 @@ class _DocumentsTabState extends State<_DocumentsTab> {
 
 // ── shared widgets ─────────────────────────────────────────────────────
 class _CardSection extends StatelessWidget {
-  const _CardSection({required this.title, required this.icon, required this.children});
-  final String title; final IconData icon; final List<Widget> children;
+  const _CardSection({required this.title, required this.icon, required this.children, this.trailing});
+  final String title; final IconData icon; final List<Widget> children; final Widget? trailing;
   @override
   Widget build(BuildContext context) => Container(
     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: _border)),
@@ -1515,7 +1666,8 @@ class _CardSection extends StatelessWidget {
         child: Row(children: [
           Icon(icon, size: 17, color: _brand600),
           const SizedBox(width: 8),
-          Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _onSurface1)),
+          Expanded(child: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _onSurface1))),
+          if (trailing != null) trailing!,
         ]),
       ),
       const Divider(height: 1, color: _border),
@@ -1523,6 +1675,19 @@ class _CardSection extends StatelessWidget {
     ]),
   );
 }
+
+Widget _sectionEditBtn(VoidCallback onTap) => GestureDetector(
+  onTap: onTap, behavior: HitTestBehavior.opaque,
+  child: Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8)),
+    child: const Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(Icons.edit_outlined, size: 13, color: _brand600),
+      SizedBox(width: 4),
+      Text('Edit', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _brand600)),
+    ]),
+  ),
+);
 
 class _InfoRow extends StatelessWidget {
   const _InfoRow(this.label, this.value, {this.last = false});
@@ -1589,24 +1754,130 @@ class _UploadSection extends StatelessWidget {
 // PROGRESS TAB
 // ══════════════════════════════════════════════════════════════════════
 class _ProgressTab extends StatefulWidget {
-  const _ProgressTab({required this.data});
+  const _ProgressTab({required this.data, required this.studentId});
   final Map<String, String> data;
+  final String studentId;
   @override
   State<_ProgressTab> createState() => _ProgressTabState();
 }
 
+class _GrowthRecord {
+  _GrowthRecord({required this.id, required this.date, this.heightCm, this.weightKg});
+  final String id;
+  final DateTime date;
+  final double? heightCm;
+  final double? weightKg;
+
+  factory _GrowthRecord.fromJson(Map<String, dynamic> j) => _GrowthRecord(
+    id: j['id'] as String,
+    date: DateTime.parse(j['date'] as String),
+    heightCm: (j['heightCm'] as num?)?.toDouble(),
+    weightKg: (j['weightKg'] as num?)?.toDouble(),
+  );
+
+  String get dateLabel {
+    const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return '${date.day.toString().padLeft(2,'0')} ${m[date.month-1]} ${date.year}';
+  }
+}
+
 class _ProgressTabState extends State<_ProgressTab> {
   late String _performance = widget.data['performance'] ?? 'Not specified';
-  late String _height      = widget.data['height']      ?? '—';
-  late String _weight      = widget.data['weight']      ?? '—';
   bool _editing = false;
+  late final _perfCtrl = TextEditingController(text: _performance);
 
-  late final _perfCtrl   = TextEditingController(text: _performance);
-  late final _heightCtrl = TextEditingController(text: _height);
-  late final _weightCtrl = TextEditingController(text: _weight);
+  List<_GrowthRecord> _growth = [];
+  bool _loadingGrowth = true;
 
   @override
-  void dispose() { _perfCtrl.dispose(); _heightCtrl.dispose(); _weightCtrl.dispose(); super.dispose(); }
+  void initState() { super.initState(); _loadGrowth(); }
+
+  @override
+  void dispose() { _perfCtrl.dispose(); super.dispose(); }
+
+  Future<void> _loadGrowth() async {
+    if (mounted) setState(() => _loadingGrowth = true);
+    try {
+      final r = await apiClient.get('/students/${widget.studentId}/growth');
+      final list = (r['data'] as List<dynamic>? ?? const []);
+      final records = list.whereType<Map>().map((m) => _GrowthRecord.fromJson(m.cast<String, dynamic>())).toList();
+      if (mounted) setState(() { _growth = records; _loadingGrowth = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loadingGrowth = false);
+    }
+  }
+
+  Future<void> _deleteGrowthRecord(String id) async {
+    try { await apiClient.delete('/students/growth/$id'); } catch (_) {}
+    await _loadGrowth();
+  }
+
+  void _showAddGrowthDialog(BuildContext context) {
+    DateTime date = DateTime.now();
+    final heightCtrl = TextEditingController();
+    final weightCtrl = TextEditingController();
+    bool saving = false;
+
+    showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      title: const Text('Add Growth Record', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        GestureDetector(
+          onTap: () async {
+            final picked = await showDatePicker(context: ctx, initialDate: date, firstDate: DateTime(2000), lastDate: DateTime.now());
+            if (picked != null) setDlg(() => date = picked);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(12)),
+            child: Row(children: [
+              const Icon(Icons.calendar_today_outlined, size: 16, color: _onSurface2),
+              const SizedBox(width: 10),
+              Text('${date.day.toString().padLeft(2,'0')}/${date.month.toString().padLeft(2,'0')}/${date.year}',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: heightCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(labelText: 'Height (cm)', filled: true, fillColor: _surface2,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: weightCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(labelText: 'Weight (kg)', filled: true, fillColor: _surface2,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+        ),
+      ]),
+      actions: [
+        TextButton(onPressed: saving ? null : () => Navigator.pop(ctx), child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: saving ? null : () async {
+            final h = double.tryParse(heightCtrl.text.trim());
+            final w = double.tryParse(weightCtrl.text.trim());
+            if (h == null && w == null) return;
+            setDlg(() => saving = true);
+            final iso = '${date.year.toString().padLeft(4,'0')}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}';
+            try {
+              await apiClient.post('/students/${widget.studentId}/growth', {
+                'date': iso,
+                if (h != null) 'heightCm': h,
+                if (w != null) 'weightKg': w,
+              });
+            } catch (_) {}
+            if (ctx.mounted) Navigator.pop(ctx);
+            await _loadGrowth();
+          },
+          style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+          child: saving
+            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+            : const Text('Save'),
+        ),
+      ],
+    )));
+  }
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
@@ -1617,16 +1888,10 @@ class _ProgressTabState extends State<_ProgressTab> {
         const Text('Progress Overview', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _onSurface1)),
         GestureDetector(
           onTap: () {
-            if (_editing) {
-              setState(() {
-                _performance = _perfCtrl.text.trim().isNotEmpty ? _perfCtrl.text.trim() : _performance;
-                _height      = _heightCtrl.text.trim().isNotEmpty ? _heightCtrl.text.trim() : _height;
-                _weight      = _weightCtrl.text.trim().isNotEmpty ? _weightCtrl.text.trim() : _weight;
-                _editing = false;
-              });
-            } else {
-              setState(() => _editing = true);
-            }
+            setState(() {
+              if (_editing) _performance = _perfCtrl.text.trim().isNotEmpty ? _perfCtrl.text.trim() : _performance;
+              _editing = !_editing;
+            });
           },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -1654,12 +1919,7 @@ class _ProgressTabState extends State<_ProgressTab> {
         _InfoRow('Institution',      widget.data['institution'] ?? 'Not specified', last: true),
       ]),
       const SizedBox(height: 14),
-      _CardSection(title: 'Health Snapshot', icon: Icons.health_and_safety_outlined, children: [
-        _editing ? _EditableRow('Height', _heightCtrl) : _InfoRow('Height', _height),
-        _editing ? _EditableRow('Weight', _weightCtrl, last: true) : _InfoRow('Weight', _weight, last: true),
-      ]),
       if (widget.data['medHistory'] != null && widget.data['medHistory']!.isNotEmpty) ...[
-        const SizedBox(height: 10),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(15),
@@ -1674,10 +1934,135 @@ class _ProgressTabState extends State<_ProgressTab> {
             Text(widget.data['medHistory']!, style: const TextStyle(fontSize: 14, color: _onSurface1, fontWeight: FontWeight.w500, height: 1.5)),
           ]),
         ),
+        const SizedBox(height: 14),
+      ],
+      // ── Growth History ───────────────────────────────────────────
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        const Text('Growth History', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _onSurface1)),
+        GestureDetector(
+          onTap: () => _showAddGrowthDialog(context),
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(10)),
+            child: const Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.add_rounded, size: 16, color: Colors.white),
+              SizedBox(width: 4),
+              Text('Add Record', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white)),
+            ]),
+          ),
+        ),
+      ]),
+      const SizedBox(height: 12),
+      if (_loadingGrowth)
+        const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator(color: _brand600)))
+      else if (_growth.isEmpty)
+        Container(
+          width: double.infinity, padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border)),
+          child: const Center(child: Text('No growth records yet — tap Add Record to log the first height/weight entry.',
+            textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: _onSurface3, fontWeight: FontWeight.w600))),
+        )
+      else ...[
+        _GrowthChart(records: _growth),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border)),
+          child: Column(children: _growth.reversed.toList().asMap().entries.map((e) {
+            final r = e.value;
+            final isLast = e.key == _growth.length - 1;
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: isLast ? null : const BoxDecoration(border: Border(bottom: BorderSide(color: _border))),
+              child: Row(children: [
+                Expanded(child: Text(r.dateLabel, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _onSurface1))),
+                Expanded(child: Text(r.heightCm != null ? '${r.heightCm!.toStringAsFixed(1)} cm' : '—',
+                  style: const TextStyle(fontSize: 13, color: _onSurface2, fontWeight: FontWeight.w600))),
+                Expanded(child: Text(r.weightKg != null ? '${r.weightKg!.toStringAsFixed(1)} kg' : '—',
+                  style: const TextStyle(fontSize: 13, color: _onSurface2, fontWeight: FontWeight.w600))),
+                GestureDetector(
+                  onTap: () => _deleteGrowthRecord(r.id),
+                  child: const Icon(Icons.delete_outline, size: 18, color: _coral500),
+                ),
+              ]),
+            );
+          }).toList()),
+        ),
       ],
       const SizedBox(height: 80),
     ]),
   );
+}
+
+// ── Growth chart: height + weight over time, dual y-axes ──────────────
+class _GrowthChart extends StatelessWidget {
+  const _GrowthChart({required this.records});
+  final List<_GrowthRecord> records;
+
+  @override
+  Widget build(BuildContext context) {
+    final heightSpots = <FlSpot>[];
+    final weightSpots = <FlSpot>[];
+    for (var i = 0; i < records.length; i++) {
+      final r = records[i];
+      if (r.heightCm != null) heightSpots.add(FlSpot(i.toDouble(), r.heightCm!));
+      if (r.weightKg != null) weightSpots.add(FlSpot(i.toDouble(), r.weightKg!));
+    }
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 18, 16, 10),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(padding: const EdgeInsets.only(left: 6, bottom: 8), child: Row(children: [
+          _LegendDot(color: _brand600, label: 'Height (cm)'),
+          const SizedBox(width: 16),
+          _LegendDot(color: _coral500, label: 'Weight (kg)'),
+        ])),
+        SizedBox(
+          height: 180,
+          child: LineChart(LineChartData(
+            gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: 10,
+              getDrawingHorizontalLine: (_) => const FlLine(color: _border, strokeWidth: 1)),
+            borderData: FlBorderData(show: false),
+            titlesData: FlTitlesData(
+              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 34,
+                getTitlesWidget: (v, meta) => Text(v.toInt().toString(), style: const TextStyle(fontSize: 10, color: _onSurface3)))),
+              bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 28,
+                getTitlesWidget: (v, meta) {
+                  final i = v.toInt();
+                  if (i < 0 || i >= records.length) return const SizedBox.shrink();
+                  // Thin out labels so they don't overlap on longer histories.
+                  if (records.length > 6 && i % (records.length / 5).ceil() != 0) return const SizedBox.shrink();
+                  final d = records[i].date;
+                  return Padding(padding: const EdgeInsets.only(top: 6),
+                    child: Text('${d.day}/${d.month}', style: const TextStyle(fontSize: 10, color: _onSurface3)));
+                })),
+            ),
+            lineBarsData: [
+              if (heightSpots.isNotEmpty)
+                LineChartBarData(spots: heightSpots, isCurved: true, color: _brand600, barWidth: 2.5,
+                  dotData: const FlDotData(show: true), belowBarData: BarAreaData(show: false)),
+              if (weightSpots.isNotEmpty)
+                LineChartBarData(spots: weightSpots, isCurved: true, color: _coral500, barWidth: 2.5,
+                  dotData: const FlDotData(show: true), belowBarData: BarAreaData(show: false)),
+            ],
+          )),
+        ),
+      ]),
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  const _LegendDot({required this.color, required this.label});
+  final Color color; final String label;
+  @override
+  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
+    Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+    const SizedBox(width: 5),
+    Text(label, style: const TextStyle(fontSize: 11.5, color: _onSurface2, fontWeight: FontWeight.w600)),
+  ]);
 }
 
 class _EditableRow extends StatelessWidget {

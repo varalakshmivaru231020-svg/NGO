@@ -45,6 +45,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/donors',            builder: (ctx, state) => const DonorsScreen()),
           GoRoute(path: '/donors/new',        builder: (ctx, state) => const AddDonorScreen()),
           GoRoute(path: '/donors/categories', builder: (ctx, state) => const DonorCategoriesScreen()),
+          GoRoute(path: '/donors/:id/edit', builder: (ctx, state) => AddDonorScreen(donorId: state.pathParameters['id']!)),
           GoRoute(path: '/donors/:id',      builder: (ctx, state) => DonorDetailScreen(id: state.pathParameters['id']!)),
           GoRoute(path: '/donations',       builder: (ctx, state) => const DonationsScreen()),
           GoRoute(path: '/donations/new',   builder: (ctx, state) => const AddDonationScreen()),
