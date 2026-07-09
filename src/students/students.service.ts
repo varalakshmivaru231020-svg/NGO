@@ -6,6 +6,7 @@ import { StudentQueryDto } from './dto/student-query.dto';
 import { CreateSponsorshipDto } from './dto/create-sponsorship.dto';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { CreateGrowthRecordDto } from './dto/create-growth-record.dto';
+import { CreateStudentDocumentDto } from './dto/create-student-document.dto';
 import { paginate, paginatedResponse } from '../common/dto/pagination.dto';
 
 @Injectable()
@@ -149,6 +150,34 @@ export class StudentsService {
 
   async removeGrowthRecord(recordId: string) {
     return this.prisma.growthRecord.delete({ where: { id: recordId } });
+  }
+
+  async addDocument(studentId: string, dto: CreateStudentDocumentDto) {
+    await this.findOne(studentId);
+    return this.prisma.studentDocument.create({
+      data: { studentId, category: dto.category, fileName: dto.fileName, mimeType: dto.mimeType, data: dto.data },
+      select: { id: true, studentId: true, category: true, fileName: true, mimeType: true, createdAt: true },
+    });
+  }
+
+  // Metadata only (no `data`) — keeps the list light; fetch the full
+  // document (with its base64 content) via getDocument() when viewing.
+  async getDocuments(studentId: string) {
+    return this.prisma.studentDocument.findMany({
+      where: { studentId },
+      select: { id: true, studentId: true, category: true, fileName: true, mimeType: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getDocument(docId: string) {
+    const doc = await this.prisma.studentDocument.findUnique({ where: { id: docId } });
+    if (!doc) throw new NotFoundException('Document not found');
+    return doc;
+  }
+
+  async removeDocument(docId: string) {
+    return this.prisma.studentDocument.delete({ where: { id: docId } });
   }
 
   async summary() {

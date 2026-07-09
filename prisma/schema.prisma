@@ -250,6 +250,7 @@ model Student {
   achievements  Achievement[]
   attendance    Attendance[]
   growthRecords GrowthRecord[]
+  documents     StudentDocument[]
 
   @@index([name])
   @@index([centerId])
@@ -271,6 +272,24 @@ model GrowthRecord {
 
   @@unique([studentId, date])
   @@map("growth_records")
+}
+
+// Uploaded documents (Aadhaar, birth certificate, report cards, etc.) —
+// category is a free-text bucket label so the same model backs both the
+// Documents tab and the Institution Details / Educational Documents section.
+model StudentDocument {
+  id        String   @id @default(cuid())
+  studentId String
+  category  String
+  fileName  String
+  mimeType  String?
+  data      String   // base64-encoded file content
+  createdAt DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@map("student_documents")
 }
 
 model Sponsorship {

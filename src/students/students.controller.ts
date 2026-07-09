@@ -7,6 +7,7 @@ import { StudentQueryDto } from './dto/student-query.dto';
 import { CreateSponsorshipDto } from './dto/create-sponsorship.dto';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { CreateGrowthRecordDto } from './dto/create-growth-record.dto';
+import { CreateStudentDocumentDto } from './dto/create-student-document.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('students')
@@ -79,5 +80,25 @@ export class StudentsController {
   @Delete('growth/:recordId') @ApiOperation({ summary: 'Remove a growth record' })
   removeGrowthRecord(@Param('recordId') recordId: string) {
     return this.svc.removeGrowthRecord(recordId);
+  }
+
+  @Post(':id/documents') @ApiOperation({ summary: 'Upload a document' })
+  addDocument(@Param('id') id: string, @Body() dto: CreateStudentDocumentDto) {
+    return this.svc.addDocument(id, dto);
+  }
+
+  @Get(':id/documents') @ApiOperation({ summary: 'List document metadata (no file content)' })
+  getDocuments(@Param('id') id: string) {
+    return this.svc.getDocuments(id);
+  }
+
+  @Get('documents/:docId') @ApiOperation({ summary: 'Get a document with its file content' })
+  getDocument(@Param('docId') docId: string) {
+    return this.svc.getDocument(docId);
+  }
+
+  @Delete('documents/:docId') @ApiOperation({ summary: 'Remove a document' })
+  removeDocument(@Param('docId') docId: string) {
+    return this.svc.removeDocument(docId);
   }
 }
