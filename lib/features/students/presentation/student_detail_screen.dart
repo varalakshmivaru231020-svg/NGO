@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/utils/open_bytes.dart';
 import 'students_screen.dart' show findStudentRecord;
 
 // ── colours ───────────────────────────────────────────────────────────
@@ -694,10 +695,10 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
           controller: _tabs,
           children: [
             _ProfileTab(data: data, onEditIdentity: () => _showIdentityEditSheet(context)),
-            _EducationTab(data: data),
+            _EducationTab(data: data, studentId: widget.id),
             _SponsorTab(data: data, onAssign: () => _showSponsorPicker(context)),
             _AchievementsTab(studentId: name),
-            const _DocumentsTab(),
+            _DocumentsTab(studentId: widget.id),
             _ProgressTab(data: data, studentId: widget.id),
           ],
         ),
@@ -876,8 +877,9 @@ class _ProfileTab extends StatelessWidget {
 // EDUCATION TAB
 // ══════════════════════════════════════════════════════════════════════
 class _EducationTab extends StatelessWidget {
-  const _EducationTab({required this.data});
+  const _EducationTab({required this.data, required this.studentId});
   final Map<String, String> data;
+  final String studentId;
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
     physics: const BouncingScrollPhysics(),
@@ -904,7 +906,8 @@ class _EducationTab extends StatelessWidget {
         _InfoRow('Address',       data['schoolAddr'] ?? '—', last: true),
       ]),
       const SizedBox(height: 14),
-      const _DocCard(label: 'Educational Documents', sublabel: 'Report cards, certificates, TC', icon: Icons.description_outlined, count: 3),
+      _SingleDocSlot(studentId: studentId, category: 'Educational Documents',
+        sublabel: 'Report cards, certificates, TC', icon: Icons.description_outlined),
       const SizedBox(height: 80),
     ]),
   );
@@ -1469,47 +1472,74 @@ class _SActBtn extends StatelessWidget {
 // ══════════════════════════════════════════════════════════════════════
 // DOCUMENTS TAB
 // ══════════════════════════════════════════════════════════════════════
-class _DocEntry {
-  _DocEntry({required this.label, required this.icon, this.fileName, this.uploaded = false});
-  final String label;
-  final IconData icon;
-  String? fileName;
-  bool uploaded;
+class _StudentDoc {
+  _StudentDoc({required this.id, required this.category, required this.fileName, this.mimeType});
+  final String id, category, fileName;
+  final String? mimeType;
+  factory _StudentDoc.fromJson(Map<String, dynamic> j) => _StudentDoc(
+    id: j['id'] as String, category: j['category'] as String,
+    fileName: j['fileName'] as String, mimeType: j['mimeType'] as String?);
 }
 
+const _fixedDocCategories = [
+  ('Aadhaar Card',        Icons.credit_card_outlined),
+  ('Birth Certificate',   Icons.article_outlined),
+  ('Transfer Certificate', Icons.transfer_within_a_station_outlined),
+  ('Medical Reports',     Icons.medical_services_outlined),
+  ('School Report Card',  Icons.school_outlined),
+];
+
 class _DocumentsTab extends StatefulWidget {
-  const _DocumentsTab();
+  const _DocumentsTab({required this.studentId});
+  final String studentId;
   @override
   State<_DocumentsTab> createState() => _DocumentsTabState();
 }
 
 class _DocumentsTabState extends State<_DocumentsTab> {
-  final List<_DocEntry> _docs = [
-    _DocEntry(label: 'Aadhaar Card',          icon: Icons.credit_card_outlined,               uploaded: false),
-    _DocEntry(label: 'Birth Certificate',      icon: Icons.article_outlined,                   uploaded: false),
-    _DocEntry(label: 'Transfer Certificate',   icon: Icons.transfer_within_a_station_outlined, uploaded: false),
-    _DocEntry(label: 'Medical Reports',        icon: Icons.medical_services_outlined,          uploaded: false),
-    _DocEntry(label: 'School Report Card',     icon: Icons.school_outlined,                    uploaded: false),
-  ];
+  List<_StudentDoc> _docs = [];
+  bool _loading = true;
+  bool _uploadingOther = false;
+  String? _uploadingCategory;
+  String? _viewingId;
 
-  final List<String> _others = [];
-  bool _uploadingIdx = false;
-  int? _loadingDoc;
+  @override
+  void initState() { super.initState(); _load(); }
 
-  Future<void> _uploadDoc(int idx) async {
-    setState(() => _loadingDoc = idx);
+  Future<void> _load() async {
+    if (mounted) setState(() => _loading = true);
+    try {
+      final r = await apiClient.get('/students/${widget.studentId}/documents');
+      final list = (r['data'] as List<dynamic>? ?? const []);
+      final docs = list.whereType<Map>().map((m) => _StudentDoc.fromJson(m.cast<String, dynamic>())).toList();
+      if (mounted) setState(() { _docs = docs; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _upload(String category) async {
+    setState(() => _uploadingCategory = category);
     try {
       final result = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
-      if (result != null && result.files.isNotEmpty && mounted) {
+      final bytes = result?.files.single.bytes;
+      if (result != null && bytes != null && mounted) {
         final name = result.files.single.name;
-        setState(() { _docs[idx].fileName = name; _docs[idx].uploaded = true; });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        await apiClient.post('/students/${widget.studentId}/documents', {
+          'category': category, 'fileName': name, 'data': base64Encode(bytes),
+        });
+        await _load();
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('$name uploaded successfully', style: const TextStyle(fontWeight: FontWeight.w700)),
           backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
       }
-    } catch (_) {}
-    if (mounted) setState(() => _loadingDoc = null);
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Upload failed — check your connection and try again', style: TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor: _coral500, behavior: SnackBarBehavior.floating));
+    }
+    if (mounted) setState(() => _uploadingCategory = null);
   }
 
   Future<void> _uploadOther() async {
@@ -1527,23 +1557,104 @@ class _DocumentsTabState extends State<_DocumentsTab> {
       ),
     );
     if (name == null || !mounted) return;
-    setState(() => _uploadingIdx = true);
+    setState(() => _uploadingOther = true);
+    await _upload(name);
+    if (mounted) setState(() => _uploadingOther = false);
+  }
+
+  Future<void> _view(_StudentDoc d) async {
+    setState(() => _viewingId = d.id);
     try {
-      final result = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
-      if (result != null && result.files.isNotEmpty && mounted) {
-        setState(() => _others.add(name));
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('$name attached', style: const TextStyle(fontWeight: FontWeight.w700)),
-          backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
-      }
-    } catch (_) {}
-    if (mounted) setState(() => _uploadingIdx = false);
+      final r = await apiClient.get('/students/documents/${d.id}');
+      final data = (r['data'] as Map).cast<String, dynamic>();
+      final b64 = data['data'] as String? ?? '';
+      if (b64.isNotEmpty) openBytesInBrowser(base64Decode(b64), d.fileName);
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Could not open document', style: TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor: _coral500, behavior: SnackBarBehavior.floating));
+    }
+    if (mounted) setState(() => _viewingId = null);
+  }
+
+  Future<void> _delete(_StudentDoc d) async {
+    try { await apiClient.delete('/students/documents/${d.id}'); } catch (_) {}
+    await _load();
+  }
+
+  Widget _docRow({required String label, required IconData icon, _StudentDoc? doc, required VoidCallback onUpload}) {
+    final uploaded = doc != null;
+    final uploading = _uploadingCategory == label;
+    final viewing = doc != null && _viewingId == doc.id;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
+        child: Row(children: [
+          Container(width: 44, height: 44,
+            decoration: BoxDecoration(color: uploaded ? _brand100 : _surface2, borderRadius: BorderRadius.circular(12)),
+            child: Icon(icon, size: 22, color: uploaded ? _brand600 : _onSurface3)),
+          const SizedBox(width: 13),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 3),
+            Row(children: [
+              Container(width: 6, height: 6, decoration: BoxDecoration(
+                color: uploaded ? _brand600 : _onSurface3, shape: BoxShape.circle)),
+              const SizedBox(width: 5),
+              Expanded(child: Text(
+                uploaded ? doc.fileName : 'Not uploaded',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600,
+                  color: uploaded ? _brand600 : _onSurface3))),
+            ]),
+          ])),
+          const SizedBox(width: 10),
+          if (uploading)
+            const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600))
+          else if (uploaded) ...[
+            GestureDetector(
+              onTap: viewing ? null : () => _view(doc),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8)),
+                child: viewing
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600))
+                  : const Text('View', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _brand600)),
+              ),
+            ),
+            GestureDetector(
+              onTap: () => _delete(doc),
+              child: const Padding(padding: EdgeInsets.only(left: 8), child: Icon(Icons.close, size: 18, color: _coral500)),
+            ),
+          ] else
+            GestureDetector(
+              onTap: onUpload,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(10), border: Border.all(color: _brand600.withValues(alpha: 0.3))),
+                child: const Text('Upload', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand600)),
+              ),
+            ),
+        ]),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final uploadedCount = _docs.where((d) => d.uploaded).length + _others.length;
+    _StudentDoc? findDoc(String category) {
+      for (final d in _docs) { if (d.category == category) return d; }
+      return null;
+    }
+    final fixedCategories = _fixedDocCategories.map((c) => c.$1).toSet();
+    final otherDocs = _docs.where((d) => !fixedCategories.contains(d.category)).toList();
+    final uploadedCount = _docs.length;
+
+    if (_loading) {
+      return const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: _brand600)));
+    }
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(18),
@@ -1551,11 +1662,11 @@ class _DocumentsTabState extends State<_DocumentsTab> {
         // Header row: upload button left, count badge right
         Row(children: [
           GestureDetector(
-            onTap: _uploadingIdx ? null : _uploadOther,
+            onTap: _uploadingOther ? null : _uploadOther,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(8)),
-              child: _uploadingIdx
+              child: _uploadingOther
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Row(mainAxisSize: MainAxisSize.min, children: [
                     Icon(Icons.upload_file_outlined, size: 14, color: Colors.white),
@@ -1577,75 +1688,11 @@ class _DocumentsTabState extends State<_DocumentsTab> {
         ]),
         const SizedBox(height: 14),
 
-        // Document rows
-        ..._docs.asMap().entries.map((entry) {
-          final i = entry.key;
-          final d = entry.value;
-          final loading = _loadingDoc == i;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
-              child: Row(children: [
-                Container(width: 44, height: 44,
-                  decoration: BoxDecoration(color: d.uploaded ? _brand100 : _surface2, borderRadius: BorderRadius.circular(12)),
-                  child: Icon(d.icon, size: 22, color: d.uploaded ? _brand600 : _onSurface3)),
-                const SizedBox(width: 13),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(d.label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 3),
-                  Row(children: [
-                    Container(width: 6, height: 6, decoration: BoxDecoration(
-                      color: d.uploaded ? _brand600 : _onSurface3, shape: BoxShape.circle)),
-                    const SizedBox(width: 5),
-                    Text(
-                      d.uploaded ? 'PDF · Uploaded' : 'Not uploaded',
-                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600,
-                        color: d.uploaded ? _brand600 : _onSurface3)),
-                  ]),
-                ])),
-                const SizedBox(width: 10),
-                loading
-                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600))
-                  : d.uploaded
-                    ? const Icon(Icons.check_circle_rounded, color: _brand600, size: 22)
-                    : GestureDetector(
-                        onTap: () => _uploadDoc(i),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(10), border: Border.all(color: _brand600.withValues(alpha: 0.3))),
-                          child: const Text('Upload', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand600)),
-                        ),
-                      ),
-              ]),
-            ),
-          );
-        }),
+        // Fixed document categories
+        ..._fixedDocCategories.map((c) => _docRow(label: c.$1, icon: c.$2, doc: findDoc(c.$1), onUpload: () => _upload(c.$1))),
 
         // Extra uploaded files
-        ..._others.map((name) => Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Container(
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
-            child: Row(children: [
-              Container(width: 44, height: 44, decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)),
-                child: const Icon(Icons.insert_drive_file_outlined, size: 22, color: _brand600)),
-              const SizedBox(width: 13),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 3),
-                const Row(children: [
-                  SizedBox(width: 6, height: 6, child: DecoratedBox(decoration: BoxDecoration(color: _brand600, shape: BoxShape.circle))),
-                  SizedBox(width: 5),
-                  Text('PDF · Uploaded', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _brand600)),
-                ]),
-              ])),
-              const Icon(Icons.check_circle_rounded, color: _brand600, size: 22),
-            ]),
-          ),
-        )),
+        ...otherDocs.map((d) => _docRow(label: d.category, icon: Icons.insert_drive_file_outlined, doc: d, onUpload: () {})),
 
         const SizedBox(height: 80),
       ]),
@@ -1703,27 +1750,114 @@ class _InfoRow extends StatelessWidget {
   );
 }
 
-class _DocCard extends StatelessWidget {
-  const _DocCard({required this.label, required this.sublabel, required this.icon, required this.count});
-  final String label, sublabel; final IconData icon; final int count;
+// A single named document slot (e.g. Educational Documents on the Education
+// tab) backed by the same student-documents API as the Documents tab —
+// fetches its own uploaded/not-uploaded state and supports upload/view/delete.
+class _SingleDocSlot extends StatefulWidget {
+  const _SingleDocSlot({required this.studentId, required this.category, required this.sublabel, required this.icon});
+  final String studentId, category, sublabel;
+  final IconData icon;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
-    child: Row(children: [
-      Container(width: 44, height: 44, decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: _brand600, size: 22)),
-      const SizedBox(width: 13),
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
-        Text(sublabel, style: const TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w500)),
-      ])),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8)),
-        child: Text('$count files', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: _brand600)),
-      ),
-    ]),
-  );
+  State<_SingleDocSlot> createState() => _SingleDocSlotState();
+}
+
+class _SingleDocSlotState extends State<_SingleDocSlot> {
+  _StudentDoc? _doc;
+  bool _loading = true;
+  bool _busy = false;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    if (mounted) setState(() => _loading = true);
+    try {
+      final r = await apiClient.get('/students/${widget.studentId}/documents');
+      final list = (r['data'] as List<dynamic>? ?? const []);
+      final docs = list.whereType<Map>().map((m) => _StudentDoc.fromJson(m.cast<String, dynamic>())).toList();
+      _StudentDoc? found;
+      for (final d in docs) { if (d.category == widget.category) { found = d; break; } }
+      if (mounted) setState(() { _doc = found; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _upload() async {
+    setState(() => _busy = true);
+    try {
+      final result = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
+      final bytes = result?.files.single.bytes;
+      if (result != null && bytes != null) {
+        await apiClient.post('/students/${widget.studentId}/documents', {
+          'category': widget.category, 'fileName': result.files.single.name, 'data': base64Encode(bytes),
+        });
+        await _load();
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _busy = false);
+  }
+
+  Future<void> _view() async {
+    final doc = _doc;
+    if (doc == null) return;
+    setState(() => _busy = true);
+    try {
+      final r = await apiClient.get('/students/documents/${doc.id}');
+      final data = (r['data'] as Map).cast<String, dynamic>();
+      final b64 = data['data'] as String? ?? '';
+      if (b64.isNotEmpty) openBytesInBrowser(base64Decode(b64), doc.fileName);
+    } catch (_) {}
+    if (mounted) setState(() => _busy = false);
+  }
+
+  Future<void> _delete() async {
+    final doc = _doc;
+    if (doc == null) return;
+    try { await apiClient.delete('/students/documents/${doc.id}'); } catch (_) {}
+    await _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final uploaded = _doc != null;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
+      child: Row(children: [
+        Container(width: 44, height: 44, decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)), child: Icon(widget.icon, color: _brand600, size: 22)),
+        const SizedBox(width: 13),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(widget.category, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+          Text(uploaded ? _doc!.fileName : widget.sublabel, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w500)),
+        ])),
+        if (_loading)
+          const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600))
+        else if (_busy)
+          const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600))
+        else if (uploaded) ...[
+          GestureDetector(
+            onTap: _view,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8)),
+              child: const Text('View', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _brand600)),
+            ),
+          ),
+          GestureDetector(onTap: _delete, child: const Padding(padding: EdgeInsets.only(left: 8), child: Icon(Icons.close, size: 18, color: _coral500))),
+        ] else
+          GestureDetector(
+            onTap: _upload,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(10), border: Border.all(color: _brand600.withValues(alpha: 0.3))),
+              child: const Text('Upload', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand600)),
+            ),
+          ),
+      ]),
+    );
+  }
 }
 
 class _UploadSection extends StatelessWidget {

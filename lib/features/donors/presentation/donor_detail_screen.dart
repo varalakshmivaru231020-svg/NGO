@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -115,6 +116,16 @@ class _DonorDetailScreenState extends State<DonorDetailScreen> with SingleTicker
     return n.trim().isNotEmpty ? n : 'Donor';
   }
 
+  // Prefer a same-session, just-uploaded photo; otherwise decode the avatar
+  // the backend actually persisted, so the photo survives a reload.
+  Uint8List? get _photoBytes {
+    final local = localDonorPhotos[widget.id];
+    if (local != null) return local;
+    final avatar = _donor?['avatar'] as String?;
+    if (avatar == null || avatar.isEmpty) return null;
+    try { return base64Decode(avatar); } catch (_) { return null; }
+  }
+
   String get _mobile => _donor?['mobile'] as String? ?? '';
   String get _whatsappNum => (_donor?['whatsapp'] as String?)?.isNotEmpty == true ? _donor!['whatsapp'] as String : _mobile;
   String get _email => _donor?['email'] as String? ?? '';
@@ -222,13 +233,13 @@ class _DonorDetailScreenState extends State<DonorDetailScreen> with SingleTicker
               Container(
                 width: 64, height: 64,
                 decoration: BoxDecoration(
-                  gradient: localDonorPhotos[widget.id] == null ? LinearGradient(colors: [color, Color.lerp(color, Colors.black, 0.25)!]) : null,
+                  gradient: _photoBytes == null ? LinearGradient(colors: [color, Color.lerp(color, Colors.black, 0.25)!]) : null,
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 2),
                 ),
                 clipBehavior: Clip.hardEdge,
-                child: localDonorPhotos[widget.id] != null
-                    ? Image.memory(localDonorPhotos[widget.id]!, fit: BoxFit.cover, width: 64, height: 64)
+                child: _photoBytes != null
+                    ? Image.memory(_photoBytes!, fit: BoxFit.cover, width: 64, height: 64)
                     : Center(child: Text(_initials(_name), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 22))),
               ),
               const SizedBox(width: 14),

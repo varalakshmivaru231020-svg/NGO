@@ -167,6 +167,14 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
   @override
   void initState() {
     super.initState();
+    // Categories now load from the backend on demand rather than being
+    // seeded — make sure the filter chips have real data even if the
+    // Donor Categorization screen was never opened this session.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (ref.read(donorCategoriesProvider).isEmpty) {
+        ref.read(donorCategoriesProvider.notifier).loadFromBackend();
+      }
+    });
   }
 
   @override
