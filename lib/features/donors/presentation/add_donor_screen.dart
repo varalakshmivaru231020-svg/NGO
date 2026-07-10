@@ -10,17 +10,13 @@ import '../../../core/theme/app_theme.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../core/widgets/phone_field_with_code.dart';
 import '../../../core/widgets/photo_picker_widget.dart';
+import '../../dashboard/presentation/dashboard_screen.dart' show dashboardRefreshProvider;
 import 'donors_screen.dart' show donorsProvider, demoLocalDonors, donorRefreshProvider, localDonorPhotos;
 
 // ── colours ───────────────────────────────────────────────────────────
 const _brand600 = Color(0xFF0E8C76);
 const _brand100 = Color(0xFFD6F3EC);
 const _errorColor = Color(0xFFF2685E);
-
-const _donorCategories = [
-  'Major Donor', 'Child Sponsor', 'Corporate Donor', 'Annual Donor',
-  'One-Time Donor', 'Monthly', 'General Donor',
-];
 
 const _preferredMethods = ['Call', 'WhatsApp', 'Email'];
 
@@ -152,7 +148,7 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
       if (mounted) setState(() {
         if (gender == 'FEMALE') _gender = 'Female';
         if (gender == 'MALE') _gender = 'Male';
-        if (firstCatName != null && _donorCategories.contains(firstCatName)) _category = firstCatName;
+        if (firstCatName != null) _category = firstCatName;
         if (avatar != null) _photoBytes = avatar;
         _loadingDonor = false;
       });
@@ -271,6 +267,7 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
     if (savedId != null && _photoBytes != null) localDonorPhotos[savedId] = _photoBytes!;
     if (mounted) {
       ref.read(donorRefreshProvider.notifier).state++; // refetch list from backend
+      ref.read(dashboardRefreshProvider.notifier).state++;
       setState(() => _saving = false);
       _toast(context, _isEditing ? 'Donor updated successfully!' : 'Donor saved successfully!');
       // Open the donor so the change is clearly visible.
@@ -329,7 +326,9 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
                   ),
                   _Row2(
                     left:  _Field(label: 'Date of Birth',   child: _DateField(ctrl: _dob,   hint: 'DD / MM / YYYY', onTap: () => _pickDate(_dob))),
-                    right: _Field(label: 'Donor Category',  child: _CategoryDropdown(value: _category, onChanged: (v) => setState(() => _category = v))),
+                    right: _Field(label: 'Donor Category',  child: _CategoryDropdown(
+                      value: _category, categories: _categoryNameToId.keys.toList(),
+                      onChanged: (v) => setState(() => _category = v))),
                   ),
                 ]),
                 const SizedBox(height: 14),
@@ -644,45 +643,41 @@ class _GenderToggle extends StatelessWidget {
 }
 
 // ── Category dropdown ─────────────────────────────────────────────────
+// Options come from the real backend categories (Donors > Categorization),
+// not a hardcoded list — a hardcoded list here previously meant the chosen
+// name almost never matched a real category id, so donors were created
+// without any category link and every category filter showed 0 donors.
 class _CategoryDropdown extends StatelessWidget {
-  const _CategoryDropdown({required this.value, required this.onChanged});
+  const _CategoryDropdown({required this.value, required this.categories, required this.onChanged});
   final String? value;
+  final List<String> categories;
   final ValueChanged<String?> onChanged;
   @override
-  Widget build(BuildContext context) => DropdownButtonFormField<String>(
-    value: value,
-    onChanged: onChanged,
-    hint: Text('Select category', style: TextStyle(color: context.textHint, fontSize: 14, fontWeight: FontWeight.w500)),
-    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: context.textPrimary),
-    decoration: InputDecoration(
-      filled: true, fillColor: context.surface2,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.border)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.border)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
-      isDense: true,
-    ),
-    icon: Icon(Icons.keyboard_arrow_down_rounded, color: context.textHint),
-    dropdownColor: context.cardBg,
-    borderRadius: BorderRadius.circular(16),
-    items: _donorCategories.map((c) {
-      final descriptions = {
-        'Major Donor': 'High-value patron',
-        'Child Sponsor': 'Sponsors a child',
-        'Corporate Donor': 'Corporate giving',
-        'Annual Donor': 'Yearly commitment',
-        'One-Time Donor': 'Single donation',
-        'Monthly': 'Recurring monthly',
-        'General Donor': 'General contribution',
-      };
-      return DropdownMenuItem(
+  Widget build(BuildContext context) {
+    // Guard against a stale/loading value that isn't in the current item
+    // list — DropdownButtonFormField throws if `value` has no matching item.
+    final safeValue = categories.contains(value) ? value : null;
+    return DropdownButtonFormField<String>(
+      value: safeValue,
+      onChanged: onChanged,
+      hint: Text(categories.isEmpty ? 'Loading categories…' : 'Select category',
+        style: TextStyle(color: context.textHint, fontSize: 14, fontWeight: FontWeight.w500)),
+      style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: context.textPrimary),
+      decoration: InputDecoration(
+        filled: true, fillColor: context.surface2,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.border)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.border)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+        isDense: true,
+      ),
+      icon: Icon(Icons.keyboard_arrow_down_rounded, color: context.textHint),
+      dropdownColor: context.cardBg,
+      borderRadius: BorderRadius.circular(16),
+      items: categories.map((c) => DropdownMenuItem(
         value: c,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Text(c, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
-          if (descriptions[c] != null)
-            Text(descriptions[c]!, style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w500)),
-        ]),
-      );
-    }).toList(),
-  );
+        child: Text(c, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
+      )).toList(),
+    );
+  }
 }

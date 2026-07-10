@@ -4,11 +4,13 @@ import 'package:file_picker/file_picker.dart';
 import '../../../core/utils/open_bytes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/phone_field_with_code.dart';
 import '../../../core/widgets/photo_picker_widget.dart';
+import '../../dashboard/presentation/dashboard_screen.dart' show dashboardRefreshProvider;
 import '../../donors/presentation/donors_screen.dart' show demoLocalDonors, mockDonorData;
 import 'students_screen.dart' show demoLocalStudents, demoCentres;
 
@@ -90,6 +92,12 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
 
   bool _saving = false;
   Uint8List? _photoBytes;
+
+  // Documents picked before the student exists — nothing to upload to yet, so
+  // these are held here and pushed to /students/:id/documents right after
+  // creation succeeds (mirrors the growth-record seeding below).
+  final Map<String, ({String filename, Uint8List bytes})> _pendingDocs = {};
+  final Map<String, List<({String filename, Uint8List bytes})>> _pendingMultiDocs = {};
 
   // loaded from API
   List<({String id, String name})> _centres = [];
@@ -276,6 +284,18 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
     return '${parts[2]}-${parts[1].padLeft(2,'0')}-${parts[0].padLeft(2,'0')}';
   }
 
+  void _setPendingDoc(String category, String? filename, Uint8List? bytes) {
+    if (filename != null && bytes != null) {
+      _pendingDocs[category] = (filename: filename, bytes: bytes);
+    } else {
+      _pendingDocs.remove(category);
+    }
+  }
+
+  void _setPendingMultiDocs(String category, List<({String filename, Uint8List bytes})> files) {
+    _pendingMultiDocs[category] = files;
+  }
+
   Future<void> _save() async {
     if (!_form.currentState!.validate()) return;
     if (_dob.isEmpty) {
@@ -307,6 +327,8 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         if (_schoolName.text.trim().isNotEmpty) 'school': _schoolName.text.trim(),
         if (_fatherName.text.trim().isNotEmpty) 'fatherName': _fatherName.text.trim(),
         if (_motherName.text.trim().isNotEmpty) 'motherName': _motherName.text.trim(),
+        if (_guardian.text.trim().isNotEmpty)   'guardianName': _guardian.text.trim(),
+        if (_relation.text.trim().isNotEmpty)   'guardianRelation': _relation.text.trim(),
         if (_mobile.text.trim().isNotEmpty)     'guardianPhone': _mobile.text.trim(),
         if (_address.text.trim().isNotEmpty)    'address': _address.text.trim(),
         if (_admDate.isNotEmpty)                'admissionDate': _toIso(_admDate),
@@ -414,6 +436,30 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         } catch (_) {}
       }
 
+      // Upload any documents picked before the student existed.
+      if (savedId != null) {
+        for (final entry in _pendingDocs.entries) {
+          try {
+            await apiClient.post('/students/$savedId/documents', {
+              'category': entry.key,
+              'fileName': entry.value.filename,
+              'data': base64Encode(entry.value.bytes),
+            });
+          } catch (_) {}
+        }
+        for (final entry in _pendingMultiDocs.entries) {
+          for (final file in entry.value) {
+            try {
+              await apiClient.post('/students/$savedId/documents', {
+                'category': entry.key,
+                'fileName': file.filename,
+                'data': base64Encode(file.bytes),
+              });
+            } catch (_) {}
+          }
+        }
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: const Row(mainAxisSize: MainAxisSize.min, children: [
@@ -426,6 +472,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
           width: 280,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ));
+        ProviderScope.containerOf(context).read(dashboardRefreshProvider.notifier).state++;
         context.go('/students/$studentId');
       }
     } catch (e) {
@@ -536,13 +583,15 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                   _textField(context, _satNo, hint: 'SAT-0000'),
                   const SizedBox(height: 14),
                   _FieldLabel('Family Photo'),
-                  _UploadBox(label: 'Upload family photo', icon: Icons.family_restroom_outlined),
+                  _UploadBox(label: 'Upload family photo', icon: Icons.family_restroom_outlined,
+                    onFilesChanged: (f) => _setPendingMultiDocs('Family Photo', f)),
                   const SizedBox(height: 14),
                   _FieldLabel('Family Background Notes'),
                   _textField(context, _familyNotes, hint: 'Context about the family…', maxLines: 3),
                   const SizedBox(height: 14),
                   _FieldLabel("Parents' Aadhaar Photo"),
-                  _UploadBox(label: "Upload parents' Aadhaar", icon: Icons.badge_outlined),
+                  _UploadBox(label: "Upload parents' Aadhaar", icon: Icons.badge_outlined,
+                    onFilesChanged: (f) => _setPendingMultiDocs("Parents' Aadhaar Photo", f)),
                 ]),
                 const SizedBox(height: 14),
 
@@ -636,7 +685,8 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                   _textField(context, _schoolAddr, hint: '${_eduType} address', maxLines: 2),
                   const SizedBox(height: 14),
                   _FieldLabel('Educational Documents'),
-                  _UploadBox(label: 'Upload report card / TC / certificates', icon: Icons.description_outlined),
+                  _UploadBox(label: 'Upload report card / TC / certificates', icon: Icons.description_outlined,
+                    onFilesChanged: (f) => _setPendingMultiDocs('Educational Documents', f)),
                 ]),
                 const SizedBox(height: 14),
 
@@ -661,7 +711,8 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                   _textField(context, _medHistory, hint: 'Allergies, conditions, notes…', maxLines: 3),
                   const SizedBox(height: 14),
                   _FieldLabel('Medical Documents'),
-                  _UploadBox(label: 'Upload medical reports / prescriptions', icon: Icons.medical_services_outlined),
+                  _UploadBox(label: 'Upload medical reports / prescriptions', icon: Icons.medical_services_outlined,
+                    onFilesChanged: (f) => _setPendingMultiDocs('Medical Documents', f)),
                 ]),
                 const SizedBox(height: 14),
 
@@ -713,13 +764,17 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
 
                 // ── Documents ────────────────────────────────────────
                 _SectionCard(title: 'Documents', children: [
-                  _DocUploadRow(icon: Icons.credit_card_outlined,   label: 'Aadhaar Card'),
+                  _DocUploadRow(icon: Icons.credit_card_outlined,   label: 'Aadhaar Card',
+                    onChanged: (fn, bytes) => _setPendingDoc('Aadhaar Card', fn, bytes)),
                   const SizedBox(height: 10),
-                  _DocUploadRow(icon: Icons.article_outlined,        label: 'Birth Certificate'),
+                  _DocUploadRow(icon: Icons.article_outlined,        label: 'Birth Certificate',
+                    onChanged: (fn, bytes) => _setPendingDoc('Birth Certificate', fn, bytes)),
                   const SizedBox(height: 10),
-                  _DocUploadRow(icon: Icons.transfer_within_a_station_outlined, label: 'Transfer Certificate'),
+                  _DocUploadRow(icon: Icons.transfer_within_a_station_outlined, label: 'Transfer Certificate',
+                    onChanged: (fn, bytes) => _setPendingDoc('Transfer Certificate', fn, bytes)),
                   const SizedBox(height: 10),
-                  _DocUploadRow(icon: Icons.medical_services_outlined, label: 'Medical Reports'),
+                  _DocUploadRow(icon: Icons.medical_services_outlined, label: 'Medical Reports',
+                    onChanged: (fn, bytes) => _setPendingDoc('Medical Reports', fn, bytes)),
                 ]),
                 const SizedBox(height: 20),
 
@@ -880,23 +935,26 @@ class _StatusChips extends StatelessWidget {
 }
 
 class _UploadBox extends StatefulWidget {
-  const _UploadBox({required this.label, required this.icon});
+  const _UploadBox({required this.label, required this.icon, required this.onFilesChanged});
   final String label;
   final IconData icon;
+  final void Function(List<({String filename, Uint8List bytes})> files) onFilesChanged;
   @override
   State<_UploadBox> createState() => _UploadBoxState();
 }
 
 class _UploadBoxState extends State<_UploadBox> {
-  final List<String> _names = [];
+  final List<({String filename, Uint8List bytes})> _files = [];
   bool _loading = false;
 
   Future<void> _pickFile() async {
     setState(() => _loading = true);
     try {
       final result = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
-      if (result != null && result.files.isNotEmpty && mounted) {
-        setState(() => _names.add(result.files.single.name));
+      final bytes = result?.files.single.bytes;
+      if (result != null && bytes != null && mounted) {
+        setState(() => _files.add((filename: result.files.single.name, bytes: bytes)));
+        widget.onFilesChanged(_files);
       }
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
@@ -924,9 +982,9 @@ class _UploadBoxState extends State<_UploadBox> {
         ]),
       ),
     ),
-    if (_names.isNotEmpty) ...[
+    if (_files.isNotEmpty) ...[
       const SizedBox(height: 8),
-      Wrap(spacing: 8, runSpacing: 6, children: _names.asMap().entries.map((e) => Container(
+      Wrap(spacing: 8, runSpacing: 6, children: _files.asMap().entries.map((e) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -934,10 +992,12 @@ class _UploadBoxState extends State<_UploadBox> {
           const SizedBox(width: 5),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 180),
-            child: Text(e.value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _brand600), overflow: TextOverflow.ellipsis)),
+            child: Text(e.value.filename, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _brand600), overflow: TextOverflow.ellipsis)),
           const SizedBox(width: 6),
-          GestureDetector(onTap: () => setState(() => _names.removeAt(e.key)),
-            child: const Icon(Icons.close, size: 13, color: _brand600)),
+          GestureDetector(onTap: () {
+            setState(() => _files.removeAt(e.key));
+            widget.onFilesChanged(_files);
+          }, child: const Icon(Icons.close, size: 13, color: _brand600)),
         ]),
       )).toList()),
     ],
@@ -945,9 +1005,10 @@ class _UploadBoxState extends State<_UploadBox> {
 }
 
 class _DocUploadRow extends StatefulWidget {
-  const _DocUploadRow({required this.icon, required this.label});
+  const _DocUploadRow({required this.icon, required this.label, required this.onChanged});
   final IconData icon;
   final String label;
+  final void Function(String? filename, Uint8List? bytes) onChanged;
   @override
   State<_DocUploadRow> createState() => _DocUploadRowState();
 }
@@ -966,6 +1027,7 @@ class _DocUploadRowState extends State<_DocUploadRow> {
           _filename = result.files.single.name;
           _bytes = result.files.single.bytes;
         });
+        widget.onChanged(_filename, _bytes);
       }
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
@@ -1008,7 +1070,10 @@ class _DocUploadRowState extends State<_DocUploadRow> {
             ),
           ),
           GestureDetector(
-            onTap: () => setState(() { _filename = null; _bytes = null; }),
+            onTap: () {
+              setState(() { _filename = null; _bytes = null; });
+              widget.onChanged(null, null);
+            },
             child: const Padding(padding: EdgeInsets.only(left: 8), child: Icon(Icons.close, size: 18, color: _coral500)),
           ),
         ] else

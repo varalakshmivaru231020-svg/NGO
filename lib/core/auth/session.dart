@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../network/api_client.dart';
 import 'role_auth.dart';
@@ -62,9 +63,20 @@ Future<void> restoreSession() async {
     final meResp = await apiClient.get('/auth/me');
     final me = (meResp['data'] as Map).cast<String, dynamic>();
     applyBackendUser(me);
+  } on DioException catch (e) {
+    // The refresh-token interceptor already retried once on a 401 before this
+    // error reaches us. A response means the server genuinely rejected the
+    // session (or the retry also failed) — sign out for real. No response at
+    // all (timeout, connection refused, DB cold-start) is a transient network
+    // hiccup, not an invalid session — don't destroy a possibly-valid token
+    // over it, or a routine reload during a slow backend start logs the user
+    // out for no reason. Just don't grant access on *this* load.
+    if (e.response != null) {
+      await apiClient.clearTokens();
+      currentLoggedInRole = null;
+    }
+    isLoggedIn = false;
   } catch (_) {
-    await apiClient.clearTokens();
-    currentLoggedInRole = null;
     isLoggedIn = false;
   }
 }

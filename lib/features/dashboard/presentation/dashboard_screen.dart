@@ -59,6 +59,11 @@ const _typeColors = {
   'Food':              Color(0xFFF6A723),
   'Infrastructure':    Color(0xFF2D9CDB),
 };
+// Bumped by other screens (e.g. Add Student, Add Donor) right after a
+// successful create, so the dashboard's live counts refresh immediately
+// instead of only on the next time it happens to be remounted.
+final dashboardRefreshProvider = StateProvider<int>((ref) => 0);
+
 const _modeLabels = {
   'UPI': 'UPI',
   'BANK_TRANSFER': 'Bank Transfer',
@@ -131,6 +136,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void initState() {
     super.initState();
     _loadCounts();
+    // Refetch whenever another screen reports it changed data that affects
+    // the dashboard's counts, so this doesn't rely on the widget happening
+    // to be recreated by navigation.
+    ref.listenManual(dashboardRefreshProvider, (_, __) => _loadCounts());
   }
 
   Future<void> _loadCounts() async {

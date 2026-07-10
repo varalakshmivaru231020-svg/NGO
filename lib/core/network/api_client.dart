@@ -48,8 +48,14 @@ class ApiClient {
               final refreshDio = Dio();
               applySslBypass(refreshDio.httpClientAdapter);
               final res = await refreshDio.post('$base/auth/refresh', data: {'refreshToken': refresh});
-              final newToken = res.data['data']['accessToken'] as String;
+              final data = res.data['data'] as Map;
+              final newToken = data['accessToken'] as String;
+              final newRefresh = data['refreshToken'] as String?;
               await prefs.setString('access_token', newToken);
+              // The backend rotates refresh tokens (old one is deleted server-side
+              // on every /auth/refresh call) — must persist the new one too, or
+              // the *next* refresh fails and silently logs the user out.
+              if (newRefresh != null) await prefs.setString('refresh_token', newRefresh);
               error.requestOptions.headers['Authorization'] = 'Bearer $newToken';
               handler.resolve(await _dio.fetch(error.requestOptions));
               return;

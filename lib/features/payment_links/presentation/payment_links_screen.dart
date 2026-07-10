@@ -211,20 +211,23 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
                 const SizedBox(height: 4),
                 Text(current.purpose, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: _onSurface2)),
                 const SizedBox(height: 12),
-                // ── QR scanner + bank details, side by side ───────────
-                IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Column(children: [
-                    Container(width: 120, height: 120, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border, width: 2)),
+                // ── QR scanner + bank details, equal-width side by side ─
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(child: Column(children: [
+                    AspectRatio(aspectRatio: 1, child: Container(
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border, width: 2)),
                       child: current.isLive
-                        ? Padding(padding: const EdgeInsets.all(8), child: QrImageView(data: current.url, size: 104, backgroundColor: Colors.white))
+                        ? LayoutBuilder(builder: (ctx, c) => Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: QrImageView(data: current.url, size: c.maxWidth - 28, backgroundColor: Colors.white)))
                         : Padding(padding: const EdgeInsets.all(12), child: Center(child: Icon(Icons.qr_code_2_outlined, size: 60, color: _onSurface3.withValues(alpha: 0.4)))),
-                    ),
+                    )),
                     const SizedBox(height: 6),
                     Text(current.isLive ? 'Scan to pay' : 'No live link', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _onSurface3)),
-                  ]),
+                  ])),
                   const SizedBox(width: 16),
                   Expanded(child: _BankDetailsPanel(onCopy: _toast)),
-                ])),
+                ]),
                 const SizedBox(height: 14),
                 // ── Donation link (below QR + details) — tap anywhere to copy/open ─
                 GestureDetector(

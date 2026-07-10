@@ -160,8 +160,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
       'admDate':     pick('admDate', 'admissionDate'),
       'father':      s('fatherName'),
       'mother':      s('motherName'),
-      'guardian':    s('guardian'),
-      'relation':    s('relation'),
+      'guardian':    pick('guardian', 'guardianName'),
+      'relation':    pick('relation', 'guardianRelation'),
       'mobile':      pick('mobile', 'guardianPhone'),
       'address':     s('address'),
       'familyNotes': pick('familyNotes', 'notes'),
@@ -287,49 +287,54 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
   static const _genderBack = {'Male': 'MALE', 'Female': 'FEMALE', 'Other': 'OTHER'};
   static const _statusBack = {'Active': 'ACTIVE', 'Graduated': 'GRADUATED', 'Relieved': 'INACTIVE', 'Drop out': 'DROPPED'};
 
-  // Persist an edit: update the on-screen data AND the underlying student record
-  // so the change survives navigation back to the list.
-  void _applyEdit({
-    required String name, required String centre, required String mobile,
-    required String address, required String gender, required String status,
-  }) {
-    setState(() {
-      if (name.isNotEmpty) _data['name'] = name;
-      _data['centre']  = centre;
-      _data['mobile']  = mobile;
-      _data['address'] = address;
-      _data['gender']  = gender;
-      _data['status']  = status;
-    });
-    final rec = findStudentRecord(widget.id);
-    if (rec != null) {
-      if (name.isNotEmpty) rec['name'] = name;
-      rec['gender']        = _genderBack[gender] ?? gender;
-      rec['status']        = _statusBack[status] ?? status;
-      rec['address']       = address;
-      rec['mobile']        = mobile;
-      rec['guardianPhone'] = mobile;
-      if (centre.isNotEmpty) rec['center'] = {'name': centre};
-    }
-  }
-
   void _applyStatus(String status) {
     setState(() => _data['status'] = status);
     final rec = findStudentRecord(widget.id);
     if (rec != null) rec['status'] = _statusBack[status] ?? status;
   }
 
-  void _showEditSheet(BuildContext context, Map<String, String> data) {
-    final nameCtrl    = TextEditingController(text: data['name']);
-    final centreCtrl  = TextEditingController(text: data['centre']);
-    final mobileCtrl  = TextEditingController(text: data['mobile']);
-    final addressCtrl = TextEditingController(text: data['address']);
-    String gender     = data['gender'] ?? 'Male';
-    String status     = data['status'] ?? 'Active';
+  Future<List<({String id, String name})>> _fetchCentres() async {
+    try {
+      final r = await apiClient.get('/students/centers');
+      final list = (r['data'] as List<dynamic>? ?? const []);
+      return list.whereType<Map>().map((m) => (id: m['id'] as String, name: m['name'] as String)).toList();
+    } catch (_) { return const []; }
+  }
+
+  // Comprehensive edit sheet covering every field collected at enrolment
+  // (Personal, Contact, Address, Guardian, Education, Health) — pre-filled
+  // from the current record and persisted to the backend via PUT. Identity
+  // & government-ID / financial fields have their own dedicated edit sheet
+  // (_showIdentityEditSheet, opened from that section's own Edit button).
+  void _showEditSheet(BuildContext context, Map<String, String> data) async {
+    final centres = await _fetchCentres();
+    if (!context.mounted) return;
+
+    final nameCtrl      = TextEditingController(text: data['name']);
+    final fatherCtrl    = TextEditingController(text: data['father']);
+    final motherCtrl    = TextEditingController(text: data['mother']);
+    final guardianCtrl  = TextEditingController(text: data['guardian']);
+    final relationCtrl  = TextEditingController(text: data['relation']);
+    final mobileCtrl    = TextEditingController(text: data['mobile']);
+    final addressCtrl   = TextEditingController(text: data['address']);
+    final schoolCtrl    = TextEditingController(text: data['school']);
+    final classCtrl     = TextEditingController(text: data['class'] == '—' ? '' : data['class']);
+    final medHistoryCtrl = TextEditingController(text: data['medHistory']);
+    final familyNotesCtrl = TextEditingController(text: data['familyNotes']);
+    String gender  = data['gender'] == 'Female' ? 'Female' : (data['gender'] == 'Other' ? 'Other' : 'Male');
+    String status  = data['status'] ?? 'Active';
+    String centre  = centres.any((c) => c.name == data['centre']) ? data['centre']! : (centres.isNotEmpty ? centres.first.name : '');
+    String dob     = data['dob'] ?? '';
+    String admDate = data['admDate'] ?? '';
+    bool saving = false;
 
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
+        Widget sectionLabel(String text) => Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 10),
+          child: Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _brand600, letterSpacing: 0.3)));
+
         Widget field(String label, TextEditingController ctrl, {TextInputType? kb, int lines = 1}) => Padding(
           padding: const EdgeInsets.only(bottom: 14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -345,6 +350,51 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12))),
           ]));
 
+        Widget dateField(String label, String value, void Function(String) onPicked) => Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+            const SizedBox(height: 6),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () async {
+                final initial = DateTime.tryParse(value) ?? DateTime.now();
+                final picked = await showDatePicker(
+                  context: ctx, initialDate: initial,
+                  firstDate: DateTime(1990), lastDate: DateTime.now());
+                if (picked != null) {
+                  final iso = '${picked.year.toString().padLeft(4,'0')}-${picked.month.toString().padLeft(2,'0')}-${picked.day.toString().padLeft(2,'0')}';
+                  setSheet(() => onPicked(iso));
+                }
+              },
+              child: Container(
+                height: 46, padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(12)),
+                child: Row(children: [
+                  Expanded(child: Text(value.isEmpty ? 'Select date' : value,
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: value.isEmpty ? _onSurface3 : _onSurface1))),
+                  const Icon(Icons.calendar_today_outlined, size: 17, color: _onSurface3),
+                ]),
+              ),
+            ),
+          ]));
+
+        Widget chips(String label, List<String> options, String selected, void Function(String) onSelected) => Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+            const SizedBox(height: 6),
+            Wrap(spacing: 8, runSpacing: 8, children: options.map((o) {
+              final active = selected == o;
+              return GestureDetector(
+                onTap: () => setSheet(() => onSelected(o)),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(color: active ? _brand600 : _surface2, borderRadius: BorderRadius.circular(10)),
+                  child: Text(o, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : _onSurface2))));
+            }).toList()),
+          ]));
+
         return Container(
           decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
           padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(ctx).viewInsets.bottom + 28),
@@ -352,60 +402,75 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(2)))),
             const Text('Edit Student', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 16),
+            const SizedBox(height: 4),
+            const Text('All fields collected at enrolment can be edited here.',
+              style: TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w500)),
+
+            sectionLabel('PERSONAL DETAILS'),
             field('Full Name', nameCtrl),
-            field('Centre', centreCtrl),
+            dateField('Date of Birth', dob, (v) => dob = v),
+            chips('Gender', const ['Male', 'Female', 'Other'], gender, (v) => gender = v),
+            chips('Status', const ['Active', 'Graduated', 'Relieved', 'Drop out'], status, (v) => status = v),
+            if (centres.isNotEmpty) chips('Centre', centres.map((c) => c.name).toList(), centre, (v) => centre = v),
+
+            sectionLabel('GUARDIAN DETAILS'),
+            field("Father's Name", fatherCtrl),
+            field("Mother's Name", motherCtrl),
+            field('Guardian Name', guardianCtrl),
+            field('Relation to Child', relationCtrl),
+
+            sectionLabel('CONTACT & ADDRESS'),
             field('Guardian Mobile', mobileCtrl, kb: TextInputType.phone),
             field('Address', addressCtrl, lines: 2),
-            const Text('Gender', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+
+            sectionLabel('EDUCATION DETAILS'),
+            field('School / Institution', schoolCtrl),
+            field('Class / Grade', classCtrl),
+            dateField('Admission Date', admDate, (v) => admDate = v),
+
+            sectionLabel('HEALTH & NOTES'),
+            field('Medical History', medHistoryCtrl, lines: 2),
+            field('Family Background Notes', familyNotesCtrl, lines: 2),
+
             const SizedBox(height: 6),
-            Wrap(spacing: 8, children: ['Male', 'Female', 'Other'].map((g) {
-              final active = gender == g;
-              return GestureDetector(
-                onTap: () => setSheet(() => gender = g),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(color: active ? _brand600 : _surface2, borderRadius: BorderRadius.circular(10)),
-                  child: Text(g, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : _onSurface2))));
-            }).toList()),
-            const SizedBox(height: 14),
-            const Text('Status', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
-            const SizedBox(height: 6),
-            Wrap(spacing: 8, children: ['Active', 'Graduated', 'Relieved', 'Drop out'].map((s) {
-              final active = status == s;
-              return GestureDetector(
-                onTap: () => setSheet(() => status = s),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: active ? _statusColor(s).withValues(alpha: 0.15) : _surface2,
-                    border: active ? Border.all(color: _statusColor(s), width: 1.5) : null,
-                    borderRadius: BorderRadius.circular(10)),
-                  child: Text(s, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
-                    color: active ? _statusColor(s) : _onSurface2))));
-            }).toList()),
-            const SizedBox(height: 20),
             SizedBox(width: double.infinity, child: ElevatedButton(
-              onPressed: () {
-                _applyEdit(
-                  name: nameCtrl.text.trim(),
-                  centre: centreCtrl.text.trim(),
-                  mobile: mobileCtrl.text.trim(),
-                  address: addressCtrl.text.trim(),
-                  gender: gender,
-                  status: status,
-                );
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: const Text('Student updated successfully', style: TextStyle(fontWeight: FontWeight.w700)),
-                  backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+              onPressed: saving ? null : () async {
+                setSheet(() => saving = true);
+                final centerId = centres.firstWhere(
+                  (c) => c.name == centre, orElse: () => (id: '', name: '')).id;
+                await _saveIdentityFields({
+                  'name': nameCtrl.text.trim(),
+                  if (dob.isNotEmpty) 'dob': dob,
+                  'gender': _genderBack[gender] ?? 'MALE',
+                  'status': _statusBack[status] ?? 'ACTIVE',
+                  if (centerId.isNotEmpty) 'centerId': centerId,
+                  'fatherName': fatherCtrl.text.trim(),
+                  'motherName': motherCtrl.text.trim(),
+                  'guardianName': guardianCtrl.text.trim(),
+                  'guardianRelation': relationCtrl.text.trim(),
+                  'guardianPhone': mobileCtrl.text.trim(),
+                  'address': addressCtrl.text.trim(),
+                  'school': schoolCtrl.text.trim(),
+                  'class': classCtrl.text.trim(),
+                  if (admDate.isNotEmpty) 'admissionDate': admDate,
+                  'medicalNotes': medHistoryCtrl.text.trim(),
+                  'notes': familyNotesCtrl.text.trim(),
+                }, centreName: centre.isNotEmpty ? centre : null);
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: const Text('Student updated successfully', style: TextStyle(fontWeight: FontWeight.w700)),
+                    backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 padding: const EdgeInsets.symmetric(vertical: 15)),
-              child: const Text('Save Changes', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              child: saving
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                : const Text('Save Changes', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
             )),
           ])),
         );
@@ -413,10 +478,12 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
     );
   }
 
-  // Persist identity/financial fields to the backend (unlike the general edit
-  // sheet above, this one actually calls PUT — these government-ID fields need
-  // to survive a reload, not just live in local state).
-  Future<void> _saveIdentityFields(Map<String, dynamic> body) async {
+  // Persist fields to the backend so edits survive a reload (PUT
+  // /students/:id), then reflect them in the on-screen data + local cache.
+  static const _genderDisplay = {'MALE': 'Male', 'FEMALE': 'Female', 'OTHER': 'Other'};
+  static const _statusDisplay = {'ACTIVE': 'Active', 'GRADUATED': 'Graduated', 'INACTIVE': 'Relieved', 'DROPPED': 'Drop out'};
+
+  Future<void> _saveIdentityFields(Map<String, dynamic> body, {String? centreName}) async {
     try {
       await apiClient.put('/students/${widget.id}', body);
     } catch (_) {
@@ -429,11 +496,18 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
         switch (k) {
           case 'aadhaarNumber': _data['aadhaar'] = val; break;
           case 'satNumber': _data['sat'] = val; break;
+          case 'gender': _data['gender'] = _genderDisplay[val] ?? val; break;
+          case 'status': _data['status'] = _statusDisplay[val] ?? val; break;
+          case 'guardianName': _data['guardian'] = val; break;
+          case 'guardianRelation': _data['relation'] = val; break;
+          case 'centerId': break; // resolved via centreName below instead
           default: _data[k] = val;
         }
       });
+      if (centreName != null) _data['centre'] = centreName;
     });
     final rec = findStudentRecord(widget.id);
+    if (rec != null && centreName != null) rec['center'] = {'name': centreName};
     if (rec != null) body.forEach((k, v) => rec[k] = v);
   }
 
