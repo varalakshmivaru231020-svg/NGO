@@ -225,6 +225,8 @@ model Student {
   photo         String?
   fatherName    String?
   motherName    String?
+  guardianName     String?
+  guardianRelation String?
   guardianPhone String?
   address       String?
   medicalNotes  String?

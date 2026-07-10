@@ -15,6 +15,8 @@ export class CreateStudentDto {
   @ApiPropertyOptional({ description: 'Profile photo, base64-encoded' }) @IsOptional() @IsString() photo?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() fatherName?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() motherName?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() guardianName?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() guardianRelation?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() guardianPhone?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() address?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() medicalNotes?: string;
