@@ -336,6 +336,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
               final tabWidgets = centreTabs.map((c) {
                 final active = _centre == c;
                 return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
                   onTap: () => setState(() => _centre = c),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
@@ -358,6 +359,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
                   child: Row(children: centreTabs.map((c) {
                     final active = _centre == c;
                     return Expanded(child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
                       onTap: () => setState(() => _centre = c),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 180),
@@ -423,6 +425,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
                   final active = _statusFilter == s;
                   final col = s == 'All' ? _brand600 : _statusColor(s);
                   return Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: () => setState(() => _statusFilter = s),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),

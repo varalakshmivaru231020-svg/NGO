@@ -1476,9 +1476,6 @@ class RazorpayCredentialsScreen extends StatefulWidget {
 }
 
 class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
-  static const _keyIdKey     = 'rzp_key_id';
-  static const _keySecretKey = 'rzp_key_secret';
-
   final _keyIdCtrl     = TextEditingController();
   final _keySecretCtrl = TextEditingController();
   bool _loading = true;
@@ -1491,13 +1488,20 @@ class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
   @override
   void dispose() { _keyIdCtrl.dispose(); _keySecretCtrl.dispose(); super.dispose(); }
 
+  // Backend-persisted (Super Admin only) — the Key Secret must live server
+  // side since only the backend ever calls Razorpay's API with it.
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _keyIdCtrl.text     = prefs.getString(_keyIdKey)     ?? '';
-      _keySecretCtrl.text = prefs.getString(_keySecretKey) ?? '';
-      _loading = false;
-    });
+    try {
+      final r = await apiClient.get('/settings/razorpay');
+      final d = (r['data'] as Map?)?.cast<String, dynamic>() ?? {};
+      if (mounted) setState(() {
+        _keyIdCtrl.text     = d['keyId'] as String? ?? '';
+        _keySecretCtrl.text = d['keySecret'] as String? ?? '';
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _save() async {
@@ -1508,19 +1512,25 @@ class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
       return;
     }
     setState(() => _saving = true);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyIdKey,     keyId);
-    await prefs.setString(_keySecretKey, keySecret);
-    setState(() => _saving = false);
-    if (mounted) _snack(context, '✓ Razorpay credentials saved');
+    try {
+      await apiClient.patch('/settings/razorpay', {'keyId': keyId, 'keySecret': keySecret});
+      if (mounted) _snack(context, '✓ Razorpay credentials saved');
+    } catch (_) {
+      if (mounted) _snack(context, 'Could not save — check your connection and try again');
+    }
+    if (mounted) setState(() => _saving = false);
   }
 
   Future<void> _clear() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyIdKey);
-    await prefs.remove(_keySecretKey);
-    setState(() { _keyIdCtrl.clear(); _keySecretCtrl.clear(); });
-    if (mounted) _snack(context, 'Credentials cleared');
+    setState(() => _saving = true);
+    try {
+      await apiClient.patch('/settings/razorpay', {'keyId': '', 'keySecret': ''});
+      if (mounted) setState(() { _keyIdCtrl.clear(); _keySecretCtrl.clear(); });
+      if (mounted) _snack(context, 'Credentials cleared');
+    } catch (_) {
+      if (mounted) _snack(context, 'Could not clear — check your connection and try again');
+    }
+    if (mounted) setState(() => _saving = false);
   }
 
   @override
