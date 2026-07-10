@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateWhatsappSettingsDto } from './dto/update-whatsapp-settings.dto';
+import { UpdateRazorpaySettingsDto } from './dto/update-razorpay-settings.dto';
 
 const SINGLETON = 'singleton';
 
@@ -45,6 +46,35 @@ export class SettingsService {
       apiVersion: row.apiVersion ?? '',
       wabaId: row.wabaId ?? '',
       businessId: row.businessId ?? '',
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  // Read (create-on-first-read) the singleton Razorpay config row.
+  async getRazorpay() {
+    const row = await this.prisma.razorpaySetting.upsert({
+      where: { id: SINGLETON },
+      create: { id: SINGLETON },
+      update: {},
+    });
+    return this.shapeRazorpay(row);
+  }
+
+  async updateRazorpay(dto: UpdateRazorpaySettingsDto) {
+    const data = { keyId: dto.keyId, keySecret: dto.keySecret };
+    const row = await this.prisma.razorpaySetting.upsert({
+      where: { id: SINGLETON },
+      create: { id: SINGLETON, ...data },
+      update: data,
+    });
+    return this.shapeRazorpay(row);
+  }
+
+  private shapeRazorpay(row: any) {
+    return {
+      keyId: row.keyId ?? '',
+      keySecret: row.keySecret ?? '',
+      configured: !!(row.keyId && row.keySecret),
       updatedAt: row.updatedAt,
     };
   }

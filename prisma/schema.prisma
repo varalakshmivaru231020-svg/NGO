@@ -183,6 +183,13 @@ model PaymentLink {
   expiresAt  DateTime?
   createdAt  DateTime  @default(now())
 
+  // Set when Razorpay is configured and the link was created for real via
+  // their Payment Links API — razorpayShortUrl is the actual rzp.io URL the
+  // donor pays through. Null means Razorpay wasn't configured at creation
+  // time, so this stayed an internal-only bookkeeping link.
+  razorpayLinkId   String?
+  razorpayShortUrl String?
+
   donation Donation? @relation(fields: [donationId], references: [id])
 
   @@map("payment_links")
@@ -487,4 +494,16 @@ model WhatsappSetting {
   updatedAt     DateTime @updatedAt
 
   @@map("whatsapp_settings")
+}
+
+// Razorpay credentials for generating real, live payment links. Stored
+// server-side (never sent to the browser except to the Super Admin settings
+// screen) since the Key Secret must never be used client-side.
+model RazorpaySetting {
+  id        String   @id @default("singleton")
+  keyId     String?
+  keySecret String?
+  updatedAt DateTime @updatedAt
+
+  @@map("razorpay_settings")
 }
