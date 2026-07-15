@@ -28,6 +28,9 @@ dependencies:
   excel: ^4.0.6
   pdf: ^3.11.1
   qr_flutter: ^4.1.0
+  video_player: ^2.9.2
+  path_provider: ^2.1.4
+  share_plus: ^10.1.2
 
 dev_dependencies:
   flutter_test:

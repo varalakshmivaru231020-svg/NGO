@@ -1342,10 +1342,13 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
                 IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close, color: Colors.white)),
               ]),
               if (bytes == null)
-                Container(height: 300, width: 300, color: const Color(0xFF15211E),
+                Container(height: 300, width: double.infinity, color: const Color(0xFF15211E),
                   child: const Center(child: Text('Image Not Available', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700))))
               else
-                InteractiveViewer(child: Image.memory(bytes, fit: BoxFit.contain)),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.7),
+                  child: InteractiveViewer(child: Image.memory(bytes, fit: BoxFit.contain)),
+                ),
             ]);
           },
         ),
