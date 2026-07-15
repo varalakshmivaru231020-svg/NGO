@@ -2,7 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAchievementDto } from './dto/create-achievement.dto';
 import { UpdateAchievementDto } from './dto/update-achievement.dto';
-import { PaginationDto, paginate, paginatedResponse } from '../common/dto/pagination.dto';
+import { AchievementQueryDto } from './dto/achievement-query.dto';
+import { paginate, paginatedResponse } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class AchievementsService {
@@ -19,7 +20,7 @@ export class AchievementsService {
     });
   }
 
-  async findAll(query: PaginationDto & { category?: string; studentId?: string }) {
+  async findAll(query: AchievementQueryDto) {
     const { page = 1, limit = 20, search, category, studentId } = query;
     const where: any = {};
     if (search) where.title = { contains: search, mode: 'insensitive' };

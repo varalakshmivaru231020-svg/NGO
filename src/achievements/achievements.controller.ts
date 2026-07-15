@@ -3,7 +3,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AchievementsService } from './achievements.service';
 import { CreateAchievementDto } from './dto/create-achievement.dto';
 import { UpdateAchievementDto } from './dto/update-achievement.dto';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { AchievementQueryDto } from './dto/achievement-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('achievements')
@@ -17,7 +17,7 @@ export class AchievementsController {
   create(@Body() dto: CreateAchievementDto) { return this.svc.create(dto); }
 
   @Get() @ApiOperation({ summary: 'List achievements' })
-  findAll(@Query() q: PaginationDto & { category?: string; studentId?: string }) { return this.svc.findAll(q); }
+  findAll(@Query() q: AchievementQueryDto) { return this.svc.findAll(q); }
 
   @Get(':id') @ApiOperation({ summary: 'Get achievement by ID' })
   findOne(@Param('id') id: string) { return this.svc.findOne(id); }
