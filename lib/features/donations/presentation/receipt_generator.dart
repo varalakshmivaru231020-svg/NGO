@@ -67,7 +67,7 @@ String _fmt(int n) {
 }
 
 String buildReceiptText(DonationReceipt r) => '''
-SAKSHAM FOUNDATION — DONATION RECEIPT
+SRI KRISHNASHRAYA EDUCATIONAL TRUST — DONATION RECEIPT
 ══════════════════════════════════════
 Receipt No : ${r.receiptNo}
 Date       : ${r.date}
@@ -81,8 +81,8 @@ Amount     : ₹${_fmt(r.amount)}.00
 ${_amountInWords(r.amount)}
 ──────────────────────────────────────
 Trust PAN: AATTS6672D
-12AA Reg : ITBA/EXM/S/12AA/2018-19
-80G Cert : AATTS6672DF2022
+12AB Reg : AATTS6672D25BL01
+80G Approval : AATTS6672D25BL02
 ${r.taxExemption ? '✓ 80G Tax Exemption Applicable\n' : ''}══════════════════════════════════════
 Thanks for your support!
 ''';
@@ -173,7 +173,7 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r) async {
         child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           pw.Text('STATUTORY REGISTRATION DETAILS (TAX BENEFITS)', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: orange)),
           pw.SizedBox(height: 6),
-          pw.Text('Trust PAN: AATTS6672D   |   12AA Registration: ITBA/EXM/S/12AA/2018-19/A/10252   |   80G Certification: ATTS6672DF20221',
+          pw.Text('Trust PAN: AATTS6672D   |   12AB Registration No.: AATTS6672D25BL01   |   80G Approval No.: AATTS6672D25BL02',
               style: pw.TextStyle(fontSize: 9, color: grey)),
           if (r.taxExemption) ...[
             pw.SizedBox(height: 4),
@@ -386,7 +386,7 @@ class _ReceiptSheet extends StatelessWidget {
                   const Text('STATUTORY REGISTRATION DETAILS (TAX BENEFITS)',
                       style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: _orange, letterSpacing: 0.5)),
                   const SizedBox(height: 6),
-                  const Text('• Trust PAN: AATTS6672D  |  • 12AA Registration: ITBA/EXM/S/12AA/2018-19/A/10252  |  • 80G Certification: ATTS6672DF20221',
+                  const Text('• Trust PAN: AATTS6672D  |  • 12AB Registration No.: AATTS6672D25BL01  |  • 80G Approval No.: AATTS6672D25BL02',
                       style: TextStyle(fontSize: 9, color: _grey, height: 1.5)),
                   const SizedBox(height: 4),
                   Text('• Payment Mode / Gateway Reference: ${receipt.paymentMode}',
