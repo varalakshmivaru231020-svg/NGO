@@ -813,7 +813,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
         body: TabBarView(
           controller: _tabs,
           children: [
-            _ProfileTab(data: data, onEditIdentity: () => _showIdentityEditSheet(context)),
+            _ProfileTab(data: data, onEditIdentity: () => _showIdentityEditSheet(context), studentId: widget.id),
             _EducationTab(data: data, studentId: widget.id),
             _SponsorTab(data: data, onAssign: () => _showSponsorPicker(context)),
             _AchievementsTab(studentId: widget.id),
@@ -899,9 +899,10 @@ class _AppBarBottom extends StatelessWidget implements PreferredSizeWidget {
 // PROFILE TAB
 // ══════════════════════════════════════════════════════════════════════
 class _ProfileTab extends StatelessWidget {
-  const _ProfileTab({required this.data, required this.onEditIdentity});
+  const _ProfileTab({required this.data, required this.onEditIdentity, required this.studentId});
   final Map<String, String> data;
   final VoidCallback onEditIdentity;
+  final String studentId;
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
@@ -982,11 +983,14 @@ class _ProfileTab extends StatelessWidget {
       ],
       const SizedBox(height: 14),
       // Document upload sections
-      const _UploadSection(label: 'Medical Documents',  sublabel: 'Prescriptions, reports, discharge summaries'),
+      _SingleDocSlot(studentId: studentId, category: 'Medical Documents',
+        sublabel: 'Prescriptions, reports, discharge summaries', icon: Icons.medical_information_outlined),
       const SizedBox(height: 10),
-      const _UploadSection(label: "Parents' Aadhaar",   sublabel: 'Upload Aadhaar card images'),
+      _SingleDocSlot(studentId: studentId, category: "Parents' Aadhaar Photo",
+        sublabel: 'Upload Aadhaar card images', icon: Icons.badge_outlined),
       const SizedBox(height: 10),
-      const _UploadSection(label: 'Family Photo',        sublabel: 'Family photograph'),
+      _SingleDocSlot(studentId: studentId, category: 'Family Photo',
+        sublabel: 'Family photograph', icon: Icons.family_restroom_outlined),
       const SizedBox(height: 80),
     ]),
   );

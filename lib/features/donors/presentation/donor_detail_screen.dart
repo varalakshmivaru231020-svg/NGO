@@ -1121,19 +1121,24 @@ class _SpnDetail extends StatelessWidget {
   ]));
 }
 
-// ── activities tab (video uploads) ─────────────────────────────────────
+// ── activities tab (photo + video uploads) ──────────────────────────────
 const _allowedVideoExt = {'mp4', 'mov', 'avi', 'webm'};
+const _allowedImageExt = {'jpg', 'jpeg', 'png', 'webp'};
 
-class _ActivityVideo {
-  _ActivityVideo({
-    required this.id, required this.title, required this.activityDate,
+enum _MediaKind { image, video }
+
+class _ActivityItem {
+  _ActivityItem({
+    required this.kind, required this.id, required this.title, required this.activityDate,
     required this.fileName, this.mimeType, this.uploadedBy, required this.createdAt,
   });
+  final _MediaKind kind;
   final String id, title, fileName;
   final DateTime activityDate, createdAt;
   final String? mimeType, uploadedBy;
 
-  factory _ActivityVideo.fromJson(Map<String, dynamic> j) => _ActivityVideo(
+  factory _ActivityItem.fromJson(Map<String, dynamic> j, _MediaKind kind) => _ActivityItem(
+    kind: kind,
     id: j['id'] as String,
     title: j['title'] as String? ?? 'Untitled activity',
     activityDate: DateTime.tryParse(j['activityDate'] as String? ?? '') ?? DateTime.now(),
@@ -1142,6 +1147,8 @@ class _ActivityVideo {
     uploadedBy: j['uploadedBy'] as String?,
     createdAt: DateTime.tryParse(j['createdAt'] as String? ?? '') ?? DateTime.now(),
   );
+
+  String get _basePath => kind == _MediaKind.video ? '/donors/activity-videos' : '/donors/activity-images';
 }
 
 class _ActivitiesTab extends StatefulWidget {
@@ -1152,7 +1159,7 @@ class _ActivitiesTab extends StatefulWidget {
 }
 
 class _ActivitiesTabState extends State<_ActivitiesTab> {
-  List<_ActivityVideo> _videos = [];
+  List<_ActivityItem> _items = [];
   bool _loading = true;
   bool _uploading = false;
 
@@ -1164,23 +1171,37 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
   Future<void> _load() async {
     if (mounted) setState(() => _loading = true);
     try {
-      final r = await apiClient.get('/donors/${widget.donorId}/activity-videos');
-      final list = (r['data'] as List<dynamic>? ?? const []);
-      final videos = list.whereType<Map>().map((m) => _ActivityVideo.fromJson(m.cast<String, dynamic>())).toList();
-      if (mounted) setState(() { _videos = videos; _loading = false; });
+      final results = await Future.wait([
+        apiClient.get('/donors/${widget.donorId}/activity-videos'),
+        apiClient.get('/donors/${widget.donorId}/activity-images'),
+      ]);
+      final videos = (results[0]['data'] as List<dynamic>? ?? const [])
+          .whereType<Map>().map((m) => _ActivityItem.fromJson(m.cast<String, dynamic>(), _MediaKind.video));
+      final images = (results[1]['data'] as List<dynamic>? ?? const [])
+          .whereType<Map>().map((m) => _ActivityItem.fromJson(m.cast<String, dynamic>(), _MediaKind.image));
+      final merged = [...videos, ...images]..sort((a, b) => b.activityDate.compareTo(a.activityDate));
+      if (mounted) setState(() { _items = merged; _loading = false; });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  String? _mimeFromExt(String ext) {
-    switch (ext) {
-      case 'mp4': return 'video/mp4';
-      case 'mov': return 'video/quicktime';
-      case 'avi': return 'video/x-msvideo';
-      case 'webm': return 'video/webm';
-      default: return null;
+  String? _mimeFromExt(String ext, _MediaKind kind) {
+    if (kind == _MediaKind.video) {
+      switch (ext) {
+        case 'mp4': return 'video/mp4';
+        case 'mov': return 'video/quicktime';
+        case 'avi': return 'video/x-msvideo';
+        case 'webm': return 'video/webm';
+      }
+    } else {
+      switch (ext) {
+        case 'jpg': case 'jpeg': return 'image/jpeg';
+        case 'png': return 'image/png';
+        case 'webp': return 'image/webp';
+      }
     }
+    return null;
   }
 
   void _toast(String msg, {bool error = false}) {
@@ -1191,14 +1212,17 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
   }
 
-  Future<void> _upload() async {
-    final r = await FilePicker.platform.pickFiles(type: FileType.video, withData: true);
+  Future<void> _upload(_MediaKind kind) async {
+    final r = await FilePicker.platform.pickFiles(
+      type: kind == _MediaKind.video ? FileType.video : FileType.image, withData: true);
     final file = r?.files.firstOrNull;
     if (file == null || file.bytes == null) return;
 
     final ext = (file.extension ?? file.name.split('.').last).toLowerCase();
-    if (!_allowedVideoExt.contains(ext)) {
-      _toast('Unsupported format "$ext" — please upload MP4, MOV, AVI, or WebM.', error: true);
+    final allowed = kind == _MediaKind.video ? _allowedVideoExt : _allowedImageExt;
+    if (!allowed.contains(ext)) {
+      final formats = kind == _MediaKind.video ? 'MP4, MOV, AVI, or WebM' : 'JPG, PNG, or WebP';
+      _toast('Unsupported format "$ext" — please upload $formats.', error: true);
       return;
     }
 
@@ -1209,7 +1233,8 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text('Upload Activity Video', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        title: Text(kind == _MediaKind.video ? 'Upload Activity Video' : 'Upload Activity Photo',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           TextField(
             controller: titleCtrl, autofocus: true,
@@ -1247,75 +1272,106 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
 
     setState(() => _uploading = true);
     try {
-      await apiClient.post('/donors/${widget.donorId}/activity-videos', {
+      final path = kind == _MediaKind.video ? 'activity-videos' : 'activity-images';
+      await apiClient.post('/donors/${widget.donorId}/$path', {
         'title': titleCtrl.text.trim().isNotEmpty ? titleCtrl.text.trim() : defaultTitle,
         'activityDate': activityDate.toIso8601String(),
         'fileName': file.name,
-        'mimeType': _mimeFromExt(ext),
+        'mimeType': _mimeFromExt(ext, kind),
         'uploadedBy': _uploaderName,
         'data': base64Encode(file.bytes!),
       });
-      _toast('Video uploaded successfully');
+      _toast('${kind == _MediaKind.video ? 'Video' : 'Photo'} uploaded successfully');
       await _load();
     } catch (e) {
-      _toast(e.toString().contains('too large') ? 'Video is too large — please upload a shorter clip.' : 'Upload failed. Please try again.', error: true);
+      final tooLarge = e.toString().contains('too large');
+      _toast(tooLarge
+        ? '${kind == _MediaKind.video ? 'Video' : 'Photo'} is too large — please upload a smaller file.'
+        : 'Upload failed. Please try again.', error: true);
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
   }
 
-  Future<Uint8List?> _fetchBytes(String videoId) async {
+  Future<Uint8List?> _fetchBytes(_ActivityItem item) async {
     try {
-      final r = await apiClient.get('/donors/activity-videos/$videoId');
+      final r = await apiClient.get('${item._basePath}/${item.id}');
       final data = (r['data'] as Map?)?['data'] as String?;
       if (data == null) return null;
       return base64Decode(data);
     } catch (_) { return null; }
   }
 
-  Future<void> _play(_ActivityVideo v) async {
-    showDialog(context: context, barrierColor: Colors.black87, builder: (ctx) => Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.all(20),
-      child: FutureBuilder<Uint8List?>(
-        future: _fetchBytes(v.id),
-        builder: (ctx, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: Colors.white)));
-          }
-          final bytes = snap.data;
-          return Column(mainAxisSize: MainAxisSize.min, children: [
-            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close, color: Colors.white)),
-            ]),
-            if (bytes == null)
-              const _VideoNotAvailable()
-            else
-              AspectRatio(aspectRatio: 16 / 9, child: WebVideoPlayer(bytes: bytes, mimeType: v.mimeType)),
-          ]);
-        },
-      ),
-    ));
+  Future<void> _open(_ActivityItem item) async {
+    if (item.kind == _MediaKind.video) {
+      showDialog(context: context, barrierColor: Colors.black87, builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(20),
+        child: FutureBuilder<Uint8List?>(
+          future: _fetchBytes(item),
+          builder: (ctx, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: Colors.white)));
+            }
+            final bytes = snap.data;
+            return Column(mainAxisSize: MainAxisSize.min, children: [
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close, color: Colors.white)),
+              ]),
+              if (bytes == null)
+                const _VideoNotAvailable()
+              else
+                AspectRatio(aspectRatio: 16 / 9, child: WebVideoPlayer(bytes: bytes, mimeType: item.mimeType)),
+            ]);
+          },
+        ),
+      ));
+    } else {
+      showDialog(context: context, barrierColor: Colors.black87, builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(20),
+        child: FutureBuilder<Uint8List?>(
+          future: _fetchBytes(item),
+          builder: (ctx, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: Colors.white)));
+            }
+            final bytes = snap.data;
+            return Column(mainAxisSize: MainAxisSize.min, children: [
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close, color: Colors.white)),
+              ]),
+              if (bytes == null)
+                Container(height: 300, width: 300, color: const Color(0xFF15211E),
+                  child: const Center(child: Text('Image Not Available', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700))))
+              else
+                InteractiveViewer(child: Image.memory(bytes, fit: BoxFit.contain)),
+            ]);
+          },
+        ),
+      ));
+    }
   }
 
-  Future<void> _download(_ActivityVideo v) async {
-    final bytes = await _fetchBytes(v.id);
-    if (bytes == null) { _toast('Video not available', error: true); return; }
-    downloadBytes(bytes, v.fileName, mimeType: v.mimeType);
+  Future<void> _download(_ActivityItem item) async {
+    final bytes = await _fetchBytes(item);
+    if (bytes == null) { _toast('File not available', error: true); return; }
+    downloadBytes(bytes, item.fileName, mimeType: item.mimeType);
   }
 
-  Future<void> _delete(_ActivityVideo v) async {
+  Future<void> _delete(_ActivityItem item) async {
+    final label = item.kind == _MediaKind.video ? 'Video' : 'Photo';
     final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      title: const Text('Delete Video?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-      content: Text('This will permanently remove "${v.title}".', style: const TextStyle(fontSize: 13.5, color: _onSurface2)),
+      title: Text('Delete $label?', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+      content: Text('This will permanently remove "${item.title}".', style: const TextStyle(fontSize: 13.5, color: _onSurface2)),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
         TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: _coral500, fontWeight: FontWeight.w700))),
       ],
     ));
     if (confirmed != true) return;
-    try { await apiClient.delete('/donors/activity-videos/${v.id}'); _toast('Video deleted'); } catch (_) { _toast('Delete failed', error: true); }
+    try { await apiClient.delete('${item._basePath}/${item.id}'); _toast('$label deleted'); } catch (_) { _toast('Delete failed', error: true); }
     await _load();
   }
 
@@ -1325,20 +1381,32 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
       Padding(
         padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
         child: Row(children: [
-          Text('${_videos.length} Video${_videos.length == 1 ? '' : 's'}',
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _onSurface2)),
-          const Spacer(),
+          Expanded(child: Text('${_items.length} ${_items.length == 1 ? 'Item' : 'Items'}',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _onSurface2))),
           GestureDetector(
-            onTap: _uploading ? null : _upload,
+            onTap: _uploading ? null : () => _upload(_MediaKind.image),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(10)),
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.add_photo_alternate_outlined, color: _brand600, size: 16),
+                SizedBox(width: 4),
+                Text('Photo', style: TextStyle(color: _brand600, fontSize: 12, fontWeight: FontWeight.w800)),
+              ]),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _uploading ? null : () => _upload(_MediaKind.video),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(10)),
               child: _uploading
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                 : const Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.upload_rounded, color: Colors.white, size: 16),
+                    Icon(Icons.videocam_outlined, color: Colors.white, size: 16),
                     SizedBox(width: 4),
-                    Text('Upload Video', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                    Text('Video', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
                   ]),
             ),
           ),
@@ -1347,22 +1415,23 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
       if (_loading)
         Expanded(child: ListView(padding: const EdgeInsets.fromLTRB(18, 4, 18, 40),
           children: List.generate(3, (_) => const Padding(padding: EdgeInsets.only(bottom: 10), child: _SkeletonCard()))))
-      else if (_videos.isEmpty)
+      else if (_items.isEmpty)
         Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.videocam_off_outlined, size: 44, color: _onSurface3),
+          const Icon(Icons.photo_library_outlined, size: 44, color: _onSurface3),
           const SizedBox(height: 12),
-          const Text('No activity videos uploaded.', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _onSurface3)),
+          const Text('No activities uploaded.', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _onSurface3)),
           const SizedBox(height: 6),
-          const Text('Tap Upload Video to add the first one.', style: TextStyle(fontSize: 13, color: _onSurface3)),
+          const Text('Tap Photo or Video above to add the first one.', style: TextStyle(fontSize: 13, color: _onSurface3)),
         ])))
       else
         Expanded(child: ListView.separated(
           padding: const EdgeInsets.fromLTRB(18, 4, 18, 40),
           physics: const BouncingScrollPhysics(),
-          itemCount: _videos.length,
+          itemCount: _items.length,
           separatorBuilder: (_, __) => const SizedBox(height: 10),
           itemBuilder: (_, i) {
-            final v = _videos[i];
+            final item = _items[i];
+            final isVideo = item.kind == _MediaKind.video;
             return Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -1372,27 +1441,36 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
               ),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 GestureDetector(
-                  onTap: () => _play(v),
-                  child: Container(
-                    height: 120, width: double.infinity,
-                    decoration: BoxDecoration(color: const Color(0xFF15211E), borderRadius: BorderRadius.circular(12)),
-                    child: const Center(child: Icon(Icons.play_circle_fill_rounded, size: 44, color: Colors.white70)),
+                  onTap: () => _open(item),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: SizedBox(
+                      height: 120, width: double.infinity,
+                      child: isVideo
+                        ? Container(color: const Color(0xFF15211E),
+                            child: const Center(child: Icon(Icons.play_circle_fill_rounded, size: 44, color: Colors.white70)))
+                        : _ActivityImageThumb(fetchBytes: () => _fetchBytes(item)),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
-                Text(v.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _onSurface1)),
+                Row(children: [
+                  Icon(isVideo ? Icons.videocam_outlined : Icons.image_outlined, size: 14, color: _onSurface3),
+                  const SizedBox(width: 5),
+                  Expanded(child: Text(item.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _onSurface1))),
+                ]),
                 const SizedBox(height: 3),
                 Text(
-                  'Activity date: ${_fmtDate(v.activityDate.toIso8601String())} · Uploaded ${_fmtDate(v.createdAt.toIso8601String())}${(v.uploadedBy ?? '').isNotEmpty ? ' by ${v.uploadedBy}' : ''}',
+                  'Activity date: ${_fmtDate(item.activityDate.toIso8601String())} · Uploaded ${_fmtDate(item.createdAt.toIso8601String())}${(item.uploadedBy ?? '').isNotEmpty ? ' by ${item.uploadedBy}' : ''}',
                   style: const TextStyle(fontSize: 12, color: _onSurface3, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 10),
                 Row(children: [
-                  _ActBtn(label: 'Play', icon: Icons.play_arrow_rounded, onTap: () => _play(v)),
+                  _ActBtn(label: isVideo ? 'Play' : 'View', icon: isVideo ? Icons.play_arrow_rounded : Icons.visibility_outlined, onTap: () => _open(item)),
                   const SizedBox(width: 8),
-                  _ActBtn(label: 'Download', icon: Icons.download_outlined, color: _sky500, onTap: () => _download(v)),
+                  _ActBtn(label: 'Download', icon: Icons.download_outlined, color: _sky500, onTap: () => _download(item)),
                   const SizedBox(width: 8),
-                  _ActBtn(label: 'Delete', icon: Icons.delete_outline, color: _coral500, onTap: () => _delete(v)),
+                  _ActBtn(label: 'Delete', icon: Icons.delete_outline, color: _coral500, onTap: () => _delete(item)),
                 ]),
               ]),
             );
@@ -1400,6 +1478,26 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
         )),
     ]);
   }
+}
+
+// Lazily fetches and displays a real thumbnail for an activity photo.
+class _ActivityImageThumb extends StatelessWidget {
+  const _ActivityImageThumb({required this.fetchBytes});
+  final Future<Uint8List?> Function() fetchBytes;
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
+    future: fetchBytes(),
+    builder: (ctx, snap) {
+      if (snap.connectionState != ConnectionState.done) {
+        return Container(color: _surface2, child: const Center(child: CircularProgressIndicator(color: _brand600, strokeWidth: 2)));
+      }
+      final bytes = snap.data;
+      if (bytes == null) {
+        return Container(color: _surface2, child: const Center(child: Icon(Icons.broken_image_outlined, color: _onSurface3, size: 28)));
+      }
+      return Image.memory(bytes, fit: BoxFit.cover, width: double.infinity, height: double.infinity);
+    },
+  );
 }
 
 // Loading-state placeholder shown while the video list is being fetched.
