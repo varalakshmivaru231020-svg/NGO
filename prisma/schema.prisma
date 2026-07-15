@@ -101,6 +101,7 @@ model Donor {
   sponsorships  Sponsorship[]
   reminders     Reminder[]
   activityVideos DonorActivityVideo[]
+  activityImages DonorActivityImage[]
 
   @@index([name])
   @@index([mobile])
@@ -125,6 +126,25 @@ model DonorActivityVideo {
 
   @@index([donorId])
   @@map("donor_activity_videos")
+}
+
+// Donor Profile → Activities tab. Photos, alongside DonorActivityVideo —
+// same pragmatic base64 storage approach.
+model DonorActivityImage {
+  id           String   @id @default(cuid())
+  donorId      String
+  title        String   // activity name
+  activityDate DateTime @default(now())
+  fileName     String
+  mimeType     String?  // image/jpeg, image/png, image/webp
+  data         String   // base64-encoded file content
+  uploadedBy   String?
+  createdAt    DateTime @default(now())
+
+  donor Donor @relation(fields: [donorId], references: [id], onDelete: Cascade)
+
+  @@index([donorId])
+  @@map("donor_activity_images")
 }
 
 model DonorCategory {

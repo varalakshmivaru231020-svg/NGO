@@ -5,6 +5,7 @@ import { CreateDonorDto } from './dto/create-donor.dto';
 import { UpdateDonorDto } from './dto/update-donor.dto';
 import { DonorQueryDto } from './dto/donor-query.dto';
 import { CreateDonorActivityVideoDto } from './dto/create-donor-activity-video.dto';
+import { CreateDonorActivityImageDto } from './dto/create-donor-activity-image.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('donors')
@@ -50,5 +51,25 @@ export class DonorsController {
   @Delete('activity-videos/:videoId') @ApiOperation({ summary: 'Remove an activity video' })
   removeActivityVideo(@Param('videoId') videoId: string) {
     return this.svc.removeActivityVideo(videoId);
+  }
+
+  @Post(':id/activity-images') @ApiOperation({ summary: 'Upload a donor activity image' })
+  addActivityImage(@Param('id') id: string, @Body() dto: CreateDonorActivityImageDto) {
+    return this.svc.addActivityImage(id, dto);
+  }
+
+  @Get(':id/activity-images') @ApiOperation({ summary: 'List activity image metadata (no file content)' })
+  getActivityImages(@Param('id') id: string) {
+    return this.svc.getActivityImages(id);
+  }
+
+  @Get('activity-images/:imageId') @ApiOperation({ summary: 'Get an activity image with its file content' })
+  getActivityImage(@Param('imageId') imageId: string) {
+    return this.svc.getActivityImage(imageId);
+  }
+
+  @Delete('activity-images/:imageId') @ApiOperation({ summary: 'Remove an activity image' })
+  removeActivityImage(@Param('imageId') imageId: string) {
+    return this.svc.removeActivityImage(imageId);
   }
 }

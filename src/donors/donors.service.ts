@@ -4,11 +4,14 @@ import { CreateDonorDto } from './dto/create-donor.dto';
 import { UpdateDonorDto } from './dto/update-donor.dto';
 import { DonorQueryDto } from './dto/donor-query.dto';
 import { CreateDonorActivityVideoDto } from './dto/create-donor-activity-video.dto';
+import { CreateDonorActivityImageDto } from './dto/create-donor-activity-image.dto';
 import { paginate, paginatedResponse } from '../common/dto/pagination.dto';
 
 // ~20MB original video / ~27MB once base64-encoded — keeps well under the
 // 30mb JSON body-parser limit configured in main.ts.
 const MAX_VIDEO_BASE64_CHARS = 27 * 1024 * 1024;
+// ~5MB original image / ~7MB once base64-encoded.
+const MAX_IMAGE_BASE64_CHARS = 7 * 1024 * 1024;
 
 @Injectable()
 export class DonorsService {
@@ -146,6 +149,45 @@ export class DonorsService {
 
   async removeActivityVideo(videoId: string) {
     return this.prisma.donorActivityVideo.delete({ where: { id: videoId } });
+  }
+
+  async addActivityImage(donorId: string, dto: CreateDonorActivityImageDto) {
+    await this.findOne(donorId);
+    if (dto.data.length > MAX_IMAGE_BASE64_CHARS) {
+      throw new BadRequestException('Image is too large — please upload a smaller photo (max ~5MB).');
+    }
+    return this.prisma.donorActivityImage.create({
+      data: {
+        donorId,
+        title: dto.title,
+        activityDate: dto.activityDate ? new Date(dto.activityDate) : new Date(),
+        fileName: dto.fileName,
+        mimeType: dto.mimeType,
+        data: dto.data,
+        uploadedBy: dto.uploadedBy,
+      },
+      select: { id: true, donorId: true, title: true, activityDate: true, fileName: true, mimeType: true, uploadedBy: true, createdAt: true },
+    });
+  }
+
+  // Metadata only (no `data`) — keeps the list light; fetch the full image
+  // (with its base64 content) via getActivityImage() when viewing.
+  async getActivityImages(donorId: string) {
+    return this.prisma.donorActivityImage.findMany({
+      where: { donorId },
+      select: { id: true, donorId: true, title: true, activityDate: true, fileName: true, mimeType: true, uploadedBy: true, createdAt: true },
+      orderBy: { activityDate: 'desc' },
+    });
+  }
+
+  async getActivityImage(imageId: string) {
+    const image = await this.prisma.donorActivityImage.findUnique({ where: { id: imageId } });
+    if (!image) throw new NotFoundException('Image not found');
+    return image;
+  }
+
+  async removeActivityImage(imageId: string) {
+    return this.prisma.donorActivityImage.delete({ where: { id: imageId } });
   }
 
   async summary() {
