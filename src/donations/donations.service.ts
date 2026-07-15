@@ -16,7 +16,7 @@ export class DonationsService {
   ) {}
 
   private include = {
-    donor: { select: { id: true, name: true, mobile: true, donorCode: true } },
+    donor: { select: { id: true, name: true, mobile: true, donorCode: true, city: true, pan: true } },
     type: true,
   };
 

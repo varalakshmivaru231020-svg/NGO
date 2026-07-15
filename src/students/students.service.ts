@@ -7,6 +7,7 @@ import { CreateSponsorshipDto } from './dto/create-sponsorship.dto';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { CreateGrowthRecordDto } from './dto/create-growth-record.dto';
 import { CreateStudentDocumentDto } from './dto/create-student-document.dto';
+import { CreateProgressRecordDto } from './dto/create-progress-record.dto';
 import { paginate, paginatedResponse } from '../common/dto/pagination.dto';
 
 @Injectable()
@@ -37,6 +38,7 @@ export class StudentsService {
         childId,
         dob: new Date(dto.dob),
         admissionDate: dto.admissionDate ? new Date(dto.admissionDate) : new Date(),
+        joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : undefined,
       },
       include: this.include,
     });
@@ -69,6 +71,8 @@ export class StudentsService {
         ...this.include,
         achievements: { orderBy: { date: 'desc' }, take: 10 },
         attendance: { orderBy: { date: 'desc' }, take: 30 },
+        progressRecords: { orderBy: { date: 'desc' }, take: 10 },
+        _count: { select: { achievements: true, attendance: true, progressRecords: true } },
       },
     });
     if (!student) throw new NotFoundException('Student not found');
@@ -83,6 +87,7 @@ export class StudentsService {
         ...dto,
         dob: dto.dob ? new Date(dto.dob) : undefined,
         admissionDate: dto.admissionDate ? new Date(dto.admissionDate) : undefined,
+        joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : undefined,
       },
       include: this.include,
     });
@@ -178,6 +183,31 @@ export class StudentsService {
 
   async removeDocument(docId: string) {
     return this.prisma.studentDocument.delete({ where: { id: docId } });
+  }
+
+  async addProgressRecord(studentId: string, dto: CreateProgressRecordDto) {
+    await this.findOne(studentId);
+    return this.prisma.progressRecord.create({
+      data: { studentId, ...dto, date: dto.date ? new Date(dto.date) : new Date() },
+    });
+  }
+
+  // Newest-first history; paginated (page/limit) since a student can
+  // accumulate many check-ins over the years.
+  async getProgressRecords(studentId: string, page = 1, limit = 10) {
+    const [data, total] = await Promise.all([
+      this.prisma.progressRecord.findMany({
+        where: { studentId },
+        orderBy: { date: 'desc' },
+        ...paginate(page, limit),
+      }),
+      this.prisma.progressRecord.count({ where: { studentId } }),
+    ]);
+    return paginatedResponse(data, total, page, limit);
+  }
+
+  async removeProgressRecord(recordId: string) {
+    return this.prisma.progressRecord.delete({ where: { id: recordId } });
   }
 
   async summary() {

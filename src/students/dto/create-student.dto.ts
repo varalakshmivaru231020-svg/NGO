@@ -23,6 +23,15 @@ export class CreateStudentDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() admissionDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
 
+  // Education Details tab
+  @ApiPropertyOptional() @IsOptional() @IsString() admissionNo?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() academicYear?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() joiningDate?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() section?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() permanence?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() studentType?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() educationRemarks?: string;
+
   // Identity / government IDs
   @ApiPropertyOptional() @IsOptional() @IsString() aadhaarNumber?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() satNumber?: string;

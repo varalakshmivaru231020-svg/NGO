@@ -4,6 +4,7 @@ import { DonorsService } from './donors.service';
 import { CreateDonorDto } from './dto/create-donor.dto';
 import { UpdateDonorDto } from './dto/update-donor.dto';
 import { DonorQueryDto } from './dto/donor-query.dto';
+import { CreateDonorActivityVideoDto } from './dto/create-donor-activity-video.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('donors')
@@ -30,4 +31,24 @@ export class DonorsController {
 
   @Delete(':id') @ApiOperation({ summary: 'Soft-delete donor' })
   remove(@Param('id') id: string) { return this.svc.remove(id); }
+
+  @Post(':id/activity-videos') @ApiOperation({ summary: 'Upload a donor activity video' })
+  addActivityVideo(@Param('id') id: string, @Body() dto: CreateDonorActivityVideoDto) {
+    return this.svc.addActivityVideo(id, dto);
+  }
+
+  @Get(':id/activity-videos') @ApiOperation({ summary: 'List activity video metadata (no file content)' })
+  getActivityVideos(@Param('id') id: string) {
+    return this.svc.getActivityVideos(id);
+  }
+
+  @Get('activity-videos/:videoId') @ApiOperation({ summary: 'Get an activity video with its file content' })
+  getActivityVideo(@Param('videoId') videoId: string) {
+    return this.svc.getActivityVideo(videoId);
+  }
+
+  @Delete('activity-videos/:videoId') @ApiOperation({ summary: 'Remove an activity video' })
+  removeActivityVideo(@Param('videoId') videoId: string) {
+    return this.svc.removeActivityVideo(videoId);
+  }
 }

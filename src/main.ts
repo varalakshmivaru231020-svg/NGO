@@ -19,9 +19,10 @@ async function bootstrap() {
 
   app.use(helmet());
   app.use(cookieParser());
-  // Allow base64 images (avatars / student photos) in JSON bodies.
-  app.use(json({ limit: '15mb' }));
-  app.use(urlencoded({ extended: true, limit: '15mb' }));
+  // Allow base64 images (avatars / student photos) and short activity
+  // videos (up to ~20MB original, ~27MB once base64-encoded) in JSON bodies.
+  app.use(json({ limit: '30mb' }));
+  app.use(urlencoded({ extended: true, limit: '30mb' }));
 
   // FRONTEND_URL may be a comma-separated list of allowed origins. Local dev
   // origins (Flutter web on :3007, admin on :3000) are always allowed.

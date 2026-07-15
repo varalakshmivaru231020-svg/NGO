@@ -1,9 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDonorDto } from './dto/create-donor.dto';
 import { UpdateDonorDto } from './dto/update-donor.dto';
 import { DonorQueryDto } from './dto/donor-query.dto';
+import { CreateDonorActivityVideoDto } from './dto/create-donor-activity-video.dto';
 import { paginate, paginatedResponse } from '../common/dto/pagination.dto';
+
+// ~20MB original video / ~27MB once base64-encoded — keeps well under the
+// 30mb JSON body-parser limit configured in main.ts.
+const MAX_VIDEO_BASE64_CHARS = 27 * 1024 * 1024;
 
 @Injectable()
 export class DonorsService {
@@ -68,7 +73,15 @@ export class DonorsService {
       },
     });
     if (!donor) throw new NotFoundException('Donor not found');
-    return donor;
+
+    // Lifetime total — the included `donations` list above is capped at 10,
+    // so it isn't enough on its own for a true all-time figure.
+    const totalDonated = await this.prisma.donation.aggregate({
+      where: { donorId: id },
+      _sum: { amount: true },
+    });
+
+    return { ...donor, totalDonated: totalDonated._sum.amount ?? 0 };
   }
 
   async update(id: string, dto: UpdateDonorDto) {
@@ -94,6 +107,45 @@ export class DonorsService {
   async remove(id: string) {
     await this.findOne(id);
     return this.prisma.donor.update({ where: { id }, data: { isActive: false }, include: this.include });
+  }
+
+  async addActivityVideo(donorId: string, dto: CreateDonorActivityVideoDto) {
+    await this.findOne(donorId);
+    if (dto.data.length > MAX_VIDEO_BASE64_CHARS) {
+      throw new BadRequestException('Video is too large — please upload a shorter clip (max ~20MB).');
+    }
+    return this.prisma.donorActivityVideo.create({
+      data: {
+        donorId,
+        title: dto.title,
+        activityDate: dto.activityDate ? new Date(dto.activityDate) : new Date(),
+        fileName: dto.fileName,
+        mimeType: dto.mimeType,
+        data: dto.data,
+        uploadedBy: dto.uploadedBy,
+      },
+      select: { id: true, donorId: true, title: true, activityDate: true, fileName: true, mimeType: true, uploadedBy: true, createdAt: true },
+    });
+  }
+
+  // Metadata only (no `data`) — keeps the list light; fetch the full video
+  // (with its base64 content) via getActivityVideo() when playing/downloading.
+  async getActivityVideos(donorId: string) {
+    return this.prisma.donorActivityVideo.findMany({
+      where: { donorId },
+      select: { id: true, donorId: true, title: true, activityDate: true, fileName: true, mimeType: true, uploadedBy: true, createdAt: true },
+      orderBy: { activityDate: 'desc' },
+    });
+  }
+
+  async getActivityVideo(videoId: string) {
+    const video = await this.prisma.donorActivityVideo.findUnique({ where: { id: videoId } });
+    if (!video) throw new NotFoundException('Video not found');
+    return video;
+  }
+
+  async removeActivityVideo(videoId: string) {
+    return this.prisma.donorActivityVideo.delete({ where: { id: videoId } });
   }
 
   async summary() {

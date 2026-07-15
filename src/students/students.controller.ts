@@ -8,6 +8,7 @@ import { CreateSponsorshipDto } from './dto/create-sponsorship.dto';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { CreateGrowthRecordDto } from './dto/create-growth-record.dto';
 import { CreateStudentDocumentDto } from './dto/create-student-document.dto';
+import { CreateProgressRecordDto } from './dto/create-progress-record.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('students')
@@ -100,5 +101,21 @@ export class StudentsController {
   @Delete('documents/:docId') @ApiOperation({ summary: 'Remove a document' })
   removeDocument(@Param('docId') docId: string) {
     return this.svc.removeDocument(docId);
+  }
+
+  @Post(':id/progress') @ApiOperation({ summary: 'Add a progress/performance record' })
+  addProgressRecord(@Param('id') id: string, @Body() dto: CreateProgressRecordDto) {
+    return this.svc.addProgressRecord(id, dto);
+  }
+
+  @Get(':id/progress') @ApiOperation({ summary: 'Get progress/performance history (paginated, newest first)' })
+  @ApiQuery({ name: 'page', required: false }) @ApiQuery({ name: 'limit', required: false })
+  getProgressRecords(@Param('id') id: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.svc.getProgressRecords(id, page ? Number(page) : 1, limit ? Number(limit) : 10);
+  }
+
+  @Delete('progress/:recordId') @ApiOperation({ summary: 'Remove a progress record' })
+  removeProgressRecord(@Param('recordId') recordId: string) {
+    return this.svc.removeProgressRecord(recordId);
   }
 }

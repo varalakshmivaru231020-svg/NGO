@@ -80,6 +80,7 @@ model Donor {
   address     String?
   city        String?
   state       String?
+  country     String?
   pincode     String?
   occupation  String?
   company     String?
@@ -90,14 +91,40 @@ model Donor {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  categories   DonorCategoryMap[]
-  donations    Donation[]
-  sponsorships Sponsorship[]
-  reminders    Reminder[]
+  // Donor Information card
+  pan                    String?
+  aadhaar                String?
+  preferredContactMethod String? // CSV of: CALL, WHATSAPP, EMAIL (multi-select)
+
+  categories    DonorCategoryMap[]
+  donations     Donation[]
+  sponsorships  Sponsorship[]
+  reminders     Reminder[]
+  activityVideos DonorActivityVideo[]
 
   @@index([name])
   @@index([mobile])
   @@map("donors")
+}
+
+// Donor Profile → Activities tab. Short activity videos, stored as base64 —
+// pragmatic for now given volume; a real deployment should move this to
+// object storage (S3/R2) and store just the URL.
+model DonorActivityVideo {
+  id           String   @id @default(cuid())
+  donorId      String
+  title        String   // activity name
+  activityDate DateTime @default(now())
+  fileName     String
+  mimeType     String?  // video/mp4, video/quicktime, video/x-msvideo, video/webm
+  data         String   // base64-encoded file content
+  uploadedBy   String?
+  createdAt    DateTime @default(now())
+
+  donor Donor @relation(fields: [donorId], references: [id], onDelete: Cascade)
+
+  @@index([donorId])
+  @@map("donor_activity_videos")
 }
 
 model DonorCategory {
@@ -234,6 +261,15 @@ model Student {
   exitDate      DateTime?
   notes         String?
 
+  // Education Details tab
+  admissionNo    String?
+  academicYear   String?
+  joiningDate    DateTime?
+  section        String?
+  permanence     String?
+  studentType    String?
+  educationRemarks String?
+
   // Identity / government IDs
   aadhaarNumber    String?
   satNumber        String?
@@ -260,6 +296,7 @@ model Student {
   attendance    Attendance[]
   growthRecords GrowthRecord[]
   documents     StudentDocument[]
+  progressRecords ProgressRecord[]
 
   @@index([name])
   @@index([centerId])
@@ -299,6 +336,30 @@ model StudentDocument {
 
   @@index([studentId])
   @@map("student_documents")
+}
+
+// Student Profile → Progress tab. One row per recorded performance
+// check-in; the tab lists these newest-first as a history/timeline.
+model ProgressRecord {
+  id                  String   @id @default(cuid())
+  studentId           String
+  date                DateTime @default(now())
+  academicScore       Int?
+  attendancePercent   Float?
+  behaviourRating     String?
+  communicationSkills String?
+  leadership          String?
+  sportsPerformance   String?
+  mentorRemarks       String?
+  teacherRemarks      String?
+  examResult          String?
+  grade               String?
+  createdAt           DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@map("progress_records")
 }
 
 model Sponsorship {

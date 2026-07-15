@@ -15,6 +15,7 @@ export class CreateDonorDto {
   @ApiPropertyOptional() @IsOptional() @IsString() address?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() city?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() state?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() country?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() pincode?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() occupation?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() company?: string;
@@ -22,4 +23,9 @@ export class CreateDonorDto {
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
   @ApiPropertyOptional({ description: 'Profile photo, base64-encoded' }) @IsOptional() @IsString() avatar?: string;
   @ApiPropertyOptional({ type: [String] }) @IsOptional() categoryIds?: string[];
+
+  // Donor Information card
+  @ApiPropertyOptional() @IsOptional() @IsString() pan?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() aadhaar?: string;
+  @ApiPropertyOptional({ description: 'CSV of: CALL, WHATSAPP, EMAIL' }) @IsOptional() @IsString() preferredContactMethod?: string;
 }
