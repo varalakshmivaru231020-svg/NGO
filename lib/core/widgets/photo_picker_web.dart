@@ -5,8 +5,8 @@ import 'dart:typed_data';
 import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';
 
-const _brand600   = Color(0xFF0E8C76);
-const _brand100   = Color(0xFFD6F3EC);
+const _brand600   = Color(0xFFFF9933);
+const _brand100   = Color(0xFFFFE8CC);
 const _coral500   = Color(0xFFF2685E);
 const _onSurface3 = Color(0xFF93A29F);
 
@@ -208,7 +208,7 @@ class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
                   shape: BoxShape.circle,
                   color: _bytes != null ? Colors.transparent : _brand100,
                   gradient: _bytes == null && widget.initials == null
-                      ? const LinearGradient(colors: [Color(0xFF0B6E5D), Color(0xFF14A98C)])
+                      ? const LinearGradient(colors: [Color(0xFFE07C1F), Color(0xFFFFB25E)])
                       : null,
                   border: Border.all(color: _brand600.withValues(alpha: 0.35), width: 2),
                 ),

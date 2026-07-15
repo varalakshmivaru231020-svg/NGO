@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 // ── palette (matches the rest of the app) ─────────────────────────────
-const _brand600  = Color(0xFF0E8C76);
-const _brand100  = Color(0xFFD6F3EC);
+const _brand600  = Color(0xFFFF9933);
+const _brand100  = Color(0xFFFFE8CC);
 const _amber600  = Color(0xFFE0921A);
 const _amber100  = Color(0xFFFFF1D6);
 const _coral500  = Color(0xFFF2685E);

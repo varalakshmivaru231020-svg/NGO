@@ -6,12 +6,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/utils/open_bytes.dart';
+import '../../../core/widgets/photo_picker_widget.dart';
 import 'students_screen.dart' show findStudentRecord;
 
 // ── colours ───────────────────────────────────────────────────────────
-const _brand700 = Color(0xFF0B6E5D);
-const _brand600 = Color(0xFF0E8C76);
-const _brand100 = Color(0xFFD6F3EC);
+const _brand700 = Color(0xFFE07C1F);
+const _brand600 = Color(0xFFFF9933);
+const _brand100 = Color(0xFFFFE8CC);
 const _violet500 = Color(0xFF7C6CF0);
 const _violet100 = Color(0xFFE7E3FD);
 const _amber600 = Color(0xFFE0921A);
@@ -155,9 +156,19 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
       'school':           s('school'),
       'sponsor':          sponsorName,
       'sponsorshipAmt':   sponsorName.isNotEmpty ? '—' : '—',
-      'achievementCount': '0',
+      'achievementCount': ((r['_count'] as Map?)?['achievements'] ?? 0).toString(),
       // Detail fields shown on the Profile tab (local + backend field names).
       'admDate':     pick('admDate', 'admissionDate'),
+      // Education Details tab
+      'admNo':       s('admissionNo'),
+      'acadYear':    s('academicYear'),
+      'joiningDate': s('joiningDate'),
+      'section':     s('section'),
+      'permanence':  s('permanence'),
+      'studentType': s('studentType'),
+      'eduRemarks':  s('educationRemarks'),
+      'createdAt':   s('createdAt'),
+      'updatedAt':   s('updatedAt'),
       'father':      s('fatherName'),
       'mother':      s('motherName'),
       'guardian':    pick('guardian', 'guardianName'),
@@ -321,11 +332,19 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
     final classCtrl     = TextEditingController(text: data['class'] == '—' ? '' : data['class']);
     final medHistoryCtrl = TextEditingController(text: data['medHistory']);
     final familyNotesCtrl = TextEditingController(text: data['familyNotes']);
+    final admNoCtrl      = TextEditingController(text: data['admNo']);
+    final acadYearCtrl   = TextEditingController(text: data['acadYear']);
+    final sectionCtrl    = TextEditingController(text: data['section']);
+    final studentTypeCtrl = TextEditingController(text: data['studentType']);
+    final eduRemarksCtrl = TextEditingController(text: data['eduRemarks']);
     String gender  = data['gender'] == 'Female' ? 'Female' : (data['gender'] == 'Other' ? 'Other' : 'Male');
     String status  = data['status'] ?? 'Active';
     String centre  = centres.any((c) => c.name == data['centre']) ? data['centre']! : (centres.isNotEmpty ? centres.first.name : '');
     String dob     = data['dob'] ?? '';
     String admDate = data['admDate'] ?? '';
+    String joiningDate = data['joiningDate'] ?? '';
+    String permanence  = data['permanence']?.isNotEmpty == true ? data['permanence']! : 'Permanent';
+    Uint8List? newPhotoBytes = _photoBytes;
     bool saving = false;
 
     showModalBottomSheet(
@@ -405,6 +424,12 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             const SizedBox(height: 4),
             const Text('All fields collected at enrolment can be edited here.',
               style: TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w500)),
+            const SizedBox(height: 16),
+            Center(child: PhotoPickerCircle(
+              label: 'Profile Photo', size: 92,
+              initialImage: _photoBytes,
+              onImageChanged: (b) => setSheet(() => newPhotoBytes = b),
+            )),
 
             sectionLabel('PERSONAL DETAILS'),
             field('Full Name', nameCtrl),
@@ -426,7 +451,14 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             sectionLabel('EDUCATION DETAILS'),
             field('School / Institution', schoolCtrl),
             field('Class / Grade', classCtrl),
+            field('Section', sectionCtrl),
+            field('Admission No.', admNoCtrl),
+            field('Academic Year', acadYearCtrl, kb: TextInputType.text),
             dateField('Admission Date', admDate, (v) => admDate = v),
+            dateField('Joining Date', joiningDate, (v) => joiningDate = v),
+            chips('Permanence', const ['Permanent', 'Temporary'], permanence, (v) => permanence = v),
+            field('Student Type', studentTypeCtrl),
+            field('Education Remarks', eduRemarksCtrl, lines: 2),
 
             sectionLabel('HEALTH & NOTES'),
             field('Medical History', medHistoryCtrl, lines: 2),
@@ -455,7 +487,17 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
                   if (admDate.isNotEmpty) 'admissionDate': admDate,
                   'medicalNotes': medHistoryCtrl.text.trim(),
                   'notes': familyNotesCtrl.text.trim(),
+                  'admissionNo': admNoCtrl.text.trim(),
+                  'academicYear': acadYearCtrl.text.trim(),
+                  'section': sectionCtrl.text.trim(),
+                  if (joiningDate.isNotEmpty) 'joiningDate': joiningDate,
+                  'permanence': permanence,
+                  'studentType': studentTypeCtrl.text.trim(),
+                  'educationRemarks': eduRemarksCtrl.text.trim(),
+                  if (!identical(newPhotoBytes, _photoBytes) && newPhotoBytes != null)
+                    'photo': base64Encode(newPhotoBytes!),
                 }, centreName: centre.isNotEmpty ? centre : null);
+                if (!identical(newPhotoBytes, _photoBytes)) setState(() => _photoBytes = newPhotoBytes);
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -500,6 +542,9 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
           case 'status': _data['status'] = _statusDisplay[val] ?? val; break;
           case 'guardianName': _data['guardian'] = val; break;
           case 'guardianRelation': _data['relation'] = val; break;
+          case 'admissionNo': _data['admNo'] = val; break;
+          case 'academicYear': _data['acadYear'] = val; break;
+          case 'educationRemarks': _data['eduRemarks'] = val; break;
           case 'centerId': break; // resolved via centreName below instead
           default: _data[k] = val;
         }
@@ -771,7 +816,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             _ProfileTab(data: data, onEditIdentity: () => _showIdentityEditSheet(context)),
             _EducationTab(data: data, studentId: widget.id),
             _SponsorTab(data: data, onAssign: () => _showSponsorPicker(context)),
-            _AchievementsTab(studentId: name),
+            _AchievementsTab(studentId: widget.id),
             _DocumentsTab(studentId: widget.id),
             _ProgressTab(data: data, studentId: widget.id),
           ],
@@ -971,13 +1016,20 @@ class _EducationTab extends StatelessWidget {
         ),
       ]),
       const SizedBox(height: 14),
-      _CardSection(title: 'Institution Details', icon: Icons.account_balance_outlined, children: [
-        _InfoRow('Institution',   data['institution'] ?? '—'),
-        _InfoRow('Class / Grade', data['class'] ?? '—'),
-        _InfoRow('Admission No.', data['admNo'] ?? '—'),
-        _InfoRow('Academic Year', data['acadYear'] ?? '—'),
-        _InfoRow('Performance',   data['performance'] ?? '—'),
-        _InfoRow('Address',       data['schoolAddr'] ?? '—', last: true),
+      _CardSection(title: 'Education Details', icon: Icons.account_balance_outlined, children: [
+        _InfoRow('Admission No.',    _na(data['admNo'])),
+        _InfoRow('Academic Year',    _na(data['acadYear'])),
+        _InfoRow('Admission Date',   _naDate(data['admDate'])),
+        _InfoRow('Joining Date',     _naDate(data['joiningDate'])),
+        _InfoRow('Current Class',    _na(data['class'])),
+        _InfoRow('Section',          _na(data['section'])),
+        _InfoRow('School',           _na(data['school'] ?? data['institution'])),
+        _InfoRow('Permanence',       _na(data['permanence'])),
+        _InfoRow('Student Type',     _na(data['studentType'])),
+        _InfoRow('Education Status', _na(data['status'])),
+        _InfoRow('Remarks',          _na(data['eduRemarks'])),
+        _InfoRow('Created Date',     _naDate(data['createdAt'])),
+        _InfoRow('Updated Date',     _naDate(data['updatedAt']), last: true),
       ]),
       const SizedBox(height: 14),
       _SingleDocSlot(studentId: studentId, category: 'Educational Documents',
@@ -1201,21 +1253,19 @@ class _TimelineEvent extends StatelessWidget {
 // ACHIEVEMENTS TAB
 // ══════════════════════════════════════════════════════════════════════
 // ── student activity model ────────────────────────────────────────────
-class _StudentActivity {
-  String title;
-  String category;
-  String description;
-  final String date;
-  final List<Uint8List> imageBytes;
-  final List<String> videoNames;
-  _StudentActivity({
-    required this.title, required this.category,
-    this.description = '', required this.date,
-    List<Uint8List>? imageBytes, List<String>? videoNames,
-  }) : imageBytes = imageBytes ?? [], videoNames = videoNames ?? [];
-}
+class _AchRecord {
+  String id, title, description, category;
+  DateTime date;
+  _AchRecord({required this.id, required this.title, this.description = '', required this.category, required this.date});
 
-final _studentAchievements = <String, List<_StudentActivity>>{};
+  factory _AchRecord.fromJson(Map<String, dynamic> j) => _AchRecord(
+    id: j['id'] as String,
+    title: j['title'] as String? ?? '',
+    description: j['description'] as String? ?? '',
+    category: j['category'] as String? ?? 'OTHER',
+    date: DateTime.tryParse(j['date'] as String? ?? '') ?? DateTime.now(),
+  );
+}
 
 class _AchievementsTab extends StatefulWidget {
   const _AchievementsTab({required this.studentId});
@@ -1225,11 +1275,13 @@ class _AchievementsTab extends StatefulWidget {
 }
 
 class _AchievementsTabState extends State<_AchievementsTab> {
-  List<_StudentActivity> get _list => _studentAchievements.putIfAbsent(widget.studentId, () => []);
-
+  // Display label ↔ backend enum. "Leadership" keeps the existing UI
+  // wording while mapping to the backend's LIFE_SKILLS category.
+  static const _catBack = {'Arts': 'ARTS', 'Sports': 'SPORTS', 'Academics': 'ACADEMICS', 'Community': 'COMMUNITY', 'Leadership': 'LIFE_SKILLS', 'Other': 'OTHER'};
+  static const _catDisplay = {'ARTS': 'Arts', 'SPORTS': 'Sports', 'ACADEMICS': 'Academics', 'COMMUNITY': 'Community', 'LIFE_SKILLS': 'Leadership', 'OTHER': 'Other'};
   static const _cats = ['Arts', 'Sports', 'Academics', 'Community', 'Leadership', 'Other'];
 
-  static Color _catFg(String c) => switch (c) {
+  static Color _catFg(String displayCat) => switch (displayCat) {
     'Arts'       => _amber600,
     'Sports'     => _sky500,
     'Academics'  => _violet500,
@@ -1237,12 +1289,62 @@ class _AchievementsTabState extends State<_AchievementsTab> {
     _            => _coral500,
   };
 
-  void _openSheet({_StudentActivity? editing}) {
+  List<_AchRecord> _all = [];
+  bool _loading = true;
+  String _search = '';
+  String _catFilter = 'All';
+  int? _yearFilter;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    if (mounted) setState(() => _loading = true);
+    try {
+      final r = await apiClient.get('/achievements', params: {'studentId': widget.studentId, 'limit': '100'});
+      final inner = r['data'];
+      final list = inner is Map ? (inner['data'] as List<dynamic>? ?? const []) : (inner is List ? inner : const []);
+      final records = list.whereType<Map>().map((m) => _AchRecord.fromJson(m.cast<String, dynamic>())).toList();
+      if (mounted) setState(() { _all = records; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  List<_AchRecord> get _filtered {
+    var list = _all;
+    if (_search.trim().isNotEmpty) {
+      final q = _search.trim().toLowerCase();
+      list = list.where((a) => a.title.toLowerCase().contains(q)).toList();
+    }
+    if (_catFilter != 'All') list = list.where((a) => _catDisplay[a.category] == _catFilter).toList();
+    if (_yearFilter != null) list = list.where((a) => a.date.year == _yearFilter).toList();
+    return list;
+  }
+
+  Set<int> get _years => _all.map((a) => a.date.year).toSet();
+
+  Future<void> _delete(_AchRecord a) async {
+    final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      title: const Text('Delete Achievement?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+      content: Text('This will permanently remove "${a.title}".', style: const TextStyle(fontSize: 13.5, color: _onSurface2)),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: _coral500, fontWeight: FontWeight.w700))),
+      ],
+    ));
+    if (confirmed != true) return;
+    try { await apiClient.delete('/achievements/${a.id}'); } catch (_) {}
+    await _load();
+  }
+
+  void _openSheet({_AchRecord? editing}) {
     final titleCtrl = TextEditingController(text: editing?.title ?? '');
     final descCtrl  = TextEditingController(text: editing?.description ?? '');
-    String cat = editing?.category ?? 'Arts';
-    final images = <Uint8List>[...?editing?.imageBytes];
-    final videos = <String>[...?editing?.videoNames];
+    String cat = editing != null ? (_catDisplay[editing.category] ?? 'Arts') : 'Arts';
+    DateTime date = editing?.date ?? DateTime.now();
+    bool saving = false;
 
     showDialog(
       context: context,
@@ -1250,7 +1352,7 @@ class _AchievementsTabState extends State<_AchievementsTab> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480, maxHeight: 620),
+          constraints: const BoxConstraints(maxWidth: 480, maxHeight: 560),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 18, 12, 0),
@@ -1296,6 +1398,24 @@ class _AchievementsTabState extends State<_AchievementsTab> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12)),
                 ),
                 const SizedBox(height: 14),
+                const Text('Date', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+                const SizedBox(height: 6),
+                GestureDetector(
+                  onTap: () async {
+                    final picked = await showDatePicker(context: ctx, initialDate: date, firstDate: DateTime(2000), lastDate: DateTime.now());
+                    if (picked != null) ss(() => date = picked);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(12)),
+                    child: Row(children: [
+                      const Icon(Icons.calendar_today_outlined, size: 16, color: _onSurface2),
+                      const SizedBox(width: 10),
+                      Text(_fmtDate(date), style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                    ]),
+                  ),
+                ),
+                const SizedBox(height: 14),
                 const Text('Description', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
                 const SizedBox(height: 6),
                 TextField(
@@ -1309,74 +1429,6 @@ class _AchievementsTabState extends State<_AchievementsTab> {
                     focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
                     contentPadding: const EdgeInsets.all(14)),
                 ),
-                const SizedBox(height: 14),
-                Row(children: [
-                  Expanded(child: GestureDetector(
-                    onTap: () async {
-                      final r = await FilePicker.platform.pickFiles(allowMultiple: true, type: FileType.image, withData: true);
-                      if (r != null && mounted) {
-                        ss(() => images.addAll(r.files.where((f) => f.bytes != null).map((f) => f.bytes!)));
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12), border: Border.all(color: _brand600.withValues(alpha: 0.3))),
-                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        const Icon(Icons.add_photo_alternate_outlined, color: _brand600, size: 18),
-                        const SizedBox(width: 6),
-                        Text('Images${images.isNotEmpty ? ' (${images.length})' : ''}',
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _brand600)),
-                      ]),
-                    ),
-                  )),
-                  const SizedBox(width: 10),
-                  Expanded(child: GestureDetector(
-                    onTap: () async {
-                      final r = await FilePicker.platform.pickFiles(allowMultiple: true, type: FileType.video, withData: false);
-                      if (r != null && mounted) {
-                        ss(() => videos.addAll(r.files.map((f) => f.name)));
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(color: _violet100, borderRadius: BorderRadius.circular(12), border: Border.all(color: _violet500.withValues(alpha: 0.3))),
-                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        const Icon(Icons.video_call_outlined, color: _violet500, size: 18),
-                        const SizedBox(width: 6),
-                        Text('Videos${videos.isNotEmpty ? ' (${videos.length})' : ''}',
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _violet500)),
-                      ]),
-                    ),
-                  )),
-                ]),
-                if (images.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  SizedBox(height: 70, child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: images.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (_, i) => Stack(children: [
-                      ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.memory(images[i], width: 70, height: 70, fit: BoxFit.cover)),
-                      Positioned(top: 2, right: 2, child: GestureDetector(
-                        onTap: () => ss(() => images.removeAt(i)),
-                        child: Container(width: 18, height: 18, decoration: const BoxDecoration(color: _coral500, shape: BoxShape.circle),
-                          child: const Icon(Icons.close, size: 12, color: Colors.white)),
-                      )),
-                    ]),
-                  )),
-                ],
-                if (videos.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  ...videos.asMap().entries.map((e) => Padding(
-                    padding: const EdgeInsets.only(bottom: 5),
-                    child: Row(children: [
-                      const Icon(Icons.videocam_outlined, color: _violet500, size: 15),
-                      const SizedBox(width: 6),
-                      Expanded(child: Text(e.value, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _onSurface2), overflow: TextOverflow.ellipsis)),
-                      GestureDetector(onTap: () => ss(() => videos.removeAt(e.key)), child: const Icon(Icons.close, size: 15, color: _onSurface3)),
-                    ]),
-                  )),
-                ],
               ]),
             )),
             Padding(
@@ -1390,27 +1442,30 @@ class _AchievementsTabState extends State<_AchievementsTab> {
                 )),
                 const SizedBox(width: 12),
                 Expanded(flex: 2, child: ElevatedButton(
-                  onPressed: () {
+                  onPressed: saving ? null : () async {
                     if (titleCtrl.text.trim().isEmpty) return;
-                    setState(() {
+                    ss(() => saving = true);
+                    final body = {
+                      'title': titleCtrl.text.trim(),
+                      'description': descCtrl.text.trim(),
+                      'category': _catBack[cat] ?? 'OTHER',
+                      'date': date.toIso8601String(),
+                    };
+                    try {
                       if (editing == null) {
-                        _list.insert(0, _StudentActivity(
-                          title: titleCtrl.text.trim(), category: cat,
-                          description: descCtrl.text.trim(),
-                          date: _fmtDate(DateTime.now()),
-                          imageBytes: List.from(images), videoNames: List.from(videos),
-                        ));
+                        await apiClient.post('/achievements', {'studentId': widget.studentId, ...body});
                       } else {
-                        editing.title = titleCtrl.text.trim();
-                        editing.category = cat;
-                        editing.description = descCtrl.text.trim();
+                        await apiClient.put('/achievements/${editing.id}', body);
                       }
-                    });
-                    Navigator.pop(ctx);
+                    } catch (_) {}
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    await _load();
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: Text(editing == null ? 'Save Achievement' : 'Update', style: const TextStyle(fontWeight: FontWeight.w800)),
+                  child: saving
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                    : Text(editing == null ? 'Save Achievement' : 'Update', style: const TextStyle(fontWeight: FontWeight.w800)),
                 )),
               ]),
             ),
@@ -1422,7 +1477,7 @@ class _AchievementsTabState extends State<_AchievementsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final list = _list;
+    final list = _filtered;
     return Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
@@ -1444,11 +1499,58 @@ class _AchievementsTabState extends State<_AchievementsTab> {
           ),
         ]),
       ),
-      if (list.isEmpty)
+      Padding(
+        padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+        child: TextField(
+          onChanged: (v) => setState(() => _search = v),
+          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
+          decoration: InputDecoration(
+            hintText: 'Search achievements…', isDense: true,
+            prefixIcon: const Icon(Icons.search, size: 18, color: _onSurface3),
+            filled: true, fillColor: _surface2,
+            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          ),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+        child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
+          ...['All', ..._cats].map((c) {
+            final sel = _catFilter == c;
+            return Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(
+              onTap: () => setState(() => _catFilter = c),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+                decoration: BoxDecoration(color: sel ? _brand600 : _surface2, borderRadius: BorderRadius.circular(10)),
+                child: Text(c, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: sel ? Colors.white : _onSurface2)),
+              ),
+            ));
+          }),
+          if (_years.isNotEmpty) ...[
+            Container(width: 1, height: 24, color: _border, margin: const EdgeInsets.symmetric(horizontal: 4)),
+            ...(_years.toList()..sort((a, b) => b.compareTo(a))).map((y) {
+              final sel = _yearFilter == y;
+              return Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(
+                onTap: () => setState(() => _yearFilter = sel ? null : y),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+                  decoration: BoxDecoration(color: sel ? _brand600 : _surface2, borderRadius: BorderRadius.circular(10)),
+                  child: Text('$y', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: sel ? Colors.white : _onSurface2)),
+                ),
+              ));
+            }),
+          ],
+        ])),
+      ),
+      if (_loading)
+        Expanded(child: ListView(padding: const EdgeInsets.fromLTRB(18, 4, 18, 40),
+          children: List.generate(3, (_) => const Padding(padding: EdgeInsets.only(bottom: 10), child: _SkeletonCard()))))
+      else if (list.isEmpty)
         Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.photo_library_outlined, size: 44, color: _onSurface3),
+          const Icon(Icons.emoji_events_outlined, size: 44, color: _onSurface3),
           const SizedBox(height: 12),
-          const Text('No achievements yet', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _onSurface3)),
+          Text(_all.isEmpty ? 'No achievements yet' : 'No matching achievements', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _onSurface3)),
           const SizedBox(height: 6),
           const Text('Tap + to add an achievement', style: TextStyle(fontSize: 13, color: _onSurface3)),
         ])))
@@ -1460,7 +1562,8 @@ class _AchievementsTabState extends State<_AchievementsTab> {
           separatorBuilder: (_, __) => const SizedBox(height: 10),
           itemBuilder: (_, i) {
             final a = list[i];
-            final fg = _catFg(a.category);
+            final displayCat = _catDisplay[a.category] ?? 'Other';
+            final fg = _catFg(displayCat);
             return Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -1473,10 +1576,10 @@ class _AchievementsTabState extends State<_AchievementsTab> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                     decoration: BoxDecoration(color: fg.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
-                    child: Text(a.category, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: fg)),
+                    child: Text(displayCat, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: fg)),
                   ),
                   const Spacer(),
-                  Text(a.date, style: const TextStyle(fontSize: 12, color: _onSurface3, fontWeight: FontWeight.w500)),
+                  Text(_fmtDate(a.date), style: const TextStyle(fontSize: 12, color: _onSurface3, fontWeight: FontWeight.w500)),
                 ]),
                 const SizedBox(height: 8),
                 Text(a.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _onSurface1)),
@@ -1484,33 +1587,11 @@ class _AchievementsTabState extends State<_AchievementsTab> {
                   const SizedBox(height: 4),
                   Text(a.description, style: const TextStyle(fontSize: 13, color: _onSurface2, height: 1.45)),
                 ],
-                if (a.imageBytes.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  SizedBox(height: 72, child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: a.imageBytes.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (_, j) => ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.memory(a.imageBytes[j], width: 72, height: 72, fit: BoxFit.cover),
-                    ),
-                  )),
-                ],
-                if (a.videoNames.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    const Icon(Icons.videocam_outlined, size: 15, color: _violet500),
-                    const SizedBox(width: 5),
-                    Text('${a.videoNames.length} video${a.videoNames.length == 1 ? '' : 's'}',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _violet500)),
-                  ]),
-                ],
                 const SizedBox(height: 10),
                 Row(children: [
                   _SActBtn(label: 'Edit', icon: Icons.edit_outlined, onTap: () => _openSheet(editing: a)),
                   const SizedBox(width: 8),
-                  _SActBtn(label: 'Delete', icon: Icons.delete_outline, color: _coral500,
-                    onTap: () => setState(() => _list.removeAt(i))),
+                  _SActBtn(label: 'Delete', icon: Icons.delete_outline, color: _coral500, onTap: () => _delete(a)),
                 ]),
               ]),
             );
@@ -1523,6 +1604,15 @@ class _AchievementsTabState extends State<_AchievementsTab> {
 String _fmtDate(DateTime d) {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return '${d.day.toString().padLeft(2,'0')} ${months[d.month - 1]} ${d.year}';
+}
+
+// "Not Available" fallback for any empty saved field, per spec.
+const _notAvailable = 'Not Available';
+String _na(String? v) => (v == null || v.trim().isEmpty || v == '—') ? _notAvailable : v;
+String _naDate(String? iso) {
+  if (iso == null || iso.isEmpty) return _notAvailable;
+  final d = DateTime.tryParse(iso);
+  return d == null ? _notAvailable : _fmtDate(d);
 }
 
 class _SActBtn extends StatelessWidget {
@@ -1989,19 +2079,49 @@ class _GrowthRecord {
   }
 }
 
-class _ProgressTabState extends State<_ProgressTab> {
-  late String _performance = widget.data['performance'] ?? 'Not specified';
-  bool _editing = false;
-  late final _perfCtrl = TextEditingController(text: _performance);
+class _ProgressRecordItem {
+  _ProgressRecordItem({
+    required this.id, required this.date, this.academicScore, this.attendancePercent,
+    this.behaviourRating, this.communicationSkills, this.leadership, this.sportsPerformance,
+    this.mentorRemarks, this.teacherRemarks, this.examResult, this.grade,
+  });
+  final String id;
+  final DateTime date;
+  final int? academicScore;
+  final double? attendancePercent;
+  final String? behaviourRating, communicationSkills, leadership, sportsPerformance;
+  final String? mentorRemarks, teacherRemarks, examResult, grade;
 
+  factory _ProgressRecordItem.fromJson(Map<String, dynamic> j) => _ProgressRecordItem(
+    id: j['id'] as String,
+    date: DateTime.tryParse(j['date'] as String? ?? '') ?? DateTime.now(),
+    academicScore: (j['academicScore'] as num?)?.toInt(),
+    attendancePercent: (j['attendancePercent'] as num?)?.toDouble(),
+    behaviourRating: j['behaviourRating'] as String?,
+    communicationSkills: j['communicationSkills'] as String?,
+    leadership: j['leadership'] as String?,
+    sportsPerformance: j['sportsPerformance'] as String?,
+    mentorRemarks: j['mentorRemarks'] as String?,
+    teacherRemarks: j['teacherRemarks'] as String?,
+    examResult: j['examResult'] as String?,
+    grade: j['grade'] as String?,
+  );
+
+  String get dateLabel => _fmtDate(date);
+}
+
+class _ProgressTabState extends State<_ProgressTab> {
   List<_GrowthRecord> _growth = [];
   bool _loadingGrowth = true;
 
-  @override
-  void initState() { super.initState(); _loadGrowth(); }
+  List<_ProgressRecordItem> _progress = [];
+  bool _loadingProgress = true;
+  bool _loadingMoreProgress = false;
+  int _progressPage = 1;
+  bool _progressHasMore = false;
 
   @override
-  void dispose() { _perfCtrl.dispose(); super.dispose(); }
+  void initState() { super.initState(); _loadGrowth(); _loadProgress(); }
 
   Future<void> _loadGrowth() async {
     if (mounted) setState(() => _loadingGrowth = true);
@@ -2018,6 +2138,155 @@ class _ProgressTabState extends State<_ProgressTab> {
   Future<void> _deleteGrowthRecord(String id) async {
     try { await apiClient.delete('/students/growth/$id'); } catch (_) {}
     await _loadGrowth();
+  }
+
+  Future<void> _loadProgress() async {
+    if (mounted) setState(() { _loadingProgress = true; _progressPage = 1; });
+    try {
+      final r = await apiClient.get('/students/${widget.studentId}/progress', params: {'page': '1', 'limit': '10'});
+      final inner = r['data'];
+      final list = inner is Map ? (inner['data'] as List<dynamic>? ?? const []) : (inner is List ? inner : const []);
+      final meta = inner is Map ? (inner['meta'] as Map?) : null;
+      final totalPages = (meta?['totalPages'] as num?)?.toInt() ?? 1;
+      final records = list.whereType<Map>().map((m) => _ProgressRecordItem.fromJson(m.cast<String, dynamic>())).toList();
+      if (mounted) setState(() {
+        _progress = records;
+        _loadingProgress = false;
+        _progressHasMore = totalPages > 1;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingProgress = false);
+    }
+  }
+
+  Future<void> _loadMoreProgress() async {
+    if (_loadingMoreProgress || !_progressHasMore) return;
+    setState(() => _loadingMoreProgress = true);
+    final nextPage = _progressPage + 1;
+    try {
+      final r = await apiClient.get('/students/${widget.studentId}/progress', params: {'page': '$nextPage', 'limit': '10'});
+      final inner = r['data'];
+      final list = inner is Map ? (inner['data'] as List<dynamic>? ?? const []) : (inner is List ? inner : const []);
+      final meta = inner is Map ? (inner['meta'] as Map?) : null;
+      final totalPages = (meta?['totalPages'] as num?)?.toInt() ?? 1;
+      final records = list.whereType<Map>().map((m) => _ProgressRecordItem.fromJson(m.cast<String, dynamic>())).toList();
+      if (mounted) setState(() {
+        _progress = [..._progress, ...records];
+        _progressPage = nextPage;
+        _progressHasMore = nextPage < totalPages;
+        _loadingMoreProgress = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingMoreProgress = false);
+    }
+  }
+
+  Future<void> _deleteProgressRecord(String id) async {
+    try { await apiClient.delete('/students/progress/$id'); } catch (_) {}
+    await _loadProgress();
+  }
+
+  void _showAddProgressDialog(BuildContext context) {
+    DateTime date = DateTime.now();
+    final academicScoreCtrl = TextEditingController();
+    final attendanceCtrl = TextEditingController();
+    final behaviourCtrl = TextEditingController();
+    final communicationCtrl = TextEditingController();
+    final leadershipCtrl = TextEditingController();
+    final sportsCtrl = TextEditingController();
+    final mentorCtrl = TextEditingController();
+    final teacherCtrl = TextEditingController();
+    final examResultCtrl = TextEditingController();
+    final gradeCtrl = TextEditingController();
+    bool saving = false;
+
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
+        Widget field(String label, TextEditingController ctrl, {TextInputType? kb, int lines = 1}) => Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: ctrl, keyboardType: kb, maxLines: lines,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              decoration: InputDecoration(
+                filled: true, fillColor: _surface2,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12))),
+          ]));
+
+        return Container(
+          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+          padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(ctx).viewInsets.bottom + 28),
+          child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(2)))),
+            const Text('Add Performance Record', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () async {
+                final picked = await showDatePicker(context: ctx, initialDate: date, firstDate: DateTime(2000), lastDate: DateTime.now());
+                if (picked != null) setSheet(() => date = picked);
+              },
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(12)),
+                child: Row(children: [
+                  const Icon(Icons.calendar_today_outlined, size: 16, color: _onSurface2),
+                  const SizedBox(width: 10),
+                  Text(_fmtDate(date), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            ),
+            field('Academic Score (%)', academicScoreCtrl, kb: TextInputType.number),
+            field('Attendance (%)', attendanceCtrl, kb: const TextInputType.numberWithOptions(decimal: true)),
+            field('Behaviour Rating', behaviourCtrl, kb: TextInputType.text),
+            field('Communication Skills', communicationCtrl),
+            field('Leadership', leadershipCtrl),
+            field('Sports Performance', sportsCtrl),
+            field('Exam Result', examResultCtrl),
+            field('Grade', gradeCtrl),
+            field('Mentor Remarks', mentorCtrl, lines: 2),
+            field('Teacher Remarks', teacherCtrl, lines: 2),
+            const SizedBox(height: 6),
+            SizedBox(width: double.infinity, child: ElevatedButton(
+              onPressed: saving ? null : () async {
+                setSheet(() => saving = true);
+                final iso = '${date.year.toString().padLeft(4,'0')}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}';
+                try {
+                  await apiClient.post('/students/${widget.studentId}/progress', {
+                    'date': iso,
+                    if (academicScoreCtrl.text.trim().isNotEmpty) 'academicScore': int.tryParse(academicScoreCtrl.text.trim()),
+                    if (attendanceCtrl.text.trim().isNotEmpty) 'attendancePercent': double.tryParse(attendanceCtrl.text.trim()),
+                    if (behaviourCtrl.text.trim().isNotEmpty) 'behaviourRating': behaviourCtrl.text.trim(),
+                    if (communicationCtrl.text.trim().isNotEmpty) 'communicationSkills': communicationCtrl.text.trim(),
+                    if (leadershipCtrl.text.trim().isNotEmpty) 'leadership': leadershipCtrl.text.trim(),
+                    if (sportsCtrl.text.trim().isNotEmpty) 'sportsPerformance': sportsCtrl.text.trim(),
+                    if (mentorCtrl.text.trim().isNotEmpty) 'mentorRemarks': mentorCtrl.text.trim(),
+                    if (teacherCtrl.text.trim().isNotEmpty) 'teacherRemarks': teacherCtrl.text.trim(),
+                    if (examResultCtrl.text.trim().isNotEmpty) 'examResult': examResultCtrl.text.trim(),
+                    if (gradeCtrl.text.trim().isNotEmpty) 'grade': gradeCtrl.text.trim(),
+                  });
+                } catch (_) {}
+                if (ctx.mounted) Navigator.pop(ctx);
+                await _loadProgress();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                padding: const EdgeInsets.symmetric(vertical: 15)),
+              child: saving
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                : const Text('Save Record', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+            )),
+          ])),
+        );
+      }),
+    );
   }
 
   void _showAddGrowthDialog(BuildContext context) {
@@ -2092,40 +2361,70 @@ class _ProgressTabState extends State<_ProgressTab> {
     physics: const BouncingScrollPhysics(),
     padding: const EdgeInsets.all(18),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Progress Overview', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _onSurface1)),
+      const SizedBox(height: 14),
+      _CardSection(title: 'Academic Summary', icon: Icons.bar_chart_outlined, children: [
+        _InfoRow('Class / Grade',    _na(widget.data['class'])),
+        _InfoRow('Academic Year',    _na(widget.data['acadYear'])),
+        _InfoRow('Admission No.',    _na(widget.data['admNo'])),
+        _InfoRow('Institution',      _na(widget.data['institution'] ?? widget.data['school']), last: true),
+      ]),
+      const SizedBox(height: 14),
+
+      // ── Performance History ─────────────────────────────────────
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        const Text('Progress Overview', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _onSurface1)),
+        const Text('Performance History', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _onSurface1)),
         GestureDetector(
-          onTap: () {
-            setState(() {
-              if (_editing) _performance = _perfCtrl.text.trim().isNotEmpty ? _perfCtrl.text.trim() : _performance;
-              _editing = !_editing;
-            });
-          },
+          onTap: () => _showAddProgressDialog(context),
+          behavior: HitTestBehavior.opaque,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: _editing ? _brand600 : _surface2,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: _editing ? _brand600 : _border),
-            ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(_editing ? Icons.check_rounded : Icons.edit_outlined, size: 15, color: _editing ? Colors.white : _onSurface2),
-              const SizedBox(width: 5),
-              Text(_editing ? 'Save' : 'Edit', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _editing ? Colors.white : _onSurface2)),
+            decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(10)),
+            child: const Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.add_rounded, size: 16, color: Colors.white),
+              SizedBox(width: 4),
+              Text('Add Record', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white)),
             ]),
           ),
         ),
       ]),
-      const SizedBox(height: 14),
-      _CardSection(title: 'Academic Performance', icon: Icons.bar_chart_outlined, children: [
-        _InfoRow('Class / Grade',    widget.data['class'] ?? 'Not specified'),
-        _InfoRow('Academic Year',    widget.data['acadYear'] ?? '2025-26'),
-        _editing
-          ? _EditableRow('Performance', _perfCtrl)
-          : _InfoRow('Performance', _performance),
-        _InfoRow('Admission No.',    widget.data['admNo'] ?? 'Not specified'),
-        _InfoRow('Institution',      widget.data['institution'] ?? 'Not specified', last: true),
-      ]),
+      const SizedBox(height: 12),
+      if (_loadingProgress)
+        Column(children: List.generate(3, (_) => const Padding(
+          padding: EdgeInsets.only(bottom: 10),
+          child: _SkeletonCard(),
+        )))
+      else if (_progress.isEmpty)
+        Container(
+          width: double.infinity, padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border)),
+          child: const Column(children: [
+            Icon(Icons.insights_outlined, size: 34, color: _onSurface3),
+            SizedBox(height: 10),
+            Text('No performance records available.',
+              textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: _onSurface3, fontWeight: FontWeight.w600)),
+          ]),
+        )
+      else ...[
+        ..._progress.map((r) => Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: _ProgressRecordCard(record: r, onDelete: () => _deleteProgressRecord(r.id)),
+        )),
+        if (_progressHasMore)
+          Center(child: Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 4),
+            child: _loadingMoreProgress
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: _brand600, strokeWidth: 2.5))
+              : GestureDetector(
+                  onTap: _loadMoreProgress,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                    decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(10), border: Border.all(color: _border)),
+                    child: const Text('Load More', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+                  ),
+                ),
+          )),
+      ],
       const SizedBox(height: 14),
       if (widget.data['medHistory'] != null && widget.data['medHistory']!.isNotEmpty) ...[
         Container(
@@ -2273,27 +2572,71 @@ class _LegendDot extends StatelessWidget {
   ]);
 }
 
-class _EditableRow extends StatelessWidget {
-  const _EditableRow(this.label, this.ctrl, {this.last = false});
-  final String label;
-  final TextEditingController ctrl;
-  final bool last;
+// A single Performance History entry — academic score, attendance, behaviour,
+// etc. for one dated check-in.
+class _ProgressRecordCard extends StatelessWidget {
+  const _ProgressRecordCard({required this.record, required this.onDelete});
+  final _ProgressRecordItem record;
+  final VoidCallback onDelete;
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(bottom: last ? 0 : 12),
-    child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-      SizedBox(width: 130, child: Text(label, style: const TextStyle(fontSize: 13, color: _onSurface3, fontWeight: FontWeight.w600))),
-      Expanded(child: TextField(
-        controller: ctrl,
-        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _onSurface1),
-        decoration: InputDecoration(
-          isDense: true,
-          filled: true, fillColor: _surface2,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _brand600, width: 1.5)),
-        ),
-      )),
-    ]),
+  Widget build(BuildContext context) {
+    final r = record;
+    final chips = <({String label, String value})>[
+      if (r.academicScore != null) (label: 'Academic Score', value: '${r.academicScore}%'),
+      if (r.attendancePercent != null) (label: 'Attendance', value: '${r.attendancePercent!.toStringAsFixed(0)}%'),
+      if (r.grade != null && r.grade!.isNotEmpty) (label: 'Grade', value: r.grade!),
+      if (r.examResult != null && r.examResult!.isNotEmpty) (label: 'Exam Result', value: r.examResult!),
+      if (r.behaviourRating != null && r.behaviourRating!.isNotEmpty) (label: 'Behaviour', value: r.behaviourRating!),
+      if (r.communicationSkills != null && r.communicationSkills!.isNotEmpty) (label: 'Communication', value: r.communicationSkills!),
+      if (r.leadership != null && r.leadership!.isNotEmpty) (label: 'Leadership', value: r.leadership!),
+      if (r.sportsPerformance != null && r.sportsPerformance!.isNotEmpty) (label: 'Sports', value: r.sportsPerformance!),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border),
+        boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 8, offset: Offset(0, 2))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.event_note_outlined, size: 15, color: _brand600),
+          const SizedBox(width: 6),
+          Expanded(child: Text(r.dateLabel, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _onSurface1))),
+          GestureDetector(onTap: onDelete, child: const Icon(Icons.delete_outline, size: 18, color: _coral500)),
+        ]),
+        if (chips.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Wrap(spacing: 8, runSpacing: 8, children: chips.map((c) => Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(8)),
+            child: Text('${c.label}: ${c.value}', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+          )).toList()),
+        ],
+        if ((r.mentorRemarks ?? '').isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Text('Mentor: ${r.mentorRemarks}', style: const TextStyle(fontSize: 12.5, color: _onSurface2, fontWeight: FontWeight.w500, height: 1.4)),
+        ],
+        if ((r.teacherRemarks ?? '').isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text('Teacher: ${r.teacherRemarks}', style: const TextStyle(fontSize: 12.5, color: _onSurface2, fontWeight: FontWeight.w500, height: 1.4)),
+        ],
+        if (chips.isEmpty && (r.mentorRemarks ?? '').isEmpty && (r.teacherRemarks ?? '').isEmpty) ...[
+          const SizedBox(height: 6),
+          const Text('No details recorded for this entry.', style: TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w500)),
+        ],
+      ]),
+    );
+  }
+}
+
+// Loading-state placeholder shown while a list of cards is being fetched.
+class _SkeletonCard extends StatelessWidget {
+  const _SkeletonCard();
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 74, width: double.infinity,
+    decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(16)),
   );
 }

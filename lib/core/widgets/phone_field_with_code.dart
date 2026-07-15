@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-const _brand600 = Color(0xFF0E8C76);
-const _brand100 = Color(0xFFD6F3EC);
+const _brand600 = Color(0xFFFF9933);
+const _brand100 = Color(0xFFFFE8CC);
 const _onSurface1 = Color(0xFF15211E);
 const _onSurface2 = Color(0xFF5A6B67);
 const _onSurface3 = Color(0xFF93A29F);

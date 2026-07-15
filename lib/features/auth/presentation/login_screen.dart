@@ -22,8 +22,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   static const _adminEmail    = 'admin@sket.org';
   static const _adminPassword = 'Sket@2026';
 
-  static const _bg      = Color(0xFF0B6E5D);
-  static const _brand   = Color(0xFF0E8C76);
+  static const _bg      = Color(0xFFE07C1F);
+  static const _brand   = Color(0xFFFF9933);
   static const _text1   = Color(0xFF1A2A24);
   static const _text2   = Color(0xFF5A7068);
   static const _border  = Color(0xFFD8E5E0);
@@ -51,7 +51,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             _logoBox(96),
             const SizedBox(height: 20),
-            const Text('Saksham Foundation',
+            const Text('Sri Krishnashraya Educational Trust',
                 style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
             const SizedBox(height: 6),
             Text('NGO Management System',
@@ -80,7 +80,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   const SizedBox(width: 12),
                   const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Saksham Foundation',
+                    Text('Sri Krishnashraya Educational Trust',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _text1, letterSpacing: -0.3)),
                     Text('NGO Management System',
                         style: TextStyle(fontSize: 12, color: _text2, fontWeight: FontWeight.w500)),
@@ -102,7 +102,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       const SizedBox(height: 44),
       _logoBox(76),
       const SizedBox(height: 14),
-      const Text('Saksham Foundation',
+      const Text('Sri Krishnashraya Educational Trust',
           style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
       const SizedBox(height: 4),
       Text('NGO Management System',

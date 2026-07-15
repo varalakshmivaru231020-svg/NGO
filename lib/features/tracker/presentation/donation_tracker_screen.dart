@@ -8,9 +8,9 @@ import '../../../core/utils/native_file_saver.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 
-const _brand700 = Color(0xFF0B6E5D);
-const _brand600 = Color(0xFF0E8C76);
-const _brand100 = Color(0xFFD6F3EC);
+const _brand700 = Color(0xFFE07C1F);
+const _brand600 = Color(0xFFFF9933);
+const _brand100 = Color(0xFFFFE8CC);
 const _amber600 = Color(0xFFE0921A);
 const _amber100 = Color(0xFFFFF1D6);
 const _coral500 = Color(0xFFF2685E);
@@ -166,7 +166,7 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
                 // header style
                 final hStyle = xl.CellStyle(
                   bold: true, fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
-                  backgroundColorHex: xl.ExcelColor.fromHexString('#0E8C76'),
+                  backgroundColorHex: xl.ExcelColor.fromHexString('#FF9933'),
                   horizontalAlign: xl.HorizontalAlign.Center,
                 );
                 final headers = ['Donor Name', 'Phone', 'Donation Type', 'Donation Amount (₹)', 'Category', 'Payment Mode', 'Receipt No.', 'Date'];
@@ -183,7 +183,7 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
                   }
                 }
                 final rawBytes = excel.encode();
-                final filename = 'Saksham_Tracker_${DateFormat('ddMMyyyy').format(DateTime.now())}.xlsx';
+                final filename = 'SKET_Tracker_${DateFormat('ddMMyyyy').format(DateTime.now())}.xlsx';
                 final ok = rawBytes != null && await NativeFileSaver.saveBytes(filename, Uint8List.fromList(rawBytes), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -207,7 +207,7 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
             Padding(padding: const EdgeInsets.fromLTRB(18, 16, 18, 0), child: Container(
               padding: const EdgeInsets.all(18),
               decoration: const BoxDecoration(
-                gradient: LinearGradient(colors: [Color(0xFF0B6E5D), Color(0xFF0E8C76)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                gradient: LinearGradient(colors: [Color(0xFFE07C1F), Color(0xFFFF9933)], begin: Alignment.topLeft, end: Alignment.bottomRight),
                 borderRadius: BorderRadius.all(Radius.circular(22)),
                 boxShadow: [BoxShadow(color: Color(0x400B6E5D), blurRadius: 16, offset: Offset(0, 6))],
               ),

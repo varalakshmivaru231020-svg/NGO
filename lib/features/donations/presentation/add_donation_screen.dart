@@ -8,9 +8,9 @@ import '../../donors/presentation/donors_screen.dart' show demoLocalDonors;
 import 'donations_screen.dart' show demoLocalDonations;
 import 'receipt_generator.dart';
 
-const _brand700 = Color(0xFF0B6E5D);
-const _brand600 = Color(0xFF0E8C76);
-const _brand100 = Color(0xFFD6F3EC);
+const _brand700 = Color(0xFFE07C1F);
+const _brand600 = Color(0xFFFF9933);
+const _brand100 = Color(0xFFFFE8CC);
 const _amber600 = Color(0xFFE0921A);
 const _coral500 = Color(0xFFF2685E);
 const _violet500 = Color(0xFF7C6CF0);
@@ -73,7 +73,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
   bool _pickingFile = false;
 
   // Loaded from API
-  List<({String id, String name, String city, String tier, String mobile, String email})> _donors = [];
+  List<({String id, String name, String city, String tier, String mobile, String email, String pan})> _donors = [];
   Map<String, String> _typeLabelToId = {};
   List<String> _typeLabels = [];
   bool _loadingData = false;
@@ -91,16 +91,17 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     _loadFormData();
   }
 
-  List<({String id, String name, String city, String tier, String mobile, String email})> _fallbackDonors() {
+  List<({String id, String name, String city, String tier, String mobile, String email, String pan})> _fallbackDonors() {
     // Only not-yet-synced local donors — no demo/mock donors in the picker.
     final all = [...demoLocalDonors];
-    return all.map<({String id, String name, String city, String tier, String mobile, String email})>((d) => (
+    return all.map<({String id, String name, String city, String tier, String mobile, String email, String pan})>((d) => (
       id:     d['id']     as String? ?? '',
       name:   d['name']   as String? ?? '',
       city:   d['city']   as String? ?? '',
       tier:   d['tier']   as String? ?? 'SILVER',
       mobile: d['mobile'] as String? ?? d['phone'] as String? ?? '',
       email:  d['email']  as String? ?? '',
+      pan:    d['pan']    as String? ?? '',
     )).toList();
   }
 
@@ -115,9 +116,9 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       final dRes = results[0];
       final dInner = dRes['data'];
       List<dynamic> dList = dInner is Map ? (dInner['data'] as List? ?? []) : (dInner as List? ?? []);
-      var donors = dList.map<({String id, String name, String city, String tier, String mobile, String email})>((d) {
+      var donors = dList.map<({String id, String name, String city, String tier, String mobile, String email, String pan})>((d) {
         final m = d as Map<String, dynamic>;
-        return (id: m['id'] as String? ?? '', name: m['name'] as String? ?? '', city: m['city'] as String? ?? '', tier: m['tier'] as String? ?? 'SILVER', mobile: m['mobile'] as String? ?? m['phone'] as String? ?? '', email: m['email'] as String? ?? '');
+        return (id: m['id'] as String? ?? '', name: m['name'] as String? ?? '', city: m['city'] as String? ?? '', tier: m['tier'] as String? ?? 'SILVER', mobile: m['mobile'] as String? ?? m['phone'] as String? ?? '', email: m['email'] as String? ?? '', pan: m['pan'] as String? ?? '');
       }).toList();
 
       // Always include demo/local donors
@@ -289,17 +290,18 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     }
 
     if (!mounted) return;
+    final selectedDonor = _donors.where((d) => d.id == _selectedDonorId).firstOrNull;
     final receipt = DonationReceipt(
       receiptNo:    receiptNo,
       donorName:    _selectedDonorName ?? 'Donor',
-      donorPhone:   '',
-      donorCity:    '',
-      donorPan:     '',
+      donorPhone:   selectedDonor?.mobile ?? '',
+      donorCity:    selectedDonor?.city ?? '',
+      donorPan:     selectedDonor?.pan ?? '',
       donationType: _donationType,
       amount:       int.parse(amountText),
       paymentMode:  _method,
       date:         _date,
-      taxExemption: false,
+      taxExemption: true,
     );
     // Persist locally so list shows it immediately
     if (!backendOk) {

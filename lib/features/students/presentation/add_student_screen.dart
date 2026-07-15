@@ -15,8 +15,8 @@ import '../../donors/presentation/donors_screen.dart' show demoLocalDonors, mock
 import 'students_screen.dart' show demoLocalStudents, demoCentres;
 
 // ── colours ───────────────────────────────────────────────────────────
-const _brand600 = Color(0xFF0E8C76);
-const _brand100 = Color(0xFFD6F3EC);
+const _brand600 = Color(0xFFFF9933);
+const _brand100 = Color(0xFFFFE8CC);
 const _violet500 = Color(0xFF7C6CF0);
 const _violet100 = Color(0xFFE7E3FD);
 const _amber600 = Color(0xFFE0921A);
@@ -332,6 +332,8 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         if (_mobile.text.trim().isNotEmpty)     'guardianPhone': _mobile.text.trim(),
         if (_address.text.trim().isNotEmpty)    'address': _address.text.trim(),
         if (_admDate.isNotEmpty)                'admissionDate': _toIso(_admDate),
+        if (_admissionNo.text.trim().isNotEmpty) 'admissionNo': _admissionNo.text.trim(),
+        if (_acadYear.text.trim().isNotEmpty)   'academicYear': _acadYear.text.trim(),
         if (_medHistory.text.trim().isNotEmpty) 'medicalNotes': _medHistory.text.trim(),
         if (_familyNotes.text.trim().isNotEmpty) 'notes': _familyNotes.text.trim(),
         if (_aadhaar.text.trim().isNotEmpty)    'aadhaarNumber': _aadhaar.text.trim(),
@@ -392,6 +394,8 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         'center':      {'name': _centreName},
         'aadhaar':     _aadhaar.text.trim(),
         'admDate':     _admDate.isNotEmpty ? _toIso(_admDate) : '',
+        'admissionNo': _admissionNo.text.trim(),
+        'academicYear': _acadYear.text.trim(),
         'fatherName':  _fatherName.text.trim(),
         'motherName':  _motherName.text.trim(),
         'guardian':    _guardian.text.trim(),
@@ -798,7 +802,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 13),
                       decoration: BoxDecoration(
-                        color: _saving ? const Color(0xFF0E8C76).withValues(alpha: 0.6) : _brand600,
+                        color: _saving ? const Color(0xFFFF9933).withValues(alpha: 0.6) : _brand600,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: _saving

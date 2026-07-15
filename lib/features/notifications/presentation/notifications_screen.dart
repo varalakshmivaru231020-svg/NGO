@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../notification_store.dart';
 
-const _brand600 = Color(0xFF0E8C76);
+const _brand600 = Color(0xFFFF9933);
 
 // ══════════════════════════════════════════════════════════════════════
 class NotificationsScreen extends StatefulWidget {

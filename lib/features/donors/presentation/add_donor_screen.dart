@@ -14,8 +14,8 @@ import '../../dashboard/presentation/dashboard_screen.dart' show dashboardRefres
 import 'donors_screen.dart' show donorsProvider, demoLocalDonors, donorRefreshProvider, localDonorPhotos;
 
 // ── colours ───────────────────────────────────────────────────────────
-const _brand600 = Color(0xFF0E8C76);
-const _brand100 = Color(0xFFD6F3EC);
+const _brand600 = Color(0xFFFF9933);
+const _brand100 = Color(0xFFFFE8CC);
 const _errorColor = Color(0xFFF2685E);
 
 const _preferredMethods = ['Call', 'WhatsApp', 'Email'];
@@ -137,6 +137,11 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
       _org.text = s('company');
       _lang.text = s('preferredLanguage');
       _notes.text = s('notes');
+      final prefCsv = s('preferredContactMethod');
+      if (prefCsv.isNotEmpty) {
+        const backToLabel = {'CALL': 'Call', 'WHATSAPP': 'WhatsApp', 'EMAIL': 'Email'};
+        _commPref.addAll(prefCsv.split(',').map((c) => backToLabel[c.trim()] ?? c.trim()).where(_preferredMethods.contains));
+      }
       final gender = s('gender');
       final categories = (d['categories'] as List?) ?? const [];
       final firstCatName = categories.isNotEmpty ? (((categories.first as Map?)?['category'] as Map?)?['name'] as String?) : null;
@@ -203,9 +208,13 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
       'tier':   'SILVER',
       if (_whatsapp.text.trim().isNotEmpty)   'whatsapp':   _whatsapp.text.trim(),
       if (_email.text.trim().isNotEmpty)       'email':      _email.text.trim(),
+      if (_pan.text.trim().isNotEmpty)         'pan':        _pan.text.trim(),
+      if (_aadhaar.text.trim().isNotEmpty)     'aadhaar':    _aadhaar.text.trim(),
       if (_city.text.trim().isNotEmpty)        'city':       _city.text.trim(),
       if (_state.text.trim().isNotEmpty)       'state':      _state.text.trim(),
+      if (_country.text.trim().isNotEmpty)     'country':    _country.text.trim(),
       if (_pincode.text.trim().isNotEmpty)     'pincode':    _pincode.text.trim(),
+      if (_commPref.isNotEmpty)                'preferredContactMethod': _commPref.map((m) => m.toUpperCase()).join(','),
       if (_occupation.text.trim().isNotEmpty)  'occupation': _occupation.text.trim(),
       if (_org.text.trim().isNotEmpty)         'company':    _org.text.trim(),
       if (_notes.text.trim().isNotEmpty)       'notes':      _notes.text.trim(),
@@ -250,7 +259,7 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
         'id': localId,
         '_count': {'donations': 0},
         'categories': _category != null
-            ? [{'category': {'name': _category!, 'color': '#0E8C76'}}]
+            ? [{'category': {'name': _category!, 'color': '#FF9933'}}]
             : <dynamic>[],
       });
       if (_photoBytes != null) localDonorPhotos[localId] = _photoBytes!;
@@ -489,7 +498,7 @@ class _Section extends StatelessWidget {
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
     Padding(
       padding: const EdgeInsets.only(left: 2, bottom: 10),
-      child: Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF0E8C76), letterSpacing: 0.3)),
+      child: Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFFFF9933), letterSpacing: 0.3)),
     ),
     Container(
       width: double.infinity,

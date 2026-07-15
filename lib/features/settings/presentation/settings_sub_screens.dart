@@ -15,8 +15,8 @@ import '../profile_store.dart';
 import '../../students/presentation/students_screen.dart' show demoCentres;
 
 // ── brand palette ────────────────────────────────────────────────
-const _brand600   = Color(0xFF0E8C76);
-const _brand100   = Color(0xFFD6F3EC);
+const _brand600   = Color(0xFFFF9933);
+const _brand100   = Color(0xFFFFE8CC);
 const _amber600   = Color(0xFFE0921A);
 const _coral500   = Color(0xFFF2685E);
 const _coral100   = Color(0xFFFFE3DF);
@@ -257,7 +257,7 @@ class _SecurityPinState extends State<SecurityPinScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Container(
             padding: const EdgeInsets.all(16), margin: const EdgeInsets.only(bottom: 20),
-            decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF0B6E5D), Color(0xFF14A98C)]), borderRadius: BorderRadius.circular(18)),
+            decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFE07C1F), Color(0xFFFFB25E)]), borderRadius: BorderRadius.circular(18)),
             child: Row(children: [
               const Icon(Icons.shield_outlined, color: Colors.white, size: 32),
               const SizedBox(width: 14),
@@ -471,7 +471,7 @@ class _LinkedDevicesState extends State<LinkedDevicesScreen> {
             decoration: BoxDecoration(color: _sky100, borderRadius: BorderRadius.circular(14), border: Border.all(color: _sky500.withValues(alpha: 0.25))),
             child: Row(children: [
               const Icon(Icons.info_outline, color: _sky500, size: 18), const SizedBox(width: 10),
-              Expanded(child: Text('Devices logged into your Saksham account. Revoke any you don\'t recognise.',
+              Expanded(child: Text('Devices logged into your SKET account. Revoke any you don\'t recognise.',
                 style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textSub))),
             ])),
           _buildSectionLabel(context, 'Active Sessions'),
@@ -984,7 +984,7 @@ class _ExportDataState extends State<ExportDataScreen> {
               if (!mounted) return;
               // Build a sample CSV/text export
               final csv = StringBuffer();
-              csv.writeln('Saksham Foundation — Data Export');
+              csv.writeln('Sri Krishnashraya Educational Trust — Data Export');
               csv.writeln('Format: $_format  |  Range: $_range');
               csv.writeln('Generated: ${DateTime.now().toString().substring(0, 16)}');
               csv.writeln('');
@@ -1011,7 +1011,7 @@ class _ExportDataState extends State<ExportDataScreen> {
                 csv.writeln('SKT-C-0002,Diya Reddy,Medahalli,Female,Class 8,Active');
                 csv.writeln('');
               }
-              final filename = 'Saksham_Export_${DateTime.now().millisecondsSinceEpoch}.${_format.toLowerCase()}';
+              final filename = 'SKET_Export_${DateTime.now().millisecondsSinceEpoch}.${_format.toLowerCase()}';
               final ok = await NativeFileSaver.saveCsv(filename, csv.toString());
               setState(() => _exporting = false);
               _snack(context, ok ? '✓ Downloaded to Downloads/$filename' : 'Failed to save file');
@@ -1144,7 +1144,7 @@ class PrivacyPolicyScreen extends ConsumerWidget {
     _LegalSection('7. Changes to this Policy',
       'We may update this Privacy Policy from time to time. Changes take effect immediately upon publishing in the app. Continued use constitutes acceptance.'),
     _LegalSection('8. Contact Us',
-      'Saksham Foundation, No. 42, NGO Campus, Bengaluru – 560067, Karnataka.\nEmail: privacy@sakshamfoundation.org  ·  Phone: +91 80 2345 6789'),
+      'Sri Krishnashraya Educational Trust, No. 42, NGO Campus, Bengaluru – 560067, Karnataka.\nEmail: privacy@sakshamfoundation.org  ·  Phone: +91 80 2345 6789'),
   ];
 
   @override
@@ -1166,19 +1166,19 @@ class TermsOfServiceScreen extends ConsumerWidget {
 
   static const _staticSections = [
     _LegalSection('1. Acceptance of Terms',
-      'By using the Saksham Foundation Management App, you agree to be bound by these Terms of Service. If you do not agree, please discontinue use immediately.'),
+      'By using the Sri Krishnashraya Educational Trust Management App, you agree to be bound by these Terms of Service. If you do not agree, please discontinue use immediately.'),
     _LegalSection('2. Authorised Use',
-      'This application is intended solely for use by authorised staff, volunteers, and administrators of Saksham Foundation. Sharing credentials with unauthorised persons is prohibited.'),
+      'This application is intended solely for use by authorised staff, volunteers, and administrators of Sri Krishnashraya Educational Trust. Sharing credentials with unauthorised persons is prohibited.'),
     _LegalSection('3. Donor & Child Data',
-      'All data entered is the property of Saksham Foundation. Users are responsible for accuracy and must not misuse donor or child beneficiary information.'),
+      'All data entered is the property of Sri Krishnashraya Educational Trust. Users are responsible for accuracy and must not misuse donor or child beneficiary information.'),
     _LegalSection('4. Financial Records',
       'All financial transactions must be genuine. Fabricating donations, receipts, or expenditure reports is a serious violation and may result in legal action.'),
     _LegalSection('5. Intellectual Property',
-      'The app design, code, logos, and content are the intellectual property of Saksham Foundation and its technology partners. Reproduction without permission is prohibited.'),
+      'The app design, code, logos, and content are the intellectual property of Sri Krishnashraya Educational Trust and its technology partners. Reproduction without permission is prohibited.'),
     _LegalSection('6. Limitation of Liability',
-      'Saksham Foundation is not liable for any loss of data, system downtime, or errors resulting from user actions. Users are responsible for maintaining device security.'),
+      'Sri Krishnashraya Educational Trust is not liable for any loss of data, system downtime, or errors resulting from user actions. Users are responsible for maintaining device security.'),
     _LegalSection('7. Termination',
-      'Saksham Foundation reserves the right to suspend or revoke app access at any time for violation of these terms or termination of employment/volunteering relationship.'),
+      'Sri Krishnashraya Educational Trust reserves the right to suspend or revoke app access at any time for violation of these terms or termination of employment/volunteering relationship.'),
     _LegalSection('8. Governing Law',
       'These terms are governed by the laws of India. Any disputes shall be subject to the exclusive jurisdiction of courts in Bengaluru, Karnataka.'),
   ];
@@ -1202,7 +1202,7 @@ class AboutUsScreen extends ConsumerWidget {
 
   static const _staticSections = [
     _LegalSection('Who We Are',
-      'Saksham Foundation is a registered charitable organisation headquartered in Bengaluru, Karnataka. Founded in 2008, we work across education, child welfare, healthcare, and community development to uplift underserved communities across South India.'),
+      'Sri Krishnashraya Educational Trust is a registered charitable organisation headquartered in Bengaluru, Karnataka. Founded in 2008, we work across education, child welfare, healthcare, and community development to uplift underserved communities across South India.'),
     _LegalSection('Our Mission',
       'To empower every child and family we serve with access to quality education, healthcare, and livelihood support — building a more equitable society, one community at a time.'),
     _LegalSection('Our Impact',
@@ -1210,16 +1210,16 @@ class AboutUsScreen extends ConsumerWidget {
     _LegalSection('Certifications & Registrations',
       '✦ 80G & 12A Tax Exemption\n✦ FCRA Licensed (Ministry of Home Affairs)\n✦ CSR-1 Registered (MCA)\n✦ GiveIndia Verified NGO\n✦ ISO 9001:2015 Quality Management'),
     _LegalSection('This App',
-      'The Saksham Admin App is a purpose-built tool for staff and volunteers to manage donors, track donations, monitor student progress, and generate impact reports — all from a single mobile platform.'),
+      'The SKET Admin App is a purpose-built tool for staff and volunteers to manage donors, track donations, monitor student progress, and generate impact reports — all from a single mobile platform.'),
     _LegalSection('Contact Us',
-      'Saksham Foundation\nNo. 42, NGO Campus, HSR Layout\nBengaluru – 560067, Karnataka\n\nEmail: info@sakshamfoundation.org\nPhone: +91 80 2345 6789\nWebsite: www.sakshamfoundation.org'),
+      'Sri Krishnashraya Educational Trust\nNo. 42, NGO Campus, HSR Layout\nBengaluru – 560067, Karnataka\n\nEmail: info@sakshamfoundation.org\nPhone: +91 80 2345 6789\nWebsite: www.sakshamfoundation.org'),
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final apiResult = ref.watch(legalContentProvider('about-us'));
     return _LegalScreen(
-      title: 'About Us', sub: 'Saksham Foundation · Est. 2008',
+      title: 'About Us', sub: 'Sri Krishnashraya Educational Trust · Est. 2008',
       icon: Icons.info_outline, sections: _staticSections,
       apiOverride: apiResult.valueOrNull,
     );
@@ -1251,22 +1251,22 @@ class HelpSupportScreen extends StatelessWidget {
         child: Column(children: [
           Container(
             padding: const EdgeInsets.all(20), margin: const EdgeInsets.only(bottom: 20),
-            decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF0B6E5D), Color(0xFF14A98C)]), borderRadius: BorderRadius.circular(18)),
+            decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFE07C1F), Color(0xFFFFB25E)]), borderRadius: BorderRadius.circular(18)),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Icon(Icons.support_agent_outlined, color: Colors.white, size: 36),
               const SizedBox(height: 10),
-              const Text('Saksham Support', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)),
+              const Text('SKET Support', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)),
               const Text('Mon–Fri · 9 AM – 6 PM IST', style: TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w500)),
               const SizedBox(height: 14),
               Row(children: [
                 _cBtn(Icons.email_outlined, 'Email',
-                  onTap: () => launchEmail('support@sakshamfoundation.org', context, subject: 'Support Request – Saksham App')),
+                  onTap: () => launchEmail('support@sakshamfoundation.org', context, subject: 'Support Request – SKET App')),
                 const SizedBox(width: 10),
                 _cBtn(Icons.phone_outlined, 'Call',
                   onTap: () => launchPhone('+918023456789', context)),
                 const SizedBox(width: 10),
                 _cBtn(Icons.chat_outlined, 'WhatsApp',
-                  onTap: () => launchWhatsApp('918023456789', context, message: 'Hi, I need support for the Saksham Foundation app.')),
+                  onTap: () => launchWhatsApp('918023456789', context, message: 'Hi, I need support for the Sri Krishnashraya Educational Trust app.')),
               ]),
             ])),
           _buildSectionLabel(context, 'FAQs'),
@@ -1439,12 +1439,12 @@ class _LegalScreen extends StatelessWidget {
             ])),
           Container(
             padding: const EdgeInsets.all(16), margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF0B6E5D), Color(0xFF14A98C)]), borderRadius: BorderRadius.circular(16)),
+            decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFE07C1F), Color(0xFFFFB25E)]), borderRadius: BorderRadius.circular(16)),
             child: Row(children: [
               Icon(icon, color: Colors.white, size: 28), const SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
-                Text('Saksham Foundation · $sub', style: const TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w500)),
+                Text('Sri Krishnashraya Educational Trust · $sub', style: const TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w500)),
               ])),
             ])),
           if (hasLiveBody)
@@ -2479,7 +2479,7 @@ class AdminPanelScreen extends StatelessWidget {
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF094F41), Color(0xFF0E8C76), Color(0xFF14A98C)],
+                colors: [Color(0xFF7A3E0A), Color(0xFFFF9933), Color(0xFFFFB25E)],
                 begin: Alignment.topLeft, end: Alignment.bottomRight,
               ),
             ),
@@ -2512,7 +2512,7 @@ class AdminPanelScreen extends StatelessWidget {
                   const SizedBox(height: 10),
                   Wrap(spacing: 8, runSpacing: 6, children: [
                     _Chip(label: '🛡️  Administrator'),
-                    _Chip(label: 'Saksham Foundation'),
+                    _Chip(label: 'Sri Krishnashraya Educational Trust'),
                   ]),
                 ])),
                 const SizedBox(width: 14),

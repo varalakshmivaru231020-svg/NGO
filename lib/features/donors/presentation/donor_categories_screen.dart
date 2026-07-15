@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/network/api_client.dart';
 
 // ── palette ──────────────────────────────────────────────────────────
-const _brand600   = Color(0xFF0E8C76);
-const _brand100   = Color(0xFFD6F3EC);
+const _brand600   = Color(0xFFFF9933);
+const _brand100   = Color(0xFFFFE8CC);
 const _coral500   = Color(0xFFF2685E);
 const _coral100   = Color(0xFFFFE3DF);
 const _onSurface2 = Color(0xFF5A6B67);
@@ -43,7 +43,7 @@ class DonorCategory {
     name: j['name'] as String? ?? '',
     desc: j['description'] as String? ?? '',
     iconKey: j['icon'] as String? ?? _iconOptions.first.$2,
-    colorHex: j['color'] as String? ?? '#0E8C76',
+    colorHex: j['color'] as String? ?? '#FF9933',
     donorCount: (j['_count'] as Map?)?['donors'] as int? ?? 0,
   );
 
@@ -59,7 +59,7 @@ class DonorCategory {
 
 // ── palette options for pickers ──────────────────────────────────────
 const _colorOptions = [
-  (Color(0xFF0E8C76), '#0E8C76'),   // teal
+  (Color(0xFFFF9933), '#FF9933'),   // saffron
   (Color(0xFF7C6CF0), '#7C6CF0'),   // violet
   (Color(0xFF2D9CDB), '#2D9CDB'),   // sky
   (Color(0xFFE0921A), '#E0921A'),   // amber

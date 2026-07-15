@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-const _brand600 = Color(0xFF0E8C76);
-const _brand100 = Color(0xFFD6F3EC);
+const _brand600 = Color(0xFFFF9933);
+const _brand100 = Color(0xFFFFE8CC);
 const _amber600 = Color(0xFFE0921A);
 const _amber100 = Color(0xFFFFF1D6);
 const _coral500 = Color(0xFFF2685E);
@@ -94,7 +94,7 @@ class _HelpScreenState extends State<HelpScreen> {
           Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFF0B6E5D), Color(0xFF0E8C76)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+              gradient: const LinearGradient(colors: [Color(0xFFE07C1F), Color(0xFFFF9933)], begin: Alignment.topLeft, end: Alignment.bottomRight),
               borderRadius: BorderRadius.circular(22),
               boxShadow: const [BoxShadow(color: Color(0x400B6E5D), blurRadius: 14, offset: Offset(0, 6))],
             ),
@@ -174,7 +174,7 @@ class _HelpScreenState extends State<HelpScreen> {
           )),
 
           const SizedBox(height: 30),
-          const Center(child: Text('Saksham Foundation · v2.4.0 · support@saksham.org',
+          const Center(child: Text('Sri Krishnashraya Educational Trust · v2.4.0 · support@saksham.org',
             style: TextStyle(fontSize: 11.5, color: _onSurface3, fontWeight: FontWeight.w500))),
           const SizedBox(height: 96),
         ]),

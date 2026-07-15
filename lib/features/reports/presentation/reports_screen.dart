@@ -8,9 +8,9 @@ import '../../../core/utils/native_file_saver.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/network/api_client.dart';
 
-const _brand700 = Color(0xFF0B6E5D);
-const _brand600 = Color(0xFF0E8C76);
-const _brand100 = Color(0xFFD6F3EC);
+const _brand700 = Color(0xFFE07C1F);
+const _brand600 = Color(0xFFFF9933);
+const _brand100 = Color(0xFFFFE8CC);
 const _amber600 = Color(0xFFE0921A);
 const _coral500 = Color(0xFFF2685E);
 const _violet500 = Color(0xFF7C6CF0);
@@ -158,7 +158,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   // ── Excel helpers ────────────────────────────────────────────────────
   xl.CellStyle _headerStyle() => xl.CellStyle(
     bold: true,
-    backgroundColorHex: xl.ExcelColor.fromHexString('#0E8C76'),
+    backgroundColorHex: xl.ExcelColor.fromHexString('#FF9933'),
     fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
     horizontalAlign: xl.HorizontalAlign.Center,
   );
@@ -166,7 +166,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   xl.CellStyle _summaryStyle() => xl.CellStyle(
     bold: true,
     backgroundColorHex: xl.ExcelColor.fromHexString('#D6F3EC'),
-    fontColorHex: xl.ExcelColor.fromHexString('#0B6E5D'),
+    fontColorHex: xl.ExcelColor.fromHexString('#E07C1F'),
   );
 
   void _setRow(xl.Sheet sheet, int row, List<String> values, {xl.CellStyle? style}) {
@@ -256,7 +256,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final bytes = excel.encode();
     if (bytes == null) { setState(() => _exporting = false); return; }
 
-    final filename = 'Saksham_${_reportFilter}_Report_$dateStr.xlsx';
+    final filename = 'SKET_${_reportFilter}_Report_$dateStr.xlsx';
     final ok = await NativeFileSaver.saveBytes(filename, Uint8List.fromList(bytes),
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 

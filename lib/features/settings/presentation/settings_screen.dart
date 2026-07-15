@@ -9,7 +9,7 @@ import '../../../core/auth/session.dart';
 import '../profile_store.dart';
 import '../org_store.dart';
 
-const _brand600 = Color(0xFF0E8C76);
+const _brand600 = Color(0xFFFF9933);
 const _coral500 = Color(0xFFF2685E);
 const _coral100 = Color(0xFFFFE3DF);
 const _onSurface3 = Color(0xFF93A29F);
@@ -283,7 +283,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
       _settingsSection('About', [
         _settingsItem(Icons.privacy_tip_outlined, 'Privacy Policy', 'View our privacy policy', onTap: () => context.go('/settings/privacy-policy')),
         _settingsItem(Icons.gavel_outlined, 'Terms of Service', 'View terms of service', onTap: () => context.go('/settings/terms-of-service')),
-        _settingsItem(Icons.info_outline, 'About Us', 'Learn about Saksham Foundation', onTap: () => context.go('/settings/about-us')),
+        _settingsItem(Icons.info_outline, 'About Us', 'Learn about Sri Krishnashraya Educational Trust', onTap: () => context.go('/settings/about-us')),
         _settingsItem(Icons.help_outline, 'Help & Support', 'FAQs and contact', onTap: () => context.go('/help')),
       ]),
       const SizedBox(height: 20),
@@ -417,7 +417,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
               Container(
                 width: 88, height: 88,
                 decoration: const BoxDecoration(shape: BoxShape.circle,
-                  gradient: LinearGradient(colors: [Color(0xFF0B6E5D), Color(0xFF14A98C)])),
+                  gradient: LinearGradient(colors: [Color(0xFFE07C1F), Color(0xFFFFB25E)])),
                 child: Center(child: Text(initials.isEmpty ? 'U' : initials, style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800))),
               ),
               const SizedBox(height: 12),

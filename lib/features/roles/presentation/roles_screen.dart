@@ -3,9 +3,9 @@ import '../../../core/auth/role_auth.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 
-const _brand600 = Color(0xFF0E8C76);
-const _brand700 = Color(0xFF0B6E5D);
-const _brand100 = Color(0xFFD6F3EC);
+const _brand600 = Color(0xFFFF9933);
+const _brand700 = Color(0xFFE07C1F);
+const _brand100 = Color(0xFFFFE8CC);
 const _coral500 = Color(0xFFF2685E);
 const _violet500 = Color(0xFF7C6CF0);
 const _amber600 = Color(0xFFE0921A);
@@ -353,9 +353,9 @@ class _TabBtn extends StatelessWidget {
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
       decoration: BoxDecoration(
-        color: active ? const Color(0xFF0E8C76) : Colors.white,
+        color: active ? const Color(0xFFFF9933) : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: active ? const Color(0xFF0E8C76) : const Color(0xFFE5EBE9)),
+        border: Border.all(color: active ? const Color(0xFFFF9933) : const Color(0xFFE5EBE9)),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(icon, size: 15, color: active ? Colors.white : const Color(0xFF5A6B67)),
@@ -388,7 +388,7 @@ void _openSheet(BuildContext context, AppRole? existing, VoidCallback onSaved) {
             // Title bar
             Container(
               decoration: const BoxDecoration(
-                gradient: LinearGradient(colors: [Color(0xFF0B6E5D), _brand600]),
+                gradient: LinearGradient(colors: [Color(0xFFE07C1F), _brand600]),
                 borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
               padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),

@@ -14,10 +14,10 @@ import '../../donations/presentation/donations_screen.dart' show demoLocalDonati
 import '../../students/presentation/students_screen.dart' show demoLocalStudents;
 
 // ── colours ───────────────────────────────────────────────────────────
-const _brand700 = Color(0xFF0B6E5D);
-const _brand600 = Color(0xFF0E8C76);
+const _brand700 = Color(0xFFE07C1F);
+const _brand600 = Color(0xFFFF9933);
 const _brand500 = Color(0xFF14A98C);
-const _brand100 = Color(0xFFD6F3EC);
+const _brand100 = Color(0xFFFFE8CC);
 const _amber600 = Color(0xFFE0921A);
 const _amber100 = Color(0xFFFFF1D6);
 const _coral500 = Color(0xFFF2685E);
@@ -43,7 +43,7 @@ const _typeSplit = [
   _TypeSlice('General Fund', 24, Color(0xFF14A98C)),
   _TypeSlice('Medical', 16, Color(0xFFF2685E)),
   _TypeSlice('Food', 11, Color(0xFFF6A723)),
-  _TypeSlice('Child Sponsorship', 7, Color(0xFF0E8C76)),
+  _TypeSlice('Child Sponsorship', 7, Color(0xFFFF9933)),
 ];
 final _recentDonations = [
   _Donation('Priya Sharma',   'Child Sponsorship', 'UPI',          18000, '04 Jun'),
@@ -53,7 +53,7 @@ final _recentDonations = [
 ];
 const _typeColors = {
   'Education':         Color(0xFF7C6CF0),
-  'Child Sponsorship': Color(0xFF0E8C76),
+  'Child Sponsorship': Color(0xFFFF9933),
   'Medical':           Color(0xFFF2685E),
   'General Fund':      Color(0xFF14A98C),
   'Food':              Color(0xFFF6A723),
@@ -868,8 +868,8 @@ class _TrendBarChart extends StatelessWidget {
                 begin: Alignment.bottomCenter,
                 end: Alignment.topCenter,
                 colors: isLast
-                    ? const [Color(0xFF14A98C), Color(0xFF0B6E5D)]
-                    : const [Color(0xFF3FBFA6), Color(0xFF14A98C)],
+                    ? const [Color(0xFFFFA94D), Color(0xFFE07C1F)]
+                    : const [Color(0xFFFFCC99), Color(0xFFFFA94D)],
               ),
               backDrawRodData: BackgroundBarChartRodData(
                 show: true,

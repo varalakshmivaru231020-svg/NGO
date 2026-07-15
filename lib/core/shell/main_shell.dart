@@ -6,7 +6,7 @@ import '../../features/notifications/notification_store.dart';
 import '../../features/settings/profile_store.dart';
 import '../../features/settings/org_store.dart';
 
-const _brand600 = Color(0xFF0E8C76);
+const _brand600 = Color(0xFFFF9933);
 const _coral500 = Color(0xFFF2685E);
 
 // ── nav item descriptor ───────────────────────────────────────────────
@@ -310,7 +310,7 @@ class _Footer extends StatelessWidget {
   const _Footer({required this.extended});
   final bool extended;
   static const _grad = BoxDecoration(
-    gradient: LinearGradient(colors: [Color(0xFF0B6E5D), Color(0xFF14A98C)]),
+    gradient: LinearGradient(colors: [Color(0xFFE07C1F), Color(0xFFFFB25E)]),
     shape: BoxShape.circle,
   );
   @override

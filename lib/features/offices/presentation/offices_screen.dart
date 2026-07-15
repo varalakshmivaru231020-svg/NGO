@@ -3,8 +3,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/network/api_client.dart';
 
-const _brand600 = Color(0xFF0E8C76);
-const _brand100 = Color(0xFFD6F3EC);
+const _brand600 = Color(0xFFFF9933);
+const _brand100 = Color(0xFFFFE8CC);
 const _coral500 = Color(0xFFF2685E);
 const _coral100 = Color(0xFFFFE3DF);
 const _onSurface2 = Color(0xFF5A6B67);
@@ -249,7 +249,7 @@ class _OfficesScreenState extends State<OfficesScreen> {
               isDense: true,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.border)),
               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.border)),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF0E8C76), width: 1.5)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFF9933), width: 1.5)),
             ),
           ),
         ),
@@ -329,7 +329,7 @@ class _OfficesScreenState extends State<OfficesScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         elevation: 4,
                         itemBuilder: (_) => [
-                          const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 17, color: Color(0xFF0E8C76)), SizedBox(width: 10), Text('Edit', style: TextStyle(fontWeight: FontWeight.w700))])),
+                          const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 17, color: Color(0xFFFF9933)), SizedBox(width: 10), Text('Edit', style: TextStyle(fontWeight: FontWeight.w700))])),
                           const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, size: 17, color: Color(0xFFF2685E)), SizedBox(width: 10), Text('Delete', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFFF2685E)))])),
                         ],
                         child: Container(

@@ -38,16 +38,24 @@ class OrgData {
   }
 
   // First word of the org name — used as the bold title line in the sidebar.
+  // For longer (3+ word) names, use an acronym instead so it fits.
   String get shortName {
     final t = name.trim();
-    if (t.isEmpty) return 'Saksham';
+    if (t.isEmpty) return 'SKET';
+    final words = t.split(RegExp(r'\s+'));
+    if (words.length >= 3) {
+      return words.map((w) => w[0]).join().toUpperCase();
+    }
     final sp = t.indexOf(' ');
     return sp == -1 ? t : t.substring(0, sp);
   }
 
   // Everything after the first word — the smaller second line (may be empty).
+  // For longer (3+ word) names, show the full name instead.
   String get tagline {
     final t = name.trim();
+    final words = t.split(RegExp(r'\s+'));
+    if (words.length >= 3) return t;
     final sp = t.indexOf(' ');
     return sp == -1 ? '' : t.substring(sp + 1).trim();
   }
@@ -101,7 +109,7 @@ class OrgData {
 const _unset = Object();
 
 const _defaultOrg = OrgData(
-  name: 'Saksham Foundation',
+  name: 'Sri Krishnashraya Educational Trust',
   website: 'www.saksham.org',
   address: 'Mumbai, Maharashtra',
   phone: '+91 98765 43210',

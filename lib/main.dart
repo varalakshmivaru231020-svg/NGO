@@ -27,7 +27,7 @@ class SakshamApp extends ConsumerWidget {
     final router    = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);
     return MaterialApp.router(
-      title: 'Saksham Foundation',
+      title: 'Sri Krishnashraya Educational Trust',
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,

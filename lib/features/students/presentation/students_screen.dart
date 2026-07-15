@@ -6,8 +6,8 @@ import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 
 // ── colours ───────────────────────────────────────────────────────────
-const _brand600  = Color(0xFF0E8C76);
-const _brand100  = Color(0xFFD6F3EC);
+const _brand600  = Color(0xFFFF9933);
+const _brand100  = Color(0xFFFFE8CC);
 const _violet500 = Color(0xFF7C6CF0);
 const _violet100 = Color(0xFFE7E3FD);
 const _amber600  = Color(0xFFE0921A);

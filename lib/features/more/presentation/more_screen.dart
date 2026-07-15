@@ -5,8 +5,8 @@ import '../../../core/auth/session.dart';
 import '../../notifications/notification_store.dart';
 import '../../settings/profile_store.dart';
 
-const _brand600 = Color(0xFF0E8C76);
-const _brand100 = Color(0xFFD6F3EC);
+const _brand600 = Color(0xFFFF9933);
+const _brand100 = Color(0xFFFFE8CC);
 const _amber600 = Color(0xFFE0921A);
 const _amber100 = Color(0xFFFFF1D6);
 const _coral500 = Color(0xFFF2685E);
@@ -99,7 +99,7 @@ class _MoreScreenState extends State<MoreScreen> {
                 return Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Color(0xFF0B6E5D), Color(0xFF14A98C)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                    gradient: const LinearGradient(colors: [Color(0xFFE07C1F), Color(0xFFFFB25E)], begin: Alignment.topLeft, end: Alignment.bottomRight),
                     borderRadius: BorderRadius.circular(22),
                     boxShadow: const [BoxShadow(color: Color(0x400B6E5D), blurRadius: 16, offset: Offset(0, 6))],
                   ),
@@ -170,7 +170,7 @@ class _MoreScreenState extends State<MoreScreen> {
           ),
 
           const SizedBox(height: 16),
-          Center(child: Text('Saksham Foundation · v2.4.0', style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w600))),
+          Center(child: Text('Sri Krishnashraya Educational Trust · v2.4.0', style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w600))),
           const SizedBox(height: 96),
         ]),
       ),

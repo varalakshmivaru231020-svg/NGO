@@ -7,9 +7,9 @@ import '../../../core/utils/app_launcher.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/network/api_client.dart';
 
-const _brand700 = Color(0xFF0B6E5D);
-const _brand600 = Color(0xFF0E8C76);
-const _brand100 = Color(0xFFD6F3EC);
+const _brand700 = Color(0xFFE07C1F);
+const _brand600 = Color(0xFFFF9933);
+const _brand100 = Color(0xFFFFE8CC);
 const _amber600 = Color(0xFFE0921A);
 const _amber100 = Color(0xFFFFF1D6);
 const _coral500 = Color(0xFFF2685E);
@@ -254,13 +254,13 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
                 const SizedBox(height: 12),
                 Row(children: [
                   _ShareBtn(icon: Icons.message_rounded, label: 'WhatsApp', color: const Color(0xFF25D366),
-                    onTap: current.isLive ? () => launchWhatsApp('', context, message: 'Donate to Saksham Foundation: ${current.url}') : () => _toast('No live link to share', error: true)),
+                    onTap: current.isLive ? () => launchWhatsApp('', context, message: 'Donate to Sri Krishnashraya Educational Trust: ${current.url}') : () => _toast('No live link to share', error: true)),
                   const SizedBox(width: 8),
                   _ShareBtn(icon: Icons.sms_outlined, label: 'SMS', color: _sky500,
-                    onTap: current.isLive ? () => launchSms('', context, body: 'Donate to Saksham Foundation: ${current.url}') : () => _toast('No live link to share', error: true)),
+                    onTap: current.isLive ? () => launchSms('', context, body: 'Donate to Sri Krishnashraya Educational Trust: ${current.url}') : () => _toast('No live link to share', error: true)),
                   const SizedBox(width: 8),
                   _ShareBtn(icon: Icons.email_outlined, label: 'Email', color: _coral500,
-                    onTap: current.isLive ? () => launchEmail('', context, subject: 'Donation Link – Saksham Foundation', body: 'Please find your donation link: ${current.url}') : () => _toast('No live link to share', error: true)),
+                    onTap: current.isLive ? () => launchEmail('', context, subject: 'Donation Link – Sri Krishnashraya Educational Trust', body: 'Please find your donation link: ${current.url}') : () => _toast('No live link to share', error: true)),
                 ]),
               ]))),
             ],

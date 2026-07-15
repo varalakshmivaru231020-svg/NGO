@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/network/api_client.dart';
 import 'donor_categories_screen.dart' show DonorCategory;
 
-const _brand600   = Color(0xFF0E8C76);
+const _brand600   = Color(0xFFFF9933);
 const _onSurface1 = Color(0xFF15211E);
 const _onSurface2 = Color(0xFF5A6B67);
 const _onSurface3 = Color(0xFF93A29F);

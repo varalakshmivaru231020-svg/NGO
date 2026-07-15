@@ -5,9 +5,9 @@ import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import 'receipt_generator.dart';
 
-const _brand700 = Color(0xFF0B6E5D);
-const _brand600 = Color(0xFF0E8C76);
-const _brand100 = Color(0xFFD6F3EC);
+const _brand700 = Color(0xFFE07C1F);
+const _brand600 = Color(0xFFFF9933);
+const _brand100 = Color(0xFFFFE8CC);
 const _amber600 = Color(0xFFE0921A);
 const _coral500 = Color(0xFFF2685E);
 const _violet500 = Color(0xFF7C6CF0);
@@ -58,9 +58,11 @@ final demoLocalDonations = <Map<String, dynamic>>[];
 class _Donation {
   _Donation({required this.id, required this.donorId, required this.name, required this.amount,
     required this.type, required this.method, required this.receipt, required this.date,
-    required this.status, required this.attach});
+    required this.status, required this.attach,
+    this.donorPhone = '', this.donorCity = '', this.donorPan = ''});
   final String id, donorId, name, type, method, receipt, date, status;
   final int amount, attach;
+  final String donorPhone, donorCity, donorPan;
 
   factory _Donation.fromApi(Map<String, dynamic> j) {
     final donor = j['donor'] as Map<String, dynamic>? ?? {};
@@ -78,6 +80,9 @@ class _Donation {
       id:       j['id']       as String? ?? '',
       donorId:  donor['id']   as String? ?? '',
       name:     donor['name'] as String? ?? 'Unknown',
+      donorPhone: donor['mobile'] as String? ?? '',
+      donorCity:  donor['city']   as String? ?? '',
+      donorPan:   donor['pan']    as String? ?? '',
       amount:   j['amount']   as int?    ?? 0,
       type:     type['label'] as String? ?? 'General Donation',
       method:   _modeLabels[rawMode] ?? rawMode,
@@ -255,7 +260,7 @@ class _DonationsScreenState extends State<DonationsScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: const BoxDecoration(
-                gradient: LinearGradient(colors: [Color(0xFF0B6E5D), Color(0xFF0E8C76)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                gradient: LinearGradient(colors: [Color(0xFFE07C1F), Color(0xFFFF9933)], begin: Alignment.topLeft, end: Alignment.bottomRight),
                 borderRadius: BorderRadius.all(Radius.circular(20)),
                 boxShadow: [BoxShadow(color: Color(0x400B6E5D), blurRadius: 12, offset: Offset(0, 5))],
               ),
@@ -417,9 +422,9 @@ class _DonationCard extends StatelessWidget {
                 onTap: () => showReceiptSheet(context, DonationReceipt(
                   receiptNo:    d.receipt,
                   donorName:    d.name,
-                  donorPhone:   '',
-                  donorCity:    '',
-                  donorPan:     '',
+                  donorPhone:   d.donorPhone,
+                  donorCity:    d.donorCity,
+                  donorPan:     d.donorPan,
                   donationType: d.type,
                   amount:       d.amount,
                   paymentMode:  d.method,
