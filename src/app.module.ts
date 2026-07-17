@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { DonorsModule } from './donors/donors.module';
 import { DonationsModule } from './donations/donations.module';
+import { ExpensesModule } from './expenses/expenses.module';
 import { StudentsModule } from './students/students.module';
 import { CategoriesModule } from './categories/categories.module';
 import { AchievementsModule } from './achievements/achievements.module';
@@ -41,6 +42,7 @@ import { SettingsModule } from './settings/settings.module';
     UsersModule,
     DonorsModule,
     DonationsModule,
+    ExpensesModule,
     StudentsModule,
     CategoriesModule,
     AchievementsModule,

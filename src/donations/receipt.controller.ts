@@ -69,25 +69,25 @@ export class ReceiptController {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${this.esc(org)} · Receipt</title>
 <style>
-  :root{--brand:#0E8C76;--brand700:#0B6E5D;--ink:#1A2A24;--sub:#5A7068;--line:#E5EBE9}
+  :root{--brand:#F97316;--brand700:#EA6A0A;--ink:#1F2937;--sub:#6B7280;--line:#E5E7EB;--bg-light:#F8FAFC}
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F4F7F6;color:var(--ink);padding:24px}
-  .wrap{max-width:520px;margin:0 auto}
-  .org{text-align:center;font-size:18px;font-weight:800;color:var(--brand700);margin-bottom:4px}
-  .org-sub{text-align:center;font-size:12px;color:var(--sub);margin-bottom:18px}
-  .rc{background:#fff;border:1px solid var(--line);border-radius:20px;padding:26px 24px;box-shadow:0 6px 24px rgba(11,110,93,.08)}
-  .badge{display:inline-block;background:#D0F2E8;color:var(--brand);font-size:12px;font-weight:800;padding:5px 12px;border-radius:20px;margin-bottom:14px}
-  h1{font-size:22px;font-weight:800;letter-spacing:-.3px}
-  .rno{color:var(--sub);font-size:12.5px;font-weight:600;margin-top:2px}
-  .amt{font-size:38px;font-weight:800;color:var(--brand700);letter-spacing:-1px;margin:16px 0}
-  table{width:100%;border-collapse:collapse;margin-top:6px}
-  td{padding:11px 0;border-bottom:1px dashed var(--line);font-size:14px;vertical-align:top}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg-light);color:var(--ink);padding:16px}
+  .wrap{max-width:440px;margin:0 auto}
+  .org{text-align:center;font-size:15px;font-weight:800;color:var(--ink);margin-bottom:2px}
+  .org-sub{text-align:center;font-size:10.5px;color:var(--sub);margin-bottom:12px}
+  .rc{background:#fff;border:1px solid var(--line);border-radius:10px;padding:16px 16px}
+  .badge{display:inline-block;background:#FFF1E7;color:var(--brand700);font-size:10.5px;font-weight:800;padding:3px 10px;border-radius:20px;margin-bottom:8px}
+  h1{font-size:16px;font-weight:800;letter-spacing:-.2px}
+  .rno{color:var(--sub);font-size:10.5px;font-weight:600;margin-top:1px}
+  .amt{font-size:26px;font-weight:800;color:var(--brand700);letter-spacing:-.5px;margin:10px 0}
+  table{width:100%;border-collapse:collapse;margin-top:2px}
+  td{padding:7px 0;border-bottom:1px dashed var(--line);font-size:12.5px;vertical-align:top}
   td:first-child{color:var(--sub);font-weight:600;width:42%}
   td:last-child{font-weight:700;text-align:right}
-  .thanks{font-size:12.5px;color:var(--sub);line-height:1.5;margin:18px 0 6px}
-  .print{width:100%;margin-top:14px;background:var(--brand);color:#fff;border:0;border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer}
+  .thanks{font-size:10.5px;color:var(--sub);line-height:1.4;margin:12px 0 4px}
+  .print{width:100%;margin-top:10px;background:var(--brand);color:#fff;border:0;border-radius:8px;padding:11px;font-size:13px;font-weight:800;cursor:pointer}
   .err{text-align:center;color:#C0392B;font-weight:600;padding:20px}
-  @media print{body{background:#fff;padding:0}.print{display:none}.rc{border:0;box-shadow:none}}
+  @media print{body{background:#fff;padding:0}.print{display:none}.rc{border:0}}
 </style></head>
 <body><div class="wrap">
   <div class="org">${this.esc(org)}</div>

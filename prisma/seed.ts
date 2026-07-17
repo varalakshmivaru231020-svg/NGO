@@ -49,6 +49,17 @@ async function main() {
     prisma.donationType.upsert({ where: { key: 'sponsorship' }, update: {}, create: { key: 'sponsorship', label: 'Child Sponsorship', icon: 'users' } }),
   ]);
 
+  // Expense Categories
+  await Promise.all([
+    prisma.expenseCategory.upsert({ where: { key: 'salaries' }, update: {}, create: { key: 'salaries', label: 'Salaries', icon: 'wallet' } }),
+    prisma.expenseCategory.upsert({ where: { key: 'utilities' }, update: {}, create: { key: 'utilities', label: 'Utilities', icon: 'bolt' } }),
+    prisma.expenseCategory.upsert({ where: { key: 'maintenance' }, update: {}, create: { key: 'maintenance', label: 'Maintenance', icon: 'tool' } }),
+    prisma.expenseCategory.upsert({ where: { key: 'program' }, update: {}, create: { key: 'program', label: 'Program & Welfare', icon: 'heart' } }),
+    prisma.expenseCategory.upsert({ where: { key: 'admin' }, update: {}, create: { key: 'admin', label: 'Administrative', icon: 'briefcase' } }),
+    prisma.expenseCategory.upsert({ where: { key: 'transport' }, update: {}, create: { key: 'transport', label: 'Transport', icon: 'truck' } }),
+    prisma.expenseCategory.upsert({ where: { key: 'misc' }, update: {}, create: { key: 'misc', label: 'Miscellaneous', icon: 'wallet' } }),
+  ]);
+
   // Centers
   const centerA = await prisma.center.upsert({
     where: { name: 'Dharavi Centre' },

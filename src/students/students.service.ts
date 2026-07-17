@@ -95,6 +95,12 @@ export class StudentsService {
 
   async addSponsorship(studentId: string, dto: CreateSponsorshipDto) {
     await this.findOne(studentId);
+    // A student has at most one active sponsor at a time — retire any
+    // existing one so assigning a new sponsor behaves like "replace", not "add".
+    await this.prisma.sponsorship.updateMany({
+      where: { studentId, isActive: true },
+      data: { isActive: false, endDate: new Date() },
+    });
     return this.prisma.sponsorship.create({
       data: {
         studentId,
