@@ -1,11 +1,11 @@
 {
-    "name": "saksham_app",
-    "short_name": "saksham_app",
+    "name": "Sri Krishnashraya Educational Trust",
+    "short_name": "SKET",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFFFFF",
+    "theme_color": "#FF9933",
+    "description": "Sri Krishnashraya Educational Trust — NGO Management System",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
