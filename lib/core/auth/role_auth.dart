@@ -55,7 +55,7 @@ final _defaultRoles = <AppRole>[];
 
 // Seeded team accounts — always available in every browser (including incognito),
 // regardless of what's in local storage. Add built-in logins here.
-const _allModules = {'donors', 'donations', 'students', 'offices', 'reports', 'reminders', 'tracker', 'payments', 'achievements'};
+const _allModules = {'donors', 'donations', 'expenses', 'students', 'offices', 'reports', 'reminders', 'tracker', 'payments', 'achievements'};
 // The super admin logs in via the backend (and the offline fallback in the
 // login screen), so it isn't listed here as a team member.
 final _seededRoles = <AppRole>[];
@@ -132,6 +132,7 @@ void saveRoles() {
 const _templateKeyToModule = <String, String>{
   'donors':          'donors',
   'donations':       'donations',
+  'expenses':        'expenses',
   'students':        'students',
   'offices':         'offices',
   'reports':         'reports',
@@ -201,6 +202,7 @@ AppRole? currentLoggedInRole;
 const moduleToRoute = <String, String>{
   'donors':       '/donors',
   'donations':    '/donations',
+  'expenses':     '/expenses',
   'students':     '/students',
   'offices':      '/offices',
   'reports':      '/reports',

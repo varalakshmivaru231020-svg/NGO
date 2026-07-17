@@ -1,0 +1,434 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+import '../../../core/network/api_client.dart';
+import '../../../core/theme/app_theme.dart';
+import 'expense_voucher_generator.dart';
+
+const _orange   = Color(0xFFF97316);
+const _orange700 = Color(0xFFC2410C);
+const _orange100 = Color(0xFFFFE8D6);
+const _violet500 = Color(0xFF7C6CF0);
+const _sky500 = Color(0xFF2D9CDB);
+const _coral500 = Color(0xFFF2685E);
+const _green500 = Color(0xFF14A98C);
+const _green100 = Color(0xFFD0F2E8);
+const _amber600 = Color(0xFFE0921A);
+const _amber100 = Color(0xFFFFF1D6);
+
+String _inr(int n) => '₹${NumberFormat("#,##,###","en_IN").format(n)}';
+String _inrC(int n) {
+  if (n >= 100000) return '₹${(n / 100000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}L';
+  if (n >= 1000) return '₹${(n / 1000).round()}K';
+  return '₹$n';
+}
+
+const _categoryInfo = {
+  'Salaries':           (_violet500, Icons.badge_outlined),
+  'Utilities':          (_amber600,  Icons.bolt_outlined),
+  'Maintenance':        (_sky500,    Icons.build_outlined),
+  'Program & Welfare':  (_orange,    Icons.favorite_outline),
+  'Administrative':     (_coral500, Icons.folder_outlined),
+  'Transport':          (Color(0xFF5BAE8A), Icons.local_shipping_outlined),
+  'Miscellaneous':      (Color(0xFF93A29F), Icons.more_horiz),
+};
+
+const _modeLabels = {
+  'CASH': 'Cash', 'UPI': 'UPI', 'BANK_TRANSFER': 'Bank Transfer', 'CHEQUE': 'Cheque', 'CARD': 'Card',
+};
+
+// In-memory store: survives navigation, cleared on hot-restart
+final demoLocalExpenses = <Map<String, dynamic>>[];
+
+class _Expense {
+  _Expense({required this.id, required this.paidTo, required this.purpose, required this.amount,
+    required this.category, required this.method, required this.voucherNo, required this.date,
+    required this.status, this.preparedBy = '', this.approvedBy = '', this.receivedBy = '', this.reference = ''});
+  final String id, paidTo, purpose, category, method, voucherNo, date, status;
+  final int amount;
+  final String preparedBy, approvedBy, receivedBy, reference;
+
+  factory _Expense.fromApi(Map<String, dynamic> j) {
+    final category = j['category'] as Map<String, dynamic>?;
+    final rawDate = j['date'] as String? ?? '';
+    String formattedDate = rawDate;
+    try {
+      final dt = DateTime.parse(rawDate).toLocal();
+      const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      formattedDate = '${dt.day.toString().padLeft(2,'0')} ${m[dt.month-1]} ${dt.year}';
+    } catch (_) {}
+    final rawMode = j['paymentMode'] as String? ?? 'CASH';
+    final rawStatus = j['status'] as String? ?? 'COMPLETED';
+    return _Expense(
+      id:       j['id']       as String? ?? '',
+      paidTo:   j['paidTo']   as String? ?? 'Unknown',
+      purpose:  j['purpose']  as String? ?? '',
+      amount:   j['amount']   as int?    ?? 0,
+      category: category?['label'] as String? ?? 'Miscellaneous',
+      method:   _modeLabels[rawMode] ?? rawMode,
+      voucherNo: j['voucherNo'] as String? ?? '',
+      date:     formattedDate,
+      status:   rawStatus == 'COMPLETED' ? 'Paid' : rawStatus,
+      preparedBy: j['preparedBy'] as String? ?? '',
+      approvedBy: j['approvedBy'] as String? ?? '',
+      receivedBy: j['receivedBy'] as String? ?? '',
+      reference:  j['reference'] as String? ?? '',
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+class ExpensesScreen extends StatefulWidget {
+  const ExpensesScreen({super.key});
+  @override
+  State<ExpensesScreen> createState() => _ExpensesScreenState();
+}
+
+class _ExpensesScreenState extends State<ExpensesScreen> {
+  String _filter = 'All';
+  List<_Expense> _expenses = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final r = await apiClient.get('/expenses', params: {'limit': '50', 'page': '1'});
+      final inner = r['data'];
+      List<dynamic> list;
+      if (inner is Map) {
+        list = inner['data'] as List<dynamic>? ?? [];
+      } else if (inner is List) {
+        list = inner;
+      } else {
+        list = [];
+      }
+      final apiExpenses = list.map((j) => _Expense.fromApi(j as Map<String, dynamic>)).toList();
+      // The logged-in user's own submissions awaiting approval — shown at the
+      // top with a "Pending Approval" badge (excluded from the totals).
+      final pending = await _loadMyPending();
+      final localExpenses = demoLocalExpenses.map(_Expense.fromApi).toList();
+      final seenVouchers = apiExpenses.map((e) => e.voucherNo.toLowerCase().trim()).toSet();
+      final uniqueLocal = localExpenses.where((e) => !seenVouchers.contains(e.voucherNo.toLowerCase().trim())).toList();
+      if (mounted) {
+        setState(() {
+          _expenses = [...pending, ...uniqueLocal, ...apiExpenses];
+          _loading = false;
+        });
+      }
+      return;
+    } catch (_) {}
+    // Backend unreachable → local-only so the app still works offline.
+    setState(() {
+      _expenses = demoLocalExpenses.map(_Expense.fromApi).toList();
+      _loading = false;
+    });
+  }
+
+  /// The current user's own submissions awaiting Super-Admin approval.
+  /// Backend-driven (`GET /approvals/mine`) so they survive reloads and vanish
+  /// once approved/rejected. Rendered with a "Pending Approval" status and
+  /// excluded from the paid-out totals.
+  Future<List<_Expense>> _loadMyPending() async {
+    try {
+      final r = await apiClient.get('/approvals/mine');
+      final inner = r['data'];
+      final reqs = inner is List
+          ? inner
+          : (inner is Map ? (inner['data'] as List<dynamic>? ?? const []) : const []);
+      final expenseReqs = reqs.whereType<Map<String, dynamic>>().where((q) =>
+          (q['module'] as String?)?.toLowerCase() == 'expenses' &&
+          (q['action'] as String?)?.toUpperCase() == 'CREATE' &&
+          (q['status'] as String?)?.toUpperCase() == 'PENDING').toList();
+      if (expenseReqs.isEmpty) return const [];
+
+      // The stored payload only has categoryId (category label isn't in the
+      // request body) — resolve it to a display label.
+      final categoryLabels = <String, String>{};
+      try {
+        final cr = await apiClient.get('/expenses/categories');
+        final ci = cr['data'];
+        final cl = ci is List ? ci : (ci is Map ? (ci['data'] as List<dynamic>? ?? const []) : const []);
+        for (final c in cl.whereType<Map<String, dynamic>>()) {
+          categoryLabels[c['id'] as String? ?? ''] = c['label'] as String? ?? '';
+        }
+      } catch (_) {}
+
+      const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return expenseReqs.map((q) {
+        final payload = (q['payload'] as Map?)?.cast<String, dynamic>() ?? const {};
+        final categoryId = payload['categoryId'] as String? ?? '';
+        final rawMode = payload['paymentMode'] as String? ?? 'CASH';
+        String date = '';
+        try {
+          final dt = DateTime.parse(q['createdAt'] as String? ?? '').toLocal();
+          date = '${dt.day.toString().padLeft(2,'0')} ${m[dt.month-1]} ${dt.year}';
+        } catch (_) {}
+        return _Expense(
+          id:       'pending-${q['id']}',
+          paidTo:   payload['paidTo'] as String? ?? 'Unknown',
+          purpose:  payload['purpose'] as String? ?? '',
+          amount:   (payload['amount'] as num?)?.toInt() ?? 0,
+          category: categoryLabels[categoryId] ?? 'Miscellaneous',
+          method:   _modeLabels[rawMode] ?? rawMode,
+          voucherNo: '',
+          date:     date,
+          status:   'Pending Approval',
+          preparedBy: payload['preparedBy'] as String? ?? '',
+        );
+      }).toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  List<String> get _categories => ['All', ..._categoryInfo.keys];
+
+  List<_Expense> get _filtered =>
+    _filter == 'All' ? _expenses : _expenses.where((e) => e.category == _filter).toList();
+
+  // Real (recorded) expenses only — pending-approval submissions are shown in
+  // the list but excluded from the paid-out totals.
+  List<_Expense> get _real => _expenses.where((e) => e.status != 'Pending Approval').toList();
+
+  int get _monthTotal => _real.fold(0, (s, e) => s + e.amount);
+  int get _avgExpense => _real.isEmpty ? 0 : _monthTotal ~/ _real.length;
+
+  @override
+  Widget build(BuildContext context) {
+    final top = MediaQuery.of(context).padding.top;
+
+    return Scaffold(
+      body: Column(children: [
+        Container(color: context.headerBg, padding: EdgeInsets.fromLTRB(18, top + 14, 18, 14),
+          child: Column(children: [
+            Row(children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Expenses', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+                Text('${_real.length} expenses', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
+              ])),
+              GestureDetector(
+                onTap: () => context.go('/expenses/new'),
+                child: Container(width: 44, height: 44, decoration: BoxDecoration(color: _orange, borderRadius: BorderRadius.circular(14)),
+                  child: const Icon(Icons.add_rounded, color: Colors.white, size: 24))),
+            ]),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(colors: [Color(0xFFC2410C), Color(0xFFF97316)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                borderRadius: BorderRadius.all(Radius.circular(20)),
+                boxShadow: [BoxShadow(color: Color(0x40C2410C), blurRadius: 12, offset: Offset(0, 5))],
+              ),
+              child: Column(children: [
+                const Row(children: [
+                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Paid out this month', style: TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  ]),
+                ]),
+                Align(alignment: Alignment.centerLeft, child: Text(_inr(_monthTotal), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.8))),
+                const SizedBox(height: 14),
+                Row(children: [
+                  Expanded(child: _SumStat('Expenses', '${_real.length}')),
+                  Container(width: 1, height: 34, color: Colors.white24),
+                  Expanded(child: _SumStat('Avg Expense', _inrC(_avgExpense))),
+                ]),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(height: 36, child: ListView(scrollDirection: Axis.horizontal,
+              children: _categories.map((t) {
+                final active = _filter == t;
+                final info = _categoryInfo[t];
+                final color = info?.$1 ?? _orange;
+                return Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(
+                  onTap: () => setState(() => _filter = t),
+                  child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(color: active ? color.withValues(alpha: 0.12) : context.cardBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? color : context.border)),
+                    child: Row(children: [
+                      if (info != null) ...[Icon(info.$2, size: 13, color: active ? color : context.textHint), const SizedBox(width: 5)],
+                      Text(t, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? color : context.textSub)),
+                    ]))));
+              }).toList())),
+          ])),
+
+        Expanded(child: _buildBody()),
+      ]),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => context.go('/expenses/new'),
+        backgroundColor: _orange,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('Add Expense', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: _orange));
+    }
+    if (_error != null) {
+      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.wifi_off_outlined, size: 48, color: _coral500),
+        const SizedBox(height: 12),
+        Text('Could not load expenses', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: context.textPrimary)),
+        const SizedBox(height: 4),
+        Text('Make sure the backend is running', style: TextStyle(fontSize: 13, color: context.textSub)),
+        const SizedBox(height: 16),
+        ElevatedButton.icon(
+          onPressed: _load,
+          icon: const Icon(Icons.refresh),
+          label: const Text('Retry'),
+          style: ElevatedButton.styleFrom(backgroundColor: _orange, foregroundColor: Colors.white),
+        ),
+      ]));
+    }
+    final items = _filtered;
+    if (items.isEmpty) {
+      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.receipt_long_outlined, size: 48, color: context.textHint),
+        const SizedBox(height: 12),
+        Text('No expenses found', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: context.textHint)),
+      ]));
+    }
+    return RefreshIndicator(
+      onRefresh: _load,
+      color: _orange,
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 100),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 10),
+        itemBuilder: (_, i) => _ExpenseCard(e: items[i]),
+      ),
+    );
+  }
+}
+
+class _SumStat extends StatelessWidget {
+  const _SumStat(this.label, this.value);
+  final String label, value;
+  @override
+  Widget build(BuildContext context) => Column(children: [
+    Text(value, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+    Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600)),
+  ]);
+}
+
+class _ExpenseCard extends StatelessWidget {
+  const _ExpenseCard({required this.e});
+  final _Expense e;
+
+  @override
+  Widget build(BuildContext context) {
+    final info = _categoryInfo[e.category];
+    final catColor = info?.$1 ?? _orange;
+    final catIcon = info?.$2 ?? Icons.receipt_long_outlined;
+
+    return Container(
+      decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(20), border: Border.all(color: context.border),
+        boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 6, offset: Offset(0, 2))]),
+      child: Column(children: [
+        Padding(padding: const EdgeInsets.fromLTRB(14, 12, 14, 10), child: Row(children: [
+          Container(width: 42, height: 42, decoration: BoxDecoration(color: catColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+            child: Icon(catIcon, color: catColor, size: 20)),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(e.paidTo, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, height: 1, color: context.textPrimary)),
+            const SizedBox(height: 4),
+            Row(children: [
+              Flexible(child: Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(color: catColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
+                child: Text(e.category, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: catColor), overflow: TextOverflow.ellipsis))),
+              const SizedBox(width: 6),
+              Flexible(child: Text(e.method, style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
+            ]),
+          ])),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(_inr(e.amount), style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: _orange700)),
+            const SizedBox(height: 3),
+            Text(e.date, style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w500)),
+          ]),
+        ])),
+        Padding(padding: const EdgeInsets.fromLTRB(14, 0, 14, 10), child: Column(children: [
+          _DashedDivider(borderColor: context.border),
+          const SizedBox(height: 8),
+          LayoutBuilder(builder: (_, constraints) {
+            final narrow = constraints.maxWidth < 320;
+            return Row(children: [
+            if (!narrow) Expanded(child: Text(e.voucherNo, style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w600, letterSpacing: 0.2), overflow: TextOverflow.ellipsis)),
+            if (!narrow) const SizedBox(width: 6),
+            // Voucher button — only for recorded expenses (a pending submission
+            // has no voucher number until it's approved).
+            if (e.status == 'Paid') ...[
+              GestureDetector(
+                onTap: () => showVoucherSheet(context, ExpenseVoucher(
+                  voucherNo:     e.voucherNo,
+                  paidTo:        e.paidTo,
+                  purpose:       e.purpose,
+                  categoryLabel: e.category,
+                  amount:        e.amount,
+                  paymentMode:   e.method == 'Bank Transfer' ? 'BANK_TRANSFER' : e.method.toUpperCase(),
+                  date:          e.date,
+                  reference:     e.reference,
+                  preparedBy:    e.preparedBy,
+                  approvedBy:    e.approvedBy,
+                  receivedBy:    e.receivedBy,
+                )),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _orange100,
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(color: _orange.withValues(alpha: 0.25)),
+                  ),
+                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.receipt_long_outlined, size: 11, color: _orange),
+                    SizedBox(width: 4),
+                    Text('Voucher', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: _orange)),
+                  ]),
+                ),
+              ),
+              const SizedBox(width: 6),
+            ] else
+              const Spacer(),
+            Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(color: e.status == 'Paid' ? _green100 : _amber100.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(7)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(e.status == 'Paid' ? Icons.check_circle_outline : Icons.schedule_outlined, size: 11, color: e.status == 'Paid' ? _green500 : _amber600),
+                const SizedBox(width: 4),
+                Text(e.status, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: e.status == 'Paid' ? _green500 : _amber600)),
+              ])),
+          ]);
+          }),
+        ])),
+      ]),
+    );
+  }
+}
+
+class _DashedDivider extends StatelessWidget {
+  const _DashedDivider({required this.borderColor});
+  final Color borderColor;
+  @override
+  Widget build(BuildContext context) => CustomPaint(size: const Size(double.infinity, 1), painter: _DashPainter(borderColor: borderColor));
+}
+
+class _DashPainter extends CustomPainter {
+  const _DashPainter({required this.borderColor});
+  final Color borderColor;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = borderColor..strokeWidth = 1;
+    double x = 0;
+    while (x < size.width) { canvas.drawLine(Offset(x, 0), Offset(x + 4, 0), paint); x += 8; }
+  }
+  @override
+  bool shouldRepaint(covariant CustomPainter _) => false;
+}

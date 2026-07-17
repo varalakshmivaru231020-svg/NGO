@@ -75,8 +75,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   Container(
                     width: 44, height: 44,
-                    decoration: BoxDecoration(color: _bg, borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(Icons.volunteer_activism, size: 24, color: Colors.white),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                    clipBehavior: Clip.antiAlias,
+                    child: Image.asset(brandLogoAsset, fit: BoxFit.contain),
                   ),
                   const SizedBox(width: 12),
                   const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -125,11 +126,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Widget _logoBox(double size) => Container(
     width: size, height: size,
+    padding: EdgeInsets.all(size * 0.16),
     decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: 0.18),
+      color: Colors.white,
       borderRadius: BorderRadius.circular(size * 0.27),
     ),
-    child: Icon(Icons.volunteer_activism, size: size * 0.52, color: Colors.white),
+    clipBehavior: Clip.antiAlias,
+    child: Image.asset(brandLogoAsset, fit: BoxFit.contain),
   );
 
   // ── Form fields (no brand — brand is above this) ────────────────────

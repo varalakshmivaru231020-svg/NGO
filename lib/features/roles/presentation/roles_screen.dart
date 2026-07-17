@@ -27,6 +27,7 @@ class _Mod {
 const _kMods = [
   _Mod('donors',      'Donors',            Icons.people_outlined,         _brand600),
   _Mod('donations',   'Donations',         Icons.receipt_long_outlined,   _amber600),
+  _Mod('expenses',    'Expenses',          Icons.payments_outlined,       _coral500),
   _Mod('students',    'Children/Students', Icons.school_outlined,         _violet500),
   _Mod('offices',     'Offices',           Icons.business_outlined,       _sky500),
   _Mod('reports',     'Reports',           Icons.bar_chart_rounded,       Color(0xFF14A98C)),

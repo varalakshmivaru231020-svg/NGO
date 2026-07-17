@@ -78,6 +78,17 @@ String _initials(String name) {
   final p = name.trim().split(RegExp(r'\s+'));
   return ((p[0].isNotEmpty ? p[0][0] : '') + (p.length > 1 && p[1].isNotEmpty ? p[1][0] : '')).toUpperCase();
 }
+// Indian-style digit grouping, e.g. 1234567 -> "12,34,567".
+String _groupThousands(int n) {
+  final s = n.toString();
+  if (s.length <= 3) return s;
+  final last3 = s.substring(s.length - 3);
+  var rest = s.substring(0, s.length - 3);
+  final parts = <String>[];
+  while (rest.length > 2) { parts.insert(0, rest.substring(rest.length - 2)); rest = rest.substring(0, rest.length - 2); }
+  if (rest.isNotEmpty) parts.insert(0, rest);
+  return '${parts.join(',')},$last3';
+}
 Color _statusColor(String s) => switch (s) {
   'Active' => _brand600, 'Graduated' => _violet500,
   'Relieved' => _amber600, 'Drop out' => _coral500, _ => _onSurface3,
@@ -263,23 +274,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
                     title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
                     subtitle: Text(city.isNotEmpty ? 'Donor · $city' : 'Donor', style: const TextStyle(fontSize: 12.5, color: _onSurface3)),
                     onTap: () {
-                      final now = DateTime.now();
-                      final dateStr = '${now.day.toString().padLeft(2,'0')} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][now.month-1]} ${now.year}';
-                      setState(() {
-                        _data['sponsor']         = name;
-                        _data['sponsorId']       = id;
-                        _data['sponsorDonorId']  = id;
-                        _data['sponsorCategory'] = 'Sponsor';
-                        _data['sponsorCity']     = city;
-                        _data['sponsorAmt']      = '';
-                        _data['sponsorSince']    = dateStr;
-                        _data['sponsorshipAmt']  = '—';
-                      });
                       Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text('$name assigned as sponsor', style: const TextStyle(fontWeight: FontWeight.w700)),
-                        backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+                      _assignSponsor(donorId: id, name: name, city: city);
                     },
                   );
                 },
@@ -289,6 +285,76 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
         ]),
       ),
     );
+  }
+
+  // Prompts for the annual sponsorship amount (required by the backend),
+  // then persists the assignment via POST /students/:id/sponsorships.
+  // Previously this only ever called setState — the sponsor "assignment"
+  // never reached the server, so it vanished on the next app launch / list refresh.
+  Future<void> _assignSponsor({required String donorId, required String name, required String city}) async {
+    final amountCtrl = TextEditingController();
+    final amount = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sponsorship Amount'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Annual amount $name will sponsor this child with', style: const TextStyle(fontSize: 13, color: _onSurface3)),
+          const SizedBox(height: 10),
+          TextField(
+            controller: amountCtrl, autofocus: true, keyboardType: TextInputType.number,
+            decoration: const InputDecoration(prefixText: '₹ ', hintText: 'e.g. 18000'),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () {
+            final v = int.tryParse(amountCtrl.text.trim());
+            if (v != null && v > 0) Navigator.pop(ctx, v);
+          }, child: const Text('Assign')),
+        ],
+      ),
+    );
+    if (amount == null || !mounted) return;
+
+    try {
+      await apiClient.post('/students/${widget.id}/sponsorships', {
+        'donorId': donorId,
+        'amount': amount,
+        'frequency': 'ANNUAL',
+      });
+
+      final now = DateTime.now();
+      final dateStr = '${now.day.toString().padLeft(2,'0')} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][now.month-1]} ${now.year}';
+      final amtStr = '₹${_groupThousands(amount)} / year';
+      setState(() {
+        _data['sponsor']         = name;
+        _data['sponsorId']       = donorId;
+        _data['sponsorDonorId']  = donorId;
+        _data['sponsorCategory'] = 'Sponsor';
+        _data['sponsorCity']     = city;
+        _data['sponsorAmt']      = amtStr;
+        _data['sponsorSince']    = dateStr;
+        _data['sponsorshipAmt']  = amtStr;
+      });
+      // Keep the cached list record in sync so re-opening this profile without
+      // a fresh /students fetch still shows the sponsor.
+      final rec = findStudentRecord(widget.id);
+      if (rec != null) {
+        rec['sponsorships'] = [
+          {'donor': {'id': donorId, 'name': name, 'mobile': ''}, 'amount': amount},
+        ];
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('$name assigned as sponsor', style: const TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Could not save sponsorship — check your connection and try again', style: TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor: _coral500, behavior: SnackBarBehavior.floating));
+    }
   }
 
   @override

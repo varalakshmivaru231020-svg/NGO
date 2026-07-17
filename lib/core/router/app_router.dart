@@ -9,6 +9,8 @@ import '../../features/donors/presentation/donor_categories_screen.dart';
 import '../../features/donors/presentation/category_donors_screen.dart';
 import '../../features/donations/presentation/donations_screen.dart';
 import '../../features/donations/presentation/add_donation_screen.dart';
+import '../../features/expenses/presentation/expenses_screen.dart';
+import '../../features/expenses/presentation/add_expense_screen.dart';
 import '../../features/students/presentation/students_screen.dart';
 import '../../features/students/presentation/student_detail_screen.dart';
 import '../../features/students/presentation/add_student_screen.dart';
@@ -54,6 +56,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/donors/:id',      builder: (ctx, state) => DonorDetailScreen(id: state.pathParameters['id']!)),
           GoRoute(path: '/donations',       builder: (ctx, state) => const DonationsScreen()),
           GoRoute(path: '/donations/new',   builder: (ctx, state) => const AddDonationScreen()),
+          GoRoute(path: '/expenses',        builder: (ctx, state) => const ExpensesScreen()),
+          GoRoute(path: '/expenses/new',    builder: (ctx, state) => const AddExpenseScreen()),
           GoRoute(path: '/students',        builder: (ctx, state) => const StudentsScreen()),
           GoRoute(path: '/students/new',    builder: (ctx, state) => const AddStudentScreen()),
           GoRoute(path: '/students/:id',    builder: (ctx, state) => StudentDetailScreen(id: state.pathParameters['id']!)),

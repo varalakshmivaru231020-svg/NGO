@@ -31,6 +31,7 @@ const _main = [
 
 const _mgmt = [
   _N(Icons.business_outlined,          Icons.business,            'Offices',         '/offices',          module: 'offices'),
+  _N(Icons.payments_outlined,          Icons.payments,            'Expenses',        '/expenses',         module: 'expenses'),
   _N(Icons.link_rounded,               Icons.link,                'Payment Links',   '/payment-links',    module: 'payments'),
   _N(Icons.cake_outlined,              Icons.cake,                'Reminders',       '/reminders',        module: 'reminders'),
   _N(Icons.track_changes_outlined,     Icons.track_changes,       'Donation Tracker','/donation-tracker', module: 'tracker'),
@@ -60,7 +61,7 @@ int _tabIdx(String loc) {
   if (loc.startsWith('/donors'))    return 1;
   if (loc.startsWith('/donations')) return 2;
   if (loc.startsWith('/students'))  return 3;
-  if (loc.startsWith('/more') || loc == '/offices' || loc == '/payment-links' ||
+  if (loc.startsWith('/more') || loc == '/offices' || loc.startsWith('/expenses') || loc == '/payment-links' ||
       loc == '/reminders' || loc == '/notifications' || loc == '/donation-tracker' ||
       loc == '/reports' || loc == '/achievements' || loc == '/centres' ||
       loc == '/settings' || loc == '/help') return 4;
