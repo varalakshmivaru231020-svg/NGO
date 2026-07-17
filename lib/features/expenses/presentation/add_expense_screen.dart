@@ -78,6 +78,42 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     }
   }
 
+  Future<void> _addCategory() async {
+    final ctrl = TextEditingController();
+    final label = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New Category'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(hintText: 'e.g. Fuel & Travel'),
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Add')),
+        ],
+      ),
+    );
+    if (label == null || label.isEmpty) return;
+
+    try {
+      final r = await apiClient.post('/expenses/categories', {'label': label});
+      final m = (r['data'] as Map).cast<String, dynamic>();
+      final created = (id: m['id'] as String, label: m['label'] as String);
+      if (!mounted) return;
+      setState(() {
+        _categories = [..._categories, created];
+        _categoryId = created.id;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      _snack('Could not add category — check your connection and try again', isError: true);
+    }
+  }
+
   String get _voucherPreview => 'EXP/${DateTime.now().year}/${(DateTime.now().millisecondsSinceEpoch % 9999 + 1000)}';
 
   void _pickAmount(int amount) {
@@ -293,15 +329,27 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               if (_loadingData)
                 const Center(child: SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: _orange)))
               else
-                Wrap(spacing: 8, runSpacing: 8, children: _categories.map((c) {
-                  final active = _categoryId == c.id;
-                  return GestureDetector(
-                    onTap: () => setState(() => _categoryId = c.id),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  ..._categories.map((c) {
+                    final active = _categoryId == c.id;
+                    return GestureDetector(
+                      onTap: () => setState(() => _categoryId = c.id),
+                      child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(color: active ? _orange.withValues(alpha: 0.12) : context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? _orange : context.border)),
+                        child: Text(c.label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? _orange : context.textSub))),
+                    );
+                  }),
+                  GestureDetector(
+                    onTap: _addCategory,
                     child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(color: active ? _orange.withValues(alpha: 0.12) : context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? _orange : context.border)),
-                      child: Text(c.label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? _orange : context.textSub))),
-                  );
-                }).toList()),
+                      decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.border, style: BorderStyle.solid)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.add, size: 14, color: context.textSub),
+                        const SizedBox(width: 4),
+                        Text('New', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub)),
+                      ])),
+                  ),
+                ]),
             ])),
 
             const SizedBox(height: 12),
