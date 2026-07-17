@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
@@ -121,11 +122,11 @@ export default function StudentsPage() {
             {s}
           </button>
         ))}
-        <a href="/students/new"
+        <Link href="/students/new"
           className="flex items-center gap-2 px-4 h-10 rounded-xl text-[13px] font-bold text-white flex-shrink-0"
           style={{ background: '#7C6CF0' }}>
           <Icon name="plus" size={16} color="#fff" /> Add Student
-        </a>
+        </Link>
       </div>
 
       {/* Cards grid */}

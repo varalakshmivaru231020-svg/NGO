@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge, TierBadge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
@@ -165,11 +166,11 @@ export default function DonorsPage() {
               </button>
             ))}
           </div>
-          <a href="/donors/new"
+          <Link href="/donors/new"
             className="flex items-center gap-2 px-4 h-10 rounded-xl text-[13px] font-bold text-white"
             style={{ background: 'var(--primary)' }}>
             <Icon name="plus" size={16} color="#fff" /> Add Donor
-          </a>
+          </Link>
         </div>
 
         {/* Table */}

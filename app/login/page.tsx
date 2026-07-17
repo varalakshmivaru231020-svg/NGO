@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { api, setToken } from '@/lib/api'
-import { Logo } from '@/components/ui/Logo'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -47,7 +47,16 @@ export default function LoginPage() {
             background: 'linear-gradient(135deg, var(--brand-600, #0d9488) 0%, var(--brand-400, #2dd4bf) 100%)',
           }}
         >
-          <Logo size={52} />
+          <div className="rounded-xl bg-white px-4 py-2.5 shadow-md">
+            <Image
+              src="/admin/sket-logo-web.webp"
+              alt="Sri Krishnashraya Educational Trust"
+              width={160}
+              height={80}
+              priority
+              style={{ height: 40, width: 'auto' }}
+            />
+          </div>
           <div className="text-center">
             <div className="text-white font-bold text-xl leading-tight">Saksham Foundation</div>
             <div className="text-white/70 text-xs tracking-widest uppercase mt-0.5">Admin Panel</div>

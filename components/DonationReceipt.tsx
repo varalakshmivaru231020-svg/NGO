@@ -26,6 +26,13 @@ export interface ReceiptData {
   supportEmail?: string
 }
 
+const ORANGE = '#F97316'
+const ORANGE_LT = '#FFF1E7'
+const DARK = '#1F2937'
+const GREY = '#6B7280'
+const BORDER = '#E5E7EB'
+const BG_LIGHT = '#F8FAFC'
+
 function fmt(n: number) {
   return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
@@ -38,195 +45,132 @@ export function DonationReceipt({ data }: { data: ReceiptData }) {
       id="receipt-print"
       style={{
         fontFamily: "'Segoe UI', Arial, sans-serif",
-        maxWidth: 800,
+        maxWidth: 620,
         margin: '0 auto',
         background: '#fff',
-        border: '1px solid #e0e0e0',
-        borderRadius: 4,
-        overflow: 'hidden',
+        border: `1px solid ${BORDER}`,
+        borderRadius: 8,
+        padding: '20px 22px',
+        color: DARK,
       }}
     >
-      {/* ── Header ── */}
-      <div style={{ padding: '24px 32px 16px', display: 'flex', alignItems: 'center', gap: 18 }}>
-        {/* Logo placeholder — matches SKET logo position */}
+      {/* ── Header: logo + org (left) | receipt no / date / mode (right) ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         <div style={{
-          width: 80, height: 80, borderRadius: 8, background: '#f0faf7',
+          width: 40, height: 40, borderRadius: 6, background: ORANGE_LT,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         }}>
-          <Logo size={56} />
+          <Logo size={26} />
         </div>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: '#0B6E5D', letterSpacing: '-0.3px' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: DARK, letterSpacing: '-0.2px' }}>
             Saksham Foundation
           </div>
-          <div style={{ fontSize: 11, color: '#5A7068', marginTop: 2 }}>
+          <div style={{ fontSize: 10.5, color: GREY, marginTop: 1 }}>
             Sri Saksham Educational & Welfare Trust
           </div>
+          <div style={{ fontSize: 9.5, color: GREY, marginTop: 2, lineHeight: 1.4 }}>
+            Dharavi Community Centre, Dr. Ambedkar Road, Dharavi, Mumbai – 400 017, Maharashtra
+          </div>
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: ORANGE }}>
+            Receipt No: {data.receiptNo}
+          </div>
+          <div style={{ fontSize: 10, color: GREY, marginTop: 3 }}>Date: {data.date}</div>
+          <div style={{ fontSize: 10, color: GREY }}>Mode: {data.mode}</div>
+          {data.gatewayRef && (
+            <div style={{ fontSize: 10, color: GREY }}>Ref: {data.gatewayRef}</div>
+          )}
         </div>
       </div>
 
-      {/* ── Address banner (orange→teal) ── */}
-      <div style={{
-        background: '#0E8C76',
-        color: '#fff',
-        fontSize: 11.5,
-        padding: '8px 32px',
-        fontWeight: 500,
-      }}>
-        Dharavi Community Centre, Dr. Ambedkar Road, Dharavi, Mumbai – 400 017, Maharashtra, India
-      </div>
+      <div style={{ borderTop: `1px solid ${BORDER}`, margin: '14px 0' }} />
 
-      {/* ── Recipient + Receipt box ── */}
-      <div style={{ padding: '28px 32px', display: 'flex', justifyContent: 'space-between', gap: 32 }}>
-        {/* Left: Recipient */}
-        <div>
-          <div style={{ fontSize: 10.5, fontWeight: 700, color: '#555', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
-            Recipient:
+      {/* ── Donor Details | Donation Details ── */}
+      <div style={{ display: 'flex', gap: 16 }}>
+        <div style={{ flex: 4, minWidth: 0 }}>
+          <div style={{ fontSize: 9.5, fontWeight: 800, color: ORANGE, letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 5 }}>
+            Donor Details
           </div>
-          <div style={{ fontSize: 20, fontWeight: 300, color: '#1A2A24', marginBottom: 4 }}>
-            {data.donor.name}
-          </div>
-          <div style={{ fontSize: 13, color: '#444', marginBottom: 2 }}>{data.donor.phone}</div>
-          <div style={{ fontSize: 13, color: '#444', marginBottom: 8 }}>{data.donor.city}</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: DARK }}>{data.donor.name}</div>
+          <div style={{ fontSize: 11, color: GREY, marginTop: 3 }}>Mobile: {data.donor.phone}</div>
+          <div style={{ fontSize: 11, color: GREY, marginTop: 1 }}>{data.donor.city}</div>
           {data.donor.pan && (
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0E8C76' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: ORANGE, marginTop: 4 }}>
               PAN: {data.donor.pan}
             </div>
           )}
         </div>
-
-        {/* Right: Receipt number panel — matches SKET orange box → teal */}
-        <div style={{
-          background: '#0E8C76',
-          color: '#fff',
-          borderRadius: 4,
-          padding: '16px 24px',
-          minWidth: 240,
-          flexShrink: 0,
-        }}>
-          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 14 }}>
-            Receipt for #{data.receiptNo}
+        <div style={{ width: 1, background: BORDER, flexShrink: 0 }} />
+        <div style={{ flex: 5, minWidth: 0 }}>
+          <div style={{ fontSize: 9.5, fontWeight: 800, color: ORANGE, letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 5 }}>
+            Donation Details
           </div>
-          <div style={{ fontSize: 12.5, marginBottom: 4 }}>
-            Transaction Date: {data.date}
-          </div>
-          <div style={{ fontSize: 12.5, marginBottom: 4 }}>
-            Mode: {data.mode}
-          </div>
-          {data.gatewayRef && (
-            <div style={{ fontSize: 12.5 }}>
-              Gateway Ref: <strong>{data.gatewayRef}</strong>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Line items table ── */}
-      <div style={{ padding: '0 32px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead>
-            <tr style={{ background: '#0E8C76', color: '#fff' }}>
-              {['Product / Service', 'Description', 'Qty.', 'Cost', 'Total'].map((h, i) => (
-                <th key={h} style={{
-                  padding: '10px 12px',
-                  textAlign: i < 2 ? 'left' : 'center',
-                  fontWeight: 700,
-                  fontSize: 11,
-                  letterSpacing: 0.5,
-                  textTransform: 'uppercase',
-                }}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data.items.map((item, idx) => (
-              <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
-                <td style={{ padding: '14px 12px', fontWeight: 700, verticalAlign: 'top', color: '#1A2A24' }}>
-                  {item.product}
-                </td>
-                <td style={{ padding: '14px 12px', color: '#555', lineHeight: 1.5, verticalAlign: 'top' }}>
-                  {item.description}
-                </td>
-                <td style={{ padding: '14px 12px', textAlign: 'center', color: '#333' }}>{item.qty}</td>
-                <td style={{ padding: '14px 12px', textAlign: 'center', color: '#333' }}>
-                  {fmt(item.cost)}
-                </td>
-                <td style={{ padding: '14px 12px', textAlign: 'center', fontWeight: 700, color: '#1A2A24' }}>
-                  ₹{fmt(item.cost * item.qty)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* ── Receipt for Payment summary ── */}
-      <div style={{ padding: '28px 32px' }}>
-        <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700, color: '#1A2A24', marginBottom: 20 }}>
-          Receipt for Payment
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          {/* Amount in words */}
-          <div>
-            <div style={{ fontSize: 10.5, fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>
-              Receipt for Payment (Amount in Words)
-            </div>
-            <div style={{ fontSize: 13.5, fontStyle: 'italic', color: '#2C5F4A', fontWeight: 600 }}>
-              {data.amountInWords}
-            </div>
-          </div>
-
-          {/* Subtotal / Tax / Total */}
-          <div style={{ minWidth: 220 }}>
-            {[
-              { label: 'Subtotal', value: `₹${fmt(subtotal)}` },
-              { label: 'Tax (0%)', value: '₹0.00' },
-            ].map(r => (
-              <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #eee', fontSize: 13 }}>
-                <span style={{ color: '#555' }}>{r.label}</span>
-                <span style={{ color: '#333' }}>{r.value}</span>
+          {data.items.map((item, idx) => (
+            <div key={idx} style={{ marginBottom: idx < data.items.length - 1 ? 10 : 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: DARK }}>{item.product}</div>
+              <div style={{ fontSize: 11, color: GREY, marginTop: 2 }}>
+                Amount: ₹{fmt(item.cost)}   ·   Qty: {item.qty}
               </div>
-            ))}
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', fontSize: 15 }}>
-              <span style={{ fontWeight: 700, color: '#1A2A24' }}>Total</span>
-              <span style={{ fontWeight: 800, color: '#1A2A24' }}>₹{fmt(subtotal)}</span>
+              <div style={{ fontSize: 10, color: GREY, marginTop: 4, lineHeight: 1.4 }}>
+                {item.description}
+              </div>
             </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ borderTop: `1px solid ${BORDER}`, margin: '14px 0' }} />
+
+      {/* ── Amount in words (left) | Subtotal / Tax / Total (right) ── */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <div style={{
+          flex: 1, background: ORANGE_LT, borderRadius: 6, padding: '10px 12px',
+        }}>
+          <div style={{ fontSize: 8.5, fontWeight: 800, color: ORANGE, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+            Amount in Words
+          </div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: DARK, marginTop: 3 }}>
+            {data.amountInWords}
+          </div>
+        </div>
+        <div style={{
+          minWidth: 180, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '10px 14px', flexShrink: 0,
+        }}>
+          {[
+            { label: 'Subtotal', value: `₹${fmt(subtotal)}` },
+            { label: 'Tax (0%)', value: '₹0.00' },
+          ].map(row => (
+            <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: GREY, padding: '2px 0' }}>
+              <span>{row.label}</span>
+              <span>{row.value}</span>
+            </div>
+          ))}
+          <div style={{ borderTop: `1px solid ${BORDER}`, margin: '5px 0' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 800, color: ORANGE }}>
+            <span>Grand Total</span>
+            <span>₹{fmt(subtotal)}</span>
           </div>
         </div>
       </div>
 
-      {/* ── Dashed divider ── */}
-      <div style={{ borderTop: '2px dashed #d0e8e1', margin: '0 32px' }} />
+      <div style={{ height: 14 }} />
 
-      {/* ── Thank you ── */}
-      <div style={{ textAlign: 'center', padding: '20px 32px', fontSize: 16, fontWeight: 800, fontStyle: 'italic', color: '#0B6E5D' }}>
-        Thanks for your support!
-      </div>
-
-      {/* ── Dashed divider ── */}
-      <div style={{ borderTop: '2px dashed #d0e8e1', margin: '0 32px' }} />
-
-      {/* ── Statutory registration details ── */}
+      {/* ── Statutory footer bar ── */}
       <div style={{
-        margin: '20px 32px 28px',
-        padding: '14px 16px',
-        borderLeft: '4px solid #0E8C76',
-        background: '#f5faf8',
-        borderRadius: '0 4px 4px 0',
-        fontSize: 11.5,
+        background: BG_LIGHT,
+        border: `1px solid ${BORDER}`,
+        borderRadius: 6,
+        padding: '10px 12px',
       }}>
-        <div style={{ fontWeight: 700, color: '#0B6E5D', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-          Statutory Registration Details (Tax Benefits)
+        <div style={{ fontSize: 9.5, fontWeight: 800, color: DARK }}>
+          {data.trustPan && <span>PAN: {data.trustPan}</span>}
+          {data.reg12AA && <span>&nbsp;&nbsp;|&nbsp;&nbsp;12AB: {data.reg12AA}</span>}
+          {data.cert80G && <span>&nbsp;&nbsp;|&nbsp;&nbsp;80G: {data.cert80G}</span>}
         </div>
-        <div style={{ color: '#333', lineHeight: 1.7 }}>
-          {data.trustPan && <span>• <strong>Trust PAN:</strong> {data.trustPan} &nbsp;|&nbsp; </span>}
-          {data.reg12AA && <span>• <strong>12AA Registration:</strong> {data.reg12AA} &nbsp;|&nbsp; </span>}
-          {data.cert80G && <span>• <strong>80G Certification:</strong> {data.cert80G}</span>}
-        </div>
-        <div style={{ color: '#777', marginTop: 8, fontSize: 11 }}>
-          This is an electronically generated receipt confirmation. No physical signature is required.
+        <div style={{ color: GREY, marginTop: 5, fontSize: 8.5, lineHeight: 1.4 }}>
+          Electronically generated receipt — no signature required. Thanks for your support!
           {data.supportEmail && ` For verification or support, write to ${data.supportEmail}.`}
         </div>
       </div>

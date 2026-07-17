@@ -1,6 +1,7 @@
 'use client'
 
 import { useParams } from 'next/navigation'
+import Link from 'next/link'
 import { DonationReceipt, type ReceiptData } from '@/components/DonationReceipt'
 import { Icon } from '@/components/ui/Icon'
 
@@ -57,13 +58,13 @@ export default function ReceiptPage() {
           >
             <Icon name="download" size={15} color="#fff" /> Download / Print
           </button>
-          <a
+          <Link
             href="/donations"
             className="flex items-center gap-2 px-5 h-10 rounded-xl text-[13px] font-bold"
             style={{ background: 'var(--surface-2)', color: 'var(--on-surface)' }}
           >
             ← Back
-          </a>
+          </Link>
         </div>
       </div>
 

@@ -43,6 +43,16 @@ export const api = {
     tracker: (range?: string) => request(`/donations/tracker?range=${range ?? 'week'}`),
     types: () => request('/donations/types'),
   },
+  expenses: {
+    list: (params?: Record<string, any>) => request(`/expenses?${new URLSearchParams(params).toString()}`),
+    one: (id: string) => request(`/expenses/${id}`),
+    create: (data: any) => request('/expenses', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: any) => request(`/expenses/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    summary: () => request('/expenses/summary'),
+  },
+  expenseCategories: {
+    list: () => request('/expenses/categories'),
+  },
   students: {
     list: (params?: Record<string, any>) => request(`/students?${new URLSearchParams(params).toString()}`),
     one: (id: string) => request(`/students/${id}`),

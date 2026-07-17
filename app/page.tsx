@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { KPICard } from '@/components/ui/KPICard'
 import { TrendChart } from '@/components/ui/TrendChart'
 import { DonutChart } from '@/components/ui/DonutChart'
@@ -127,9 +128,9 @@ export default function DashboardPage() {
         <div className="rounded-2xl border overflow-hidden" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
           <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
             <h3 className="font-bold text-[15px]" style={{ color: 'var(--on-surface)' }}>Recent Donations</h3>
-            <a href="/donations" className="text-[12.5px] font-bold flex items-center gap-1" style={{ color: 'var(--primary)' }}>
+            <Link href="/donations" className="text-[12.5px] font-bold flex items-center gap-1" style={{ color: 'var(--primary)' }}>
               View all <Icon name="chevR" size={14} />
-            </a>
+            </Link>
           </div>
           <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
             {RECENT_DONORS.map((d, i) => (

@@ -17,6 +17,7 @@ const NAV_GROUPS = [
     items: [
       { href: '/donors', label: 'Donors', icon: 'users' },
       { href: '/donations', label: 'Donations', icon: 'wallet' },
+      { href: '/expenses', label: 'Expenses', icon: 'receipt' },
       { href: '/students', label: 'Students', icon: 'grad' },
       { href: '/categories', label: 'Donor Categories', icon: 'grid' },
       { href: '/achievements', label: 'Achievements', icon: 'trophy' },
@@ -44,6 +45,7 @@ const ICON_PATHS: Record<string, string> = {
   home: 'M3 11.5 12 4l9 7.5M5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9',
   users: 'M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM20 19v-1.5a3.5 3.5 0 0 0-2.6-3.4M15 4.2a3.5 3.5 0 0 1 0 6.6',
   wallet: 'M3 7a1 1 0 0 1 1-1h13a1 1 0 0 1 1 1v2M3 7v11a1 1 0 0 0 1 1h15a1 1 0 0 0 1-1v-3M21 11h-5a2 2 0 0 0 0 4h5v-4zM3 7l13-3v3',
+  receipt: 'M5 2h14a1 1 0 0 1 1 1v17l-3-2-2 2-2-2-2 2-2-2-3 2V3a1 1 0 0 1 1-1zM9 7h6M9 11h6M9 15h4',
   grad: 'M3 9l9-4 9 4-9 4-9-4zM7 11v5c0 1 2.2 2.5 5 2.5s5-1.5 5-2.5v-5M21 9v5',
   grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   trophy: 'M7 4h10v4a5 5 0 0 1-10 0V4zM7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3M9 18h6M10 14v4M14 14v4M8 21h8',

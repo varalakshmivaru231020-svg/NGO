@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
@@ -15,6 +16,18 @@ const MODE_BADGE: Record<string, { label: string; variant: 'green' | 'sky' | 'am
   ONLINE: { label: 'Online', variant: 'sky' },
 }
 
+// Raw shape returned by GET /donations (donor/type are relations, not strings).
+interface DonationApi {
+  id: string
+  receiptNo: string
+  donor?: { name: string } | null
+  type?: { label: string } | null
+  amount: number
+  paymentMode: string
+  status: string
+  date: string
+}
+
 interface Donation {
   id: string
   receiptNo: string
@@ -24,6 +37,19 @@ interface Donation {
   mode: string
   status: string
   date: string
+}
+
+function toDonation(d: DonationApi): Donation {
+  return {
+    id: d.id,
+    receiptNo: d.receiptNo,
+    donor: d.donor?.name ?? 'Unknown',
+    type: d.type?.label ?? 'General Donation',
+    amount: d.amount,
+    mode: d.paymentMode,
+    status: d.status,
+    date: d.date,
+  }
 }
 
 interface DonationSummary {
@@ -57,8 +83,8 @@ export default function DonationsPage() {
 
         if (listRes.status === 'fulfilled') {
           const res = listRes.value as any
-          const items: Donation[] = Array.isArray(res) ? res : (res.data ?? res.items ?? [])
-          setDonations(items)
+          const raw: DonationApi[] = Array.isArray(res) ? res : (res.data ?? res.items ?? [])
+          setDonations(raw.map(toDonation))
         } else {
           throw new Error((listRes.reason as Error)?.message ?? 'Failed to load donations')
         }
@@ -142,11 +168,11 @@ export default function DonationsPage() {
             </button>
           ))}
         </div>
-        <a href="/donations/new"
+        <Link href="/donations/new"
           className="flex items-center gap-2 px-4 h-10 rounded-xl text-[13px] font-bold text-white flex-shrink-0"
           style={{ background: 'var(--primary)' }}>
           <Icon name="plus" size={16} color="#fff" /> Record Donation
-        </a>
+        </Link>
       </div>
 
       {/* Table */}
@@ -183,11 +209,11 @@ export default function DonationsPage() {
                   <td className="px-4 py-3 text-[12.5px]" style={{ color: 'var(--on-surface-2)' }}>{fmt.dayMon(d.date)}</td>
                   <td className="px-4 py-3"><Badge variant="green">Completed</Badge></td>
                   <td className="px-4 py-3">
-                    <a href={`/donations/${d.id}/receipt`}
+                    <Link href={`/donations/${d.id}/receipt`}
                       className="flex items-center gap-1.5 px-3 h-7 rounded-lg text-[12px] font-bold"
                       style={{ background: 'var(--brand-100)', color: 'var(--brand-700)' }}>
                       <Icon name="receipt" size={12} color="var(--brand-700)" /> Receipt
-                    </a>
+                    </Link>
                   </td>
                 </tr>
               )
