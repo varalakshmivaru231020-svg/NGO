@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { UpdateExpenseDto } from './dto/update-expense.dto';
 import { ExpenseQueryDto } from './dto/expense-query.dto';
+import { CreateExpenseCategoryDto } from './dto/create-expense-category.dto';
 import { paginate, paginatedResponse } from '../common/dto/pagination.dto';
 import type { SessionUser } from '../approvals/approvals.service';
 
@@ -58,6 +59,14 @@ export class ExpensesService {
 
   async findCategories() {
     return this.prisma.expenseCategory.findMany({ where: { isActive: true }, orderBy: { label: 'asc' } });
+  }
+
+  async createCategory(dto: CreateExpenseCategoryDto) {
+    const label = dto.label.trim();
+    const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'category';
+    let key = base;
+    for (let i = 2; await this.prisma.expenseCategory.findUnique({ where: { key } }); i++) key = `${base}-${i}`;
+    return this.prisma.expenseCategory.create({ data: { key, label, icon: dto.icon ?? 'wallet' } });
   }
 
   async findOne(id: string) {

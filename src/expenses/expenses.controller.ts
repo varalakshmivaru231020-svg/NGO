@@ -7,6 +7,7 @@ import { ExpensesService } from './expenses.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { UpdateExpenseDto } from './dto/update-expense.dto';
 import { ExpenseQueryDto } from './dto/expense-query.dto';
+import { CreateExpenseCategoryDto } from './dto/create-expense-category.dto';
 
 @ApiTags('expenses')
 @ApiBearerAuth('JWT')
@@ -28,6 +29,9 @@ export class ExpensesController {
 
   @Get('categories') @ApiOperation({ summary: 'List expense categories' })
   findCategories() { return this.svc.findCategories(); }
+
+  @Post('categories') @ApiOperation({ summary: 'Create an expense category' })
+  createCategory(@Body() dto: CreateExpenseCategoryDto) { return this.svc.createCategory(dto); }
 
   @Get(':id') @ApiOperation({ summary: 'Get expense by ID' })
   findOne(@Param('id') id: string) { return this.svc.findOne(id); }
