@@ -17,12 +17,17 @@ const NAV_GROUPS = [
     items: [
       { href: '/donors', label: 'Donors', icon: 'users' },
       { href: '/donations', label: 'Donations', icon: 'wallet' },
-      { href: '/expenses', label: 'Expenses', icon: 'receipt' },
       { href: '/students', label: 'Students', icon: 'grad' },
       { href: '/categories', label: 'Donor Categories', icon: 'grid' },
       { href: '/achievements', label: 'Achievements', icon: 'trophy' },
       { href: '/reminders', label: 'Reminders', icon: 'cake' },
       { href: '/offices', label: 'Offices', icon: 'building' },
+    ],
+  },
+  {
+    title: 'Accounts',
+    items: [
+      { href: '/expenses', label: 'Expenses', icon: 'receipt' },
     ],
   },
   {
