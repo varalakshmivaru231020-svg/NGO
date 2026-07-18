@@ -4,7 +4,9 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import { json, urlencoded } from 'express';
+import { json, urlencoded, static as expressStatic } from 'express';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -17,11 +19,27 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
 
-  app.use(helmet());
+  // CSP is disabled: this same server now also serves the Flutter web build
+  // (see the static-file section below), which loads external resources
+  // (Google Fonts, CanvasKit WASM) that helmet's default strict CSP would
+  // otherwise block. Other helmet protections (XSS filter, hide
+  // X-Powered-By, etc.) stay on.
+  app.use(helmet({ contentSecurityPolicy: false }));
   app.use(cookieParser());
   // Allow base64 images (avatars / student photos) and short activity
   // videos (up to ~20MB original, ~27MB once base64-encoded) in JSON bodies.
-  app.use(json({ limit: '30mb' }));
+  app.use(
+    json({
+      limit: '30mb',
+      // Stash the raw request body alongside normal parsing — needed to
+      // verify the Razorpay webhook's HMAC signature, which must be computed
+      // over the exact bytes Razorpay sent. req.body is still populated
+      // normally for every route; this is a harmless no-op elsewhere.
+      verify: (req: any, _res, buf: Buffer) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
   app.use(urlencoded({ extended: true, limit: '30mb' }));
 
   // FRONTEND_URL may be a comma-separated list of allowed origins. Local dev
@@ -35,6 +53,7 @@ async function bootstrap() {
     ...configuredOrigins,
     'http://localhost:3000',
     'http://localhost:3007',
+    'http://localhost:3008',
   ]));
   app.enableCors({
     origin: allowedOrigins,
@@ -67,12 +86,36 @@ async function bootstrap() {
       .addTag('auth').addTag('users').addTag('donors').addTag('donations')
       .addTag('students').addTag('categories').addTag('achievements')
       .addTag('reminders').addTag('offices').addTag('reports')
-      .addTag('notifications').addTag('payment-links')
+      .addTag('notifications').addTag('payment-links').addTag('public-donations')
       .build();
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('docs', app, document, {
       swaggerOptions: { persistAuthorization: true },
     });
+  }
+
+  // ── Serve the Flutter web build from this same server ──────────────────
+  // One deployable Node.js process handles both the API (/api/v1/*, /docs)
+  // and the app's web UI, instead of running two separate sites. The build
+  // folder is copied to WEB_BUILD_PATH at deploy time (defaults to
+  // saksham-backend/public/web) — if it isn't present (e.g. plain local
+  // API-only dev), this section is skipped entirely.
+  // __dirname here is dist/src (this file always runs compiled — both
+  // `nest start --watch` and production run node against dist/src/main.js),
+  // so the project root is two levels up, not one.
+  const webBuildPath = configService.get<string>('WEB_BUILD_PATH')
+    ?? join(__dirname, '..', '..', 'public', 'web');
+  if (existsSync(join(webBuildPath, 'index.html'))) {
+    app.use(expressStatic(webBuildPath));
+    app.use((req, res, next) => {
+      if (req.method !== 'GET' || req.path.startsWith('/api/') || req.path.startsWith('/docs')) {
+        return next();
+      }
+      res.sendFile(join(webBuildPath, 'index.html'));
+    });
+    console.log(`🌐 Web app    → serving from ${webBuildPath}`);
+  } else {
+    console.log(`🌐 Web app    → not found at ${webBuildPath}, skipping (API-only mode)`);
   }
 
   const port = configService.get<number>('PORT', 3001);

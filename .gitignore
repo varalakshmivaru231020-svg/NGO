@@ -5,6 +5,10 @@
 /dist
 /build
 
+# Flutter web build, copied here at deploy time so this one server can serve
+# both the API and the web app (see src/main.ts) — not source, don't commit.
+/public/web
+
 # Secrets / environment (NEVER commit — see .env.example for the template)
 .env
 .env.local

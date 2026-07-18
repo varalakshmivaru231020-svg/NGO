@@ -31,10 +31,11 @@ export class StudentsService {
   }
 
   async create(dto: CreateStudentDto) {
+    const { documents, ...rest } = dto;
     const childId = await this.nextChildId(dto.centerId);
-    return this.prisma.student.create({
+    const student = await this.prisma.student.create({
       data: {
-        ...dto,
+        ...rest,
         childId,
         dob: new Date(dto.dob),
         admissionDate: dto.admissionDate ? new Date(dto.admissionDate) : new Date(),
@@ -42,10 +43,24 @@ export class StudentsService {
       },
       include: this.include,
     });
+    // Documents picked before the student existed — created here, using the
+    // real new id, instead of a separate follow-up request (see CreateStudentDto).
+    if (documents?.length) {
+      await this.prisma.studentDocument.createMany({
+        data: documents.map((d) => ({
+          studentId: student.id,
+          category: d.category,
+          fileName: d.fileName,
+          mimeType: d.mimeType,
+          data: d.data,
+        })),
+      });
+    }
+    return student;
   }
 
   async findAll(query: StudentQueryDto) {
-    const { page = 1, limit = 20, search, status, centerId } = query;
+    const { page = 1, limit = 20, search, status, centerId, sponsorDonorId } = query;
     const where: any = {};
     if (search) {
       where.OR = [
@@ -56,6 +71,7 @@ export class StudentsService {
     }
     if (status) where.status = status;
     if (centerId) where.centerId = centerId;
+    if (sponsorDonorId) where.sponsorships = { some: { donorId: sponsorDonorId, isActive: true } };
 
     const [data, total] = await Promise.all([
       this.prisma.student.findMany({ where, include: this.include, ...paginate(page, limit), orderBy: { createdAt: 'desc' } }),
@@ -81,10 +97,11 @@ export class StudentsService {
 
   async update(id: string, dto: UpdateStudentDto) {
     await this.findOne(id);
+    const { documents: _documents, ...rest } = dto;
     return this.prisma.student.update({
       where: { id },
       data: {
-        ...dto,
+        ...rest,
         dob: dto.dob ? new Date(dto.dob) : undefined,
         admissionDate: dto.admissionDate ? new Date(dto.admissionDate) : undefined,
         joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : undefined,

@@ -25,7 +25,10 @@ export class ExpensesService {
       data: {
         ...dto,
         voucherNo,
-        approvedBy: user.name ?? user.email,
+        // Client-submitted (the admin's dropdown pick) takes precedence;
+        // falls back to the recording user so older callers that don't send
+        // approvedBy behave exactly as before.
+        approvedBy: dto.approvedBy || user.name || user.email,
         date: dto.date ? new Date(dto.date) : new Date(),
       },
       include: this.include,

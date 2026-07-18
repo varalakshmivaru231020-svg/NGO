@@ -6,4 +6,6 @@ export class CreatePaymentLinkDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) amount?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() purpose?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() expiresAt?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() typeId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() callbackUrl?: string;
 }

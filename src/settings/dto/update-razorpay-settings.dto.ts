@@ -7,4 +7,7 @@ export class UpdateRazorpaySettingsDto {
 
   @ApiPropertyOptional({ description: 'Razorpay Key Secret — used server-side only' })
   @IsOptional() @IsString() keySecret?: string;
+
+  @ApiPropertyOptional({ description: 'Webhook Secret configured in the Razorpay Dashboard — used to verify incoming webhook signatures' })
+  @IsOptional() @IsString() webhookSecret?: string;
 }

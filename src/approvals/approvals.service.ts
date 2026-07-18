@@ -17,6 +17,17 @@ import { ApprovalQueryDto } from './dto/approval-query.dto';
 const EXEMPT_MODULES = new Set(['auth', 'approvals', 'notifications']);
 const MUTATING = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
 
+// Document sub-resource routes are exempted at the PATH level, not the
+// module level — 'students'/'users' stay approval-gated for every other
+// mutation (profile edits, etc.), only their document upload/delete
+// sub-routes bypass the queue so uploads save and appear immediately.
+const EXEMPT_PATH_PATTERNS: RegExp[] = [
+  /^students\/[^/]+\/documents$/i,
+  /^students\/documents\/[^/]+$/i,
+  /^users\/[^/]+\/documents$/i,
+  /^users\/documents\/[^/]+$/i,
+];
+
 export interface SessionUser {
   id: string;
   name: string;
@@ -47,16 +58,23 @@ export class ApprovalsService {
     if (!user) return false; // unauthenticated → auth guard decides
     if (user.role === 'SUPER_ADMIN') return false; // full authority
     if (req.headers?.['x-approval-replay'] === this.replaySecret) return false; // replay
-    return !EXEMPT_MODULES.has(this.moduleOf(req.path || req.originalUrl || ''));
+    const path = req.path || req.originalUrl || '';
+    if (EXEMPT_MODULES.has(this.moduleOf(path))) return false;
+    const relPath = this.relativeSegs(path).join('/');
+    if (EXEMPT_PATH_PATTERNS.some((re) => re.test(relPath))) return false; // e.g. document uploads
+    return true;
   }
 
-  private moduleOf(path: string): string {
-    const segs = path
+  private relativeSegs(path: string): string[] {
+    return path
       .split('?')[0]
       .replace(/^\/api\/v\d+\//, '')
       .split('/')
       .filter(Boolean);
-    return segs[0] ?? 'unknown';
+  }
+
+  private moduleOf(path: string): string {
+    return this.relativeSegs(path)[0] ?? 'unknown';
   }
 
   private actionOf(method: string): 'CREATE' | 'EDIT' | 'DELETE' {

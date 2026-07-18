@@ -16,18 +16,32 @@ export class DonationsService {
   ) {}
 
   private include = {
-    donor: { select: { id: true, name: true, mobile: true, donorCode: true, city: true, pan: true } },
+    donor: {
+      select: {
+        id: true, name: true, mobile: true, donorCode: true, email: true,
+        address: true, city: true, state: true, country: true, pincode: true, pan: true,
+      },
+    },
     type: true,
   };
 
-  private async nextReceipt(): Promise<string> {
-    const count = await this.prisma.donation.count();
+  // Atomic per-year sequence: a single INSERT ... ON CONFLICT ... DO UPDATE
+  // statement means Postgres holds the row lock through conflict resolution,
+  // so concurrent requests can never receive the same number. A new year
+  // gets a fresh row (and fresh 00001) the first time it's used.
+  private async nextReceiptNo(): Promise<string> {
     const year = new Date().getFullYear();
-    return `RCP/${year}/${String(count + 1).padStart(6, '0')}`;
+    const key = `donation-receipt:${year}`;
+    const rows = await this.prisma.$queryRaw<{ seq: number }[]>`
+      INSERT INTO sequence_counters (key, seq) VALUES (${key}, 1)
+      ON CONFLICT (key) DO UPDATE SET seq = sequence_counters.seq + 1
+      RETURNING seq;
+    `;
+    return `SKET/${year}/${String(rows[0].seq).padStart(5, '0')}`;
   }
 
   async create(dto: CreateDonationDto) {
-    const receiptNo = await this.nextReceipt();
+    const receiptNo = await this.nextReceiptNo();
     const donation = await this.prisma.donation.create({
       data: {
         ...dto,
@@ -132,7 +146,12 @@ export class DonationsService {
     return this.prisma.donation.findMany({
       where: { date: { gte: from } },
       include: {
-        donor: { select: { id: true, name: true, mobile: true, whatsapp: true, email: true } },
+        donor: {
+          select: {
+            id: true, name: true, mobile: true, whatsapp: true, email: true,
+            address: true, city: true, state: true, country: true, pincode: true, pan: true,
+          },
+        },
         type: true,
       },
       orderBy: { date: 'desc' },

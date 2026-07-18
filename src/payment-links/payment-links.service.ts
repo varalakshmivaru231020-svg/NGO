@@ -24,6 +24,9 @@ export class PaymentLinksService {
 
   async create(dto: CreatePaymentLinkDto) {
     const slug = randomBytes(8).toString('hex');
+    // callbackUrl is only used for the outbound Razorpay API call, it isn't
+    // a PaymentLink column — keep it out of the Prisma `data` payload.
+    const { callbackUrl, ...persisted } = dto;
 
     let donor: { name: string; mobile: string; email: string | null } | null = null;
     if (dto.donorId) {
@@ -38,12 +41,12 @@ export class PaymentLinksService {
     // stays an internal-only bookkeeping link (razorpayShortUrl stays null).
     let razorpay: { id: string; short_url: string } | null = null;
     if (dto.amount) {
-      razorpay = await this.createRazorpayLink(dto.amount, dto.purpose || 'Donation', donor);
+      razorpay = await this.createRazorpayLink(dto.amount, dto.purpose || 'Donation', donor, callbackUrl);
     }
 
     return this.prisma.paymentLink.create({
       data: {
-        ...dto,
+        ...persisted,
         slug,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
         razorpayLinkId: razorpay?.id,
@@ -59,6 +62,7 @@ export class PaymentLinksService {
     amountRupees: number,
     description: string,
     donor: { name: string; mobile: string; email: string | null } | null,
+    callbackUrl?: string,
   ): Promise<{ id: string; short_url: string } | null> {
     const settings = await this.prisma.razorpaySetting.findUnique({ where: { id: 'singleton' } });
     const keyId = settings?.keyId;
@@ -75,6 +79,10 @@ export class PaymentLinksService {
       notify: { sms: true, email: true },
       reminder_enable: true,
     };
+    if (callbackUrl) {
+      body.callback_url = callbackUrl;
+      body.callback_method = 'get';
+    }
     if (donor) {
       body.customer = {
         name: donor.name,

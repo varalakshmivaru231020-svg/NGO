@@ -7,8 +7,8 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")  // pooled (runtime)
-  directUrl = env("DIRECT_URL")    // direct (migrations)
+  url       = env("DATABASE_URL") // pooled (runtime)
+  directUrl = env("DIRECT_URL") // direct (migrations)
 }
 
 // ─────────────────────────────────────────
@@ -22,7 +22,7 @@ model User {
   phone        String?
   passwordHash String
   role         String    @default("STAFF")
-  modules      String?   // CSV of frontend module keys this member can access
+  modules      String? // CSV of frontend module keys this member can access
   avatar       String?
   officeId     String?
   isActive     Boolean   @default(true)
@@ -35,8 +35,25 @@ model User {
   deviceTokens  DeviceToken[]
   notifications Notification[]
   auditLogs     AuditLog[]
+  documents     UserDocument[]
 
   @@map("users")
+}
+
+// Staff/team-member documents (own profile). Mirrors StudentDocument.
+model UserDocument {
+  id        String   @id @default(cuid())
+  userId    String
+  category  String
+  fileName  String
+  mimeType  String?
+  data      String // base64-encoded file content
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_documents")
 }
 
 model RefreshToken {
@@ -86,7 +103,7 @@ model Donor {
   company     String?
   tier        String    @default("SILVER")
   notes       String?
-  avatar      String?   // profile photo, base64-encoded
+  avatar      String? // profile photo, base64-encoded
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -96,10 +113,10 @@ model Donor {
   aadhaar                String?
   preferredContactMethod String? // CSV of: CALL, WHATSAPP, EMAIL (multi-select)
 
-  categories    DonorCategoryMap[]
-  donations     Donation[]
-  sponsorships  Sponsorship[]
-  reminders     Reminder[]
+  categories     DonorCategoryMap[]
+  donations      Donation[]
+  sponsorships   Sponsorship[]
+  reminders      Reminder[]
   activityVideos DonorActivityVideo[]
   activityImages DonorActivityImage[]
 
@@ -114,11 +131,11 @@ model Donor {
 model DonorActivityVideo {
   id           String   @id @default(cuid())
   donorId      String
-  title        String   // activity name
+  title        String // activity name
   activityDate DateTime @default(now())
   fileName     String
-  mimeType     String?  // video/mp4, video/quicktime, video/x-msvideo, video/webm
-  data         String   // base64-encoded file content
+  mimeType     String? // video/mp4, video/quicktime, video/x-msvideo, video/webm
+  data         String // base64-encoded file content
   uploadedBy   String?
   createdAt    DateTime @default(now())
 
@@ -133,11 +150,11 @@ model DonorActivityVideo {
 model DonorActivityImage {
   id           String   @id @default(cuid())
   donorId      String
-  title        String   // activity name
+  title        String // activity name
   activityDate DateTime @default(now())
   fileName     String
-  mimeType     String?  // image/jpeg, image/png, image/webp
-  data         String   // base64-encoded file content
+  mimeType     String? // image/jpeg, image/png, image/webp
+  data         String // base64-encoded file content
   uploadedBy   String?
   createdAt    DateTime @default(now())
 
@@ -187,7 +204,8 @@ model DonationType {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
-  donations Donation[]
+  donations    Donation[]
+  paymentLinks PaymentLink[]
 
   @@map("donation_types")
 }
@@ -275,8 +293,15 @@ model PaymentLink {
   // their Payment Links API — razorpayShortUrl is the actual rzp.io URL the
   // donor pays through. Null means Razorpay wasn't configured at creation
   // time, so this stayed an internal-only bookkeeping link.
-  razorpayLinkId   String?
+  razorpayLinkId   String? @unique
   razorpayShortUrl String?
+
+  // Which DonationType the eventual Donation should be recorded under —
+  // set by callers (e.g. the public donate flow) that know the cause up
+  // front, since `purpose` is only a free-text label and isn't reliably
+  // reversible back to a DonationType id from the webhook.
+  typeId String?
+  type   DonationType? @relation(fields: [typeId], references: [id])
 
   donation Donation? @relation(fields: [donationId], references: [id])
 
@@ -301,46 +326,46 @@ model Center {
 }
 
 model Student {
-  id            String    @id @default(cuid())
-  childId       String    @unique
-  name          String
-  gender        String    @default("MALE")
-  dob           DateTime
-  centerId      String
-  class         String?
-  school        String?
-  status        String    @default("ACTIVE")
-  photo         String?
-  fatherName    String?
-  motherName    String?
+  id               String    @id @default(cuid())
+  childId          String    @unique
+  name             String
+  gender           String    @default("MALE")
+  dob              DateTime
+  centerId         String
+  class            String?
+  school           String?
+  status           String    @default("ACTIVE")
+  photo            String?
+  fatherName       String?
+  motherName       String?
   guardianName     String?
   guardianRelation String?
-  guardianPhone String?
-  address       String?
-  medicalNotes  String?
-  admissionDate DateTime  @default(now())
-  exitDate      DateTime?
-  notes         String?
+  guardianPhone    String?
+  address          String?
+  medicalNotes     String?
+  admissionDate    DateTime  @default(now())
+  exitDate         DateTime?
+  notes            String?
 
   // Education Details tab
-  admissionNo    String?
-  academicYear   String?
-  joiningDate    DateTime?
-  section        String?
-  permanence     String?
-  studentType    String?
+  admissionNo      String?
+  academicYear     String?
+  joiningDate      DateTime?
+  section          String?
+  permanence       String?
+  studentType      String?
   educationRemarks String?
 
   // Identity / government IDs
-  aadhaarNumber    String?
-  satNumber        String?
-  penNumber        String?
-  cwcNumber        String?
-  abhaNumber       String?
-  rationCardNumber String?
+  aadhaarNumber         String?
+  satNumber             String?
+  penNumber             String?
+  cwcNumber             String?
+  abhaNumber            String?
+  rationCardNumber      String?
   missionVatsalyaNumber String?
-  caste            String?
-  subCaste         String?
+  caste                 String?
+  subCaste              String?
 
   // Financial / welfare
   bankAccountDetails        String?
@@ -348,15 +373,15 @@ model Student {
   incomeCertificateAmount   Int?
   incomeCertificateRdNumber String?
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  center        Center         @relation(fields: [centerId], references: [id])
-  sponsorships  Sponsorship[]
-  achievements  Achievement[]
-  attendance    Attendance[]
-  growthRecords GrowthRecord[]
-  documents     StudentDocument[]
+  center          Center            @relation(fields: [centerId], references: [id])
+  sponsorships    Sponsorship[]
+  achievements    Achievement[]
+  attendance      Attendance[]
+  growthRecords   GrowthRecord[]
+  documents       StudentDocument[]
   progressRecords ProgressRecord[]
 
   @@index([name])
@@ -390,7 +415,7 @@ model StudentDocument {
   category  String
   fileName  String
   mimeType  String?
-  data      String   // base64-encoded file content
+  data      String // base64-encoded file content
   createdAt DateTime @default(now())
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -571,24 +596,24 @@ model AuditLog {
 
 model ApprovalRequest {
   id            String    @id @default(cuid())
-  module        String    // first URL segment: donors, students, users, offices …
-  action        String    // CREATE | EDIT | DELETE
-  method        String    // POST | PATCH | PUT | DELETE
-  path          String    // originalUrl incl. /api/v1 prefix + query — used to replay
-  targetId      String?   // resource id for EDIT/DELETE
-  payload       Json?     // request body (the proposed new data)
-  previousData  Json?     // snapshot of the record before the change (for the diff view)
+  module        String // first URL segment: donors, students, users, offices …
+  action        String // CREATE | EDIT | DELETE
+  method        String // POST | PATCH | PUT | DELETE
+  path          String // originalUrl incl. /api/v1 prefix + query — used to replay
+  targetId      String? // resource id for EDIT/DELETE
+  payload       Json? // request body (the proposed new data)
+  previousData  Json? // snapshot of the record before the change (for the diff view)
   status        String    @default("PENDING") // PENDING | APPROVED | REJECTED
-  reason        String?   // rejection reason (mandatory on reject)
+  reason        String? // rejection reason (mandatory on reject)
   requesterId   String
   requesterName String
   requesterRole String
-  department    String?   // requester's office name, for filtering
+  department    String? // requester's office name, for filtering
   reviewerId    String?
   reviewerName  String?
   reviewedAt    DateTime?
-  resultId      String?   // id of the created/updated record after approval
-  error         String?   // last replay error, if execution failed on approval
+  resultId      String? // id of the created/updated record after approval
+  error         String? // last replay error, if execution failed on approval
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -605,16 +630,16 @@ model ApprovalRequest {
 
 model WhatsappSetting {
   id            String   @id @default("singleton")
-  storeNumber   String?  // sender display number, e.g. 919832399399
-  phoneNumberId String?  // Meta Phone Number ID, sent with each message
-  apiToken      String?  // Bearer token
-  apiUrl        String?  // send endpoint (override); default botsyncwa messages URL
+  storeNumber   String? // sender display number, e.g. 919832399399
+  phoneNumberId String? // Meta Phone Number ID, sent with each message
+  apiToken      String? // Bearer token
+  apiUrl        String? // send endpoint (override); default botsyncwa messages URL
   // Native-Meta-passthrough mode (apiUrl containing "/api/meta"): the send URL
   // is built as `${apiUrl}/${apiVersion}/${phoneNumberId}/messages`. wabaId /
   // businessId are stored for reference only — not sent in the request.
-  apiVersion    String?  // Meta Graph API version, e.g. v19.0
-  wabaId        String?  // WhatsApp Business Account ID
-  businessId    String?  // Meta Business ID
+  apiVersion    String? // Meta Graph API version, e.g. v19.0
+  wabaId        String? // WhatsApp Business Account ID
+  businessId    String? // Meta Business ID
   updatedAt     DateTime @updatedAt
 
   @@map("whatsapp_settings")
@@ -624,10 +649,46 @@ model WhatsappSetting {
 // server-side (never sent to the browser except to the Super Admin settings
 // screen) since the Key Secret must never be used client-side.
 model RazorpaySetting {
-  id        String   @id @default("singleton")
-  keyId     String?
-  keySecret String?
-  updatedAt DateTime @updatedAt
+  id            String   @id @default("singleton")
+  keyId         String?
+  keySecret     String?
+  webhookSecret String? // Dashboard-configured Webhook Secret, distinct from the API key secret
+  updatedAt     DateTime @updatedAt
 
   @@map("razorpay_settings")
+}
+
+// Atomic per-key sequence counter — powers donation receipt numbers and
+// donor codes via a single INSERT ... ON CONFLICT ... DO UPDATE statement,
+// which is race-free under concurrent requests by construction.
+model SequenceCounter {
+  key String @id
+  seq Int    @default(0)
+
+  @@map("sequence_counters")
+}
+
+// Single source of truth for organization identity (name/address/PAN/etc.),
+// read by every receipt/voucher renderer instead of each keeping its own
+// hardcoded copy.
+model OrgSettings {
+  id                 String   @id @default("singleton")
+  name               String?
+  address            String?
+  city               String?
+  state              String?
+  country            String?
+  pincode            String?
+  phone              String?
+  email              String?
+  website            String?
+  registrationNumber String?
+  pan                String?
+  reg12A             String?
+  cert80G            String?
+  fcra               String?
+  logoBase64         String?
+  updatedAt          DateTime @updatedAt
+
+  @@map("org_settings")
 }

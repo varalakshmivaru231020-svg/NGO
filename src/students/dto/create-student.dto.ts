@@ -1,5 +1,7 @@
-import { IsString, IsIn, IsOptional, IsDateString, IsInt, Min } from 'class-validator';
+import { IsString, IsIn, IsOptional, IsDateString, IsInt, IsArray, ValidateNested, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CreateStudentDocumentDto } from './create-student-document.dto';
 
 const GENDERS = ['MALE', 'FEMALE', 'OTHER'] as const;
 const STUDENT_STATUSES = ['ACTIVE', 'INACTIVE', 'GRADUATED', 'DROPPED'] as const;
@@ -48,4 +50,13 @@ export class CreateStudentDto {
   @ApiPropertyOptional() @IsOptional() @IsString() siblingNames?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) incomeCertificateAmount?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() incomeCertificateRdNumber?: string;
+
+  // Documents picked during the Add Child flow, bundled into this same
+  // request so they're created transactionally with the new student's real
+  // id — including when this whole request is queued for Super Admin
+  // approval (the approval-replay mechanism replays this exact payload
+  // verbatim, so the documents survive replay instead of being dropped).
+  @ApiPropertyOptional({ type: [CreateStudentDocumentDto] })
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => CreateStudentDocumentDto)
+  documents?: CreateStudentDocumentDto[];
 }

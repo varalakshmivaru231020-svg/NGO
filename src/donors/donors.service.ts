@@ -22,9 +22,16 @@ export class DonorsService {
     _count: { select: { donations: true, sponsorships: true } },
   };
 
+  // Atomic — see DonationsService.nextReceiptNo() for why a single
+  // INSERT ... ON CONFLICT ... DO UPDATE is race-free under concurrent
+  // requests (relevant now that public/anonymous donor creation exists).
   private async nextCode(): Promise<string> {
-    const count = await this.prisma.donor.count();
-    return `DID${String(count + 1).padStart(5, '0')}`;
+    const rows = await this.prisma.$queryRaw<{ seq: number }[]>`
+      INSERT INTO sequence_counters (key, seq) VALUES ('donor-code', 1)
+      ON CONFLICT (key) DO UPDATE SET seq = sequence_counters.seq + 1
+      RETURNING seq;
+    `;
+    return `DID${String(rows[0].seq).padStart(5, '0')}`;
   }
 
   async create(dto: CreateDonorDto) {

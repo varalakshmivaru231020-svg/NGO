@@ -15,6 +15,8 @@ export class CreateExpenseDto {
   // Who filled out this voucher — client-submitted (not derived from req.user) so it
   // survives the approval-replay flow unchanged; see ExpensesService.create().
   @ApiPropertyOptional() @IsOptional() @IsString() preparedBy?: string;
+  @ApiPropertyOptional({ description: 'Name of the authorized staff member who approved this expense' })
+  @IsOptional() @IsString() approvedBy?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() receivedBy?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() date?: string;

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateWhatsappSettingsDto } from './dto/update-whatsapp-settings.dto';
 import { UpdateRazorpaySettingsDto } from './dto/update-razorpay-settings.dto';
+import { UpdateOrganizationSettingsDto } from './dto/update-organization-settings.dto';
 
 const SINGLETON = 'singleton';
 
@@ -61,7 +62,7 @@ export class SettingsService {
   }
 
   async updateRazorpay(dto: UpdateRazorpaySettingsDto) {
-    const data = { keyId: dto.keyId, keySecret: dto.keySecret };
+    const data = { keyId: dto.keyId, keySecret: dto.keySecret, webhookSecret: dto.webhookSecret };
     const row = await this.prisma.razorpaySetting.upsert({
       where: { id: SINGLETON },
       create: { id: SINGLETON, ...data },
@@ -74,7 +75,48 @@ export class SettingsService {
     return {
       keyId: row.keyId ?? '',
       keySecret: row.keySecret ?? '',
+      webhookSecret: row.webhookSecret ?? '',
       configured: !!(row.keyId && row.keySecret),
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  // Read (create-on-first-read) the singleton organization identity row.
+  async getOrganization() {
+    const row = await this.prisma.orgSettings.upsert({
+      where: { id: SINGLETON },
+      create: { id: SINGLETON },
+      update: {},
+    });
+    return this.shapeOrganization(row);
+  }
+
+  async updateOrganization(dto: UpdateOrganizationSettingsDto) {
+    const row = await this.prisma.orgSettings.upsert({
+      where: { id: SINGLETON },
+      create: { id: SINGLETON, ...dto },
+      update: { ...dto },
+    });
+    return this.shapeOrganization(row);
+  }
+
+  private shapeOrganization(row: any) {
+    return {
+      name: row.name ?? '',
+      address: row.address ?? '',
+      city: row.city ?? '',
+      state: row.state ?? '',
+      country: row.country ?? '',
+      pincode: row.pincode ?? '',
+      phone: row.phone ?? '',
+      email: row.email ?? '',
+      website: row.website ?? '',
+      registrationNumber: row.registrationNumber ?? '',
+      pan: row.pan ?? '',
+      reg12A: row.reg12A ?? '',
+      cert80G: row.cert80G ?? '',
+      fcra: row.fcra ?? '',
+      logoBase64: row.logoBase64 ?? '',
       updatedAt: row.updatedAt,
     };
   }
