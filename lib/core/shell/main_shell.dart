@@ -31,7 +31,6 @@ const _main = [
 
 const _mgmt = [
   _N(Icons.business_outlined,          Icons.business,            'Offices',         '/offices',          module: 'offices'),
-  _N(Icons.payments_outlined,          Icons.payments,            'Expenses',        '/expenses',         module: 'expenses'),
   _N(Icons.link_rounded,               Icons.link,                'Payment Links',   '/payment-links',    module: 'payments'),
   _N(Icons.cake_outlined,              Icons.cake,                'Reminders',       '/reminders',        module: 'reminders'),
   _N(Icons.track_changes_outlined,     Icons.track_changes,       'Donation Tracker','/donation-tracker', module: 'tracker'),
@@ -41,6 +40,7 @@ const _mgmt = [
 
 const _acct = [
   _N(Icons.notifications_outlined,     Icons.notifications,       'Notifications',   '/notifications'),
+  _N(Icons.payments_outlined,          Icons.payments,            'Expenses',        '/expenses',         module: 'expenses'),
   // Approvals is Super-Admin only ('approvals' is granted to no role → admins only).
   _N(Icons.fact_check_outlined,        Icons.fact_check,          'Approvals',       '/approvals', module: 'approvals'),
   _N(Icons.location_city_outlined,     Icons.location_city,       'Centre',          '/centres',   module: 'settings'),

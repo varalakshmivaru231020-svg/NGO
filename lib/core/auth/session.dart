@@ -37,7 +37,7 @@ String applyBackendUser(Map<String, dynamic> me) {
       ? csv.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toSet()
       : modulesForBackendRole(role);
   currentLoggedInRole =
-      AppRole(name: mName, email: email, password: '', roleName: role, modules: modules);
+      AppRole(name: mName, email: email, password: '', roleName: role, modules: modules, backendId: me['id'] as String?);
   return modules.isNotEmpty ? (moduleToRoute[modules.first] ?? '/dashboard') : '/dashboard';
 }
 

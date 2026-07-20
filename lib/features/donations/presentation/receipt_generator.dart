@@ -4,6 +4,38 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../../../core/utils/native_file_saver.dart';
+import '../../../core/network/api_client.dart';
+
+// Fetches organization identity (name/address/PAN/12A/80G/etc.) configured in
+// Settings → Organization on the backend. Returns null (never throws) on any
+// failure so the receipt still renders with the hardcoded fallbacks below —
+// this must never block a donor from getting their receipt.
+Future<Map<String, dynamic>?> fetchOrgSettings() async {
+  try {
+    final r = await apiClient.get('/settings/organization');
+    return (r['data'] as Map).cast<String, dynamic>();
+  } catch (_) {
+    return null;
+  }
+}
+
+// Hardcoded fallback identity — used whenever Settings → Organization hasn't
+// been configured yet (or couldn't be reached), so the receipt never regresses
+// to blank/missing org details.
+const _orgFallback = {
+  'name': 'Sri Krishnashraya Educational Trust',
+  'address': '# 88/1, 84/1, 84/5, Thammarasanahalli, Sulibele, Bangalore - 562129',
+  'pan': 'AATTS6672D',
+  'reg12A': 'AATTS6672D25BL01',
+  'cert80G': 'AATTS6672D25BL02',
+  'email': 'krishnashryahome@gmail.com',
+};
+
+String _org(Map<String, dynamic>? org, String key) {
+  final v = org?[key] as String?;
+  if (v != null && v.trim().isNotEmpty) return v;
+  return _orgFallback[key] ?? '';
+}
 
 // Receipt palette (shared by the on-screen sheet + the PDF export).
 const _orange   = Color(0xFFF97316);
@@ -25,6 +57,11 @@ class DonationReceipt {
     required this.paymentMode,
     required this.date,
     required this.taxExemption,
+    this.donorEmail = '',
+    this.donorAddress = '',
+    this.donorState = '',
+    this.donorPincode = '',
+    this.donorCountry = '',
   });
 
   final String receiptNo;
@@ -37,6 +74,17 @@ class DonationReceipt {
   final String paymentMode;
   final String date;
   final bool taxExemption;
+  final String donorEmail;
+  final String donorAddress;
+  final String donorState;
+  final String donorPincode;
+  final String donorCountry;
+
+  // Full postal address for display — donorCity/donorState/etc. are separate
+  // fields on the donor record, joined here for a single-line render.
+  String get donorFullAddress => [donorAddress, donorCity, donorState, donorPincode, donorCountry]
+      .where((s) => s.trim().isNotEmpty)
+      .join(', ');
 }
 
 String _amountInWords(int n) {
@@ -75,7 +123,7 @@ Date       : ${r.date}
 Payment    : ${r.paymentMode}
 ──────────────────────────────────────
 Donor      : ${r.donorName}
-${r.donorPhone.isNotEmpty ? 'Phone      : ${r.donorPhone}\n' : ''}${r.donorCity.isNotEmpty ? 'City       : ${r.donorCity}\n' : ''}${r.donorPan.isNotEmpty ? 'PAN        : ${r.donorPan}\n' : ''}──────────────────────────────────────
+${r.donorPhone.isNotEmpty ? 'Phone      : ${r.donorPhone}\n' : ''}${r.donorEmail.isNotEmpty ? 'Email      : ${r.donorEmail}\n' : ''}${r.donorFullAddress.isNotEmpty ? 'Address    : ${r.donorFullAddress}\n' : ''}${r.donorPan.isNotEmpty ? 'PAN        : ${r.donorPan}\n' : ''}──────────────────────────────────────
 Type       : ${r.donationType}
 Amount     : ₹${_fmt(r.amount)}.00
 ──────────────────────────────────────
@@ -93,7 +141,7 @@ Thanks for your support!
 // the way physical trust/NGO receipt books are commonly printed.
 // Uses "Rs." instead of the ₹ glyph because the default PDF font (Helvetica)
 // can't render the rupee symbol.
-Future<Uint8List> buildReceiptPdf(DonationReceipt r) async {
+Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}) async {
   final doc = pw.Document();
   final logoData = await rootBundle.load('assets/images/sket-logo.png');
   final logo = pw.MemoryImage(logoData.buffer.asUint8List());
@@ -105,20 +153,31 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r) async {
   final brd      = PdfColor.fromInt(0xFFE5E7EB);
   final bgLight  = PdfColor.fromInt(0xFFF8FAFC);
   final amtStr   = 'Rs. ${_fmt(r.amount)}.00';
+  final orgName    = _org(org, 'name');
+  final orgAddress = _org(org, 'address');
+  final orgPan     = _org(org, 'pan');
+  final org12A     = _org(org, 'reg12A');
+  final org80G     = _org(org, 'cert80G');
 
-  doc.addPage(pw.Page(
+  // MultiPage (not a fixed-size Page): a Page silently clips/positions any
+  // content past its bottom edge when it overflows — with real donor data
+  // (long addresses, every optional line populated at once) the compact A5
+  // layout can run taller than one page, and everything after the header
+  // would vanish with no error. MultiPage flows the overflow onto another
+  // page instead.
+  doc.addPage(pw.MultiPage(
     pageFormat: PdfPageFormat.a5.landscape,
     margin: const pw.EdgeInsets.fromLTRB(22, 18, 22, 16),
-    build: (ctx) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+    build: (ctx) => [pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
       // Header: logo + org (left) | receipt no + date + mode (right)
       pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
         pw.Image(logo, height: 32),
         pw.SizedBox(width: 10),
         pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-          pw.Text('Sri Krishnashraya Educational Trust', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: dark)),
+          pw.Text(orgName, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: dark)),
           pw.SizedBox(height: 1),
-          pw.Text('# 88/1, 84/1, 84/5, Thammarasanahalli, Sulibele, Bangalore - 562129',
-              style: pw.TextStyle(fontSize: 7.5, color: grey)),
+          if (orgAddress.isNotEmpty)
+            pw.Text(orgAddress, style: pw.TextStyle(fontSize: 7.5, color: grey)),
         ])),
         pw.SizedBox(width: 12),
         pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
@@ -139,7 +198,8 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r) async {
           pw.SizedBox(height: 4),
           pw.Text(r.donorName, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: dark)),
           if (r.donorPhone.isNotEmpty) pw.Text('Mobile: ${r.donorPhone}', style: pw.TextStyle(fontSize: 9, color: grey)),
-          if (r.donorCity.isNotEmpty) pw.Text(r.donorCity, style: pw.TextStyle(fontSize: 9, color: grey)),
+          if (r.donorEmail.isNotEmpty) pw.Text('Email: ${r.donorEmail}', style: pw.TextStyle(fontSize: 9, color: grey)),
+          if (r.donorFullAddress.isNotEmpty) pw.Text(r.donorFullAddress, style: pw.TextStyle(fontSize: 8.5, color: grey)),
           if (r.donorPan.isNotEmpty) pw.Text('PAN: ${r.donorPan}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: orange)),
         ])),
         pw.Container(width: 1, margin: const pw.EdgeInsets.symmetric(horizontal: 7.5), color: brd),
@@ -182,14 +242,29 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r) async {
       ]),
       pw.SizedBox(height: 10),
 
-      // Statutory footer bar (PAN / 12AB / 80G) + disclaimer
+      // Thank-you note + authorized signature line
+      pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+        pw.Expanded(child: pw.Text(
+          'Thank you for your generous contribution. Your support is helping transform '
+          "children's lives through education, care, and holistic development.",
+          style: pw.TextStyle(fontSize: 7.5, color: grey, lineSpacing: 1.4))),
+        pw.SizedBox(width: 14),
+        pw.Column(children: [
+          pw.Container(width: 110, height: 1, color: dark),
+          pw.SizedBox(height: 3),
+          pw.Text('Authorized Signature', style: pw.TextStyle(fontSize: 7, color: grey)),
+        ]),
+      ]),
+      pw.SizedBox(height: 8),
+
+      // Statutory footer bar (PAN / 12A / 80G) + disclaimer
       pw.Container(
         width: double.infinity,
         padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: pw.BoxDecoration(color: bgLight, borderRadius: pw.BorderRadius.circular(5), border: pw.Border.all(color: brd, width: 0.5)),
         child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           pw.Text(
-            'PAN: AATTS6672D   |   12AB: AATTS6672D25BL01   |   80G: AATTS6672D25BL02'
+            'PAN: $orgPan   |   12A: $org12A   |   80G: $org80G'
             '${r.taxExemption ? '   |   Eligible for 80G Tax Exemption' : ''}',
             style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: dark)),
           pw.SizedBox(height: 3),
@@ -198,7 +273,7 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r) async {
         ]),
       ),
     ]),
-  ));
+  ]));
   return doc.save();
 }
 
@@ -214,22 +289,33 @@ pw.Widget _totRowPdf(String label, String value, PdfColor color, {bool bold = fa
 
 // ── Receipt Bottom Sheet ──────────────────────────────────────────────────────
 
-Future<void> showReceiptSheet(BuildContext context, DonationReceipt receipt) async {
+Future<void> showReceiptSheet(BuildContext context, DonationReceipt receipt, {Map<String, dynamic>? org}) async {
+  // Fetch org settings once up front if the caller didn't already have them,
+  // so the sheet (and any PDF download from it) render with real org data.
+  final orgData = org ?? await fetchOrgSettings();
+  if (!context.mounted) return;
   await showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
-    builder: (_) => _ReceiptSheet(receipt: receipt),
+    builder: (_) => _ReceiptSheet(receipt: receipt, org: orgData),
   );
 }
 
 class _ReceiptSheet extends StatelessWidget {
-  const _ReceiptSheet({required this.receipt});
+  const _ReceiptSheet({required this.receipt, this.org});
   final DonationReceipt receipt;
+  final Map<String, dynamic>? org;
 
   @override
   Widget build(BuildContext context) {
     final amtStr = '₹${_fmt(receipt.amount)}.00';
+    final orgName    = _org(org, 'name');
+    final orgAddress = _org(org, 'address');
+    final orgPan     = _org(org, 'pan');
+    final org12A     = _org(org, 'reg12A');
+    final org80G     = _org(org, 'cert80G');
+    final orgEmail   = _org(org, 'email');
 
     return DraggableScrollableSheet(
       initialChildSize: 0.94,
@@ -254,11 +340,12 @@ class _ReceiptSheet extends StatelessWidget {
                     height: 34, fit: BoxFit.contain, alignment: Alignment.centerLeft),
                 const SizedBox(width: 10),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Sri Krishnashraya Educational Trust',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _dark)),
-                  const SizedBox(height: 2),
-                  const Text('# 88/1, 84/1, 84/5, Thammarasanahalli, Sulibele, Bangalore – 562129',
-                      style: TextStyle(fontSize: 9, color: _grey)),
+                  Text(orgName,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _dark)),
+                  if (orgAddress.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(orgAddress, style: const TextStyle(fontSize: 9, color: _grey)),
+                  ],
                 ])),
                 const SizedBox(width: 12),
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -288,9 +375,13 @@ class _ReceiptSheet extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text('Mobile: ${receipt.donorPhone}', style: const TextStyle(fontSize: 11, color: _grey)),
                   ],
-                  if (receipt.donorCity.isNotEmpty) ...[
+                  if (receipt.donorEmail.isNotEmpty) ...[
                     const SizedBox(height: 2),
-                    Text(receipt.donorCity, style: const TextStyle(fontSize: 11, color: _grey)),
+                    Text('Email: ${receipt.donorEmail}', style: const TextStyle(fontSize: 11, color: _grey)),
+                  ],
+                  if (receipt.donorFullAddress.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(receipt.donorFullAddress, style: const TextStyle(fontSize: 10.5, color: _grey, height: 1.35)),
                   ],
                   if (receipt.donorPan.isNotEmpty) ...[
                     const SizedBox(height: 4),
@@ -349,6 +440,22 @@ class _ReceiptSheet extends StatelessWidget {
 
               const SizedBox(height: 14),
 
+              // ── Thank-you note + authorized signature ────────────────
+              Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                const Expanded(child: Text(
+                    "Thank you for your generous contribution. Your support is helping transform "
+                    "children's lives through education, care, and holistic development.",
+                    style: TextStyle(fontSize: 10.5, color: _grey, height: 1.5))),
+                const SizedBox(width: 14),
+                Column(children: [
+                  Container(width: 120, height: 1, color: _dark),
+                  const SizedBox(height: 4),
+                  const Text('Authorized Signature', style: TextStyle(fontSize: 9.5, color: _grey)),
+                ]),
+              ]),
+
+              const SizedBox(height: 14),
+
               // ── STATUTORY FOOTER BAR ─────────────────────────────────
               Container(
                 width: double.infinity,
@@ -360,14 +467,14 @@ class _ReceiptSheet extends StatelessWidget {
                 ),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(
-                      'PAN: AATTS6672D  |  12AB: AATTS6672D25BL01  |  80G: AATTS6672D25BL02'
+                      'PAN: $orgPan  |  12A: $org12A  |  80G: $org80G'
                       '${receipt.taxExemption ? '  |  Eligible for 80G Tax Exemption' : ''}',
                       style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: _dark, height: 1.4)),
                   const SizedBox(height: 5),
-                  const Text(
+                  Text(
                       'Electronically generated receipt — no signature required. Thanks for your support! '
-                      'For verification or support, write to krishnashryahome@gmail.com.',
-                      style: TextStyle(fontSize: 8.5, color: _grey, height: 1.4)),
+                      '${orgEmail.isNotEmpty ? 'For verification or support, write to $orgEmail.' : ''}',
+                      style: const TextStyle(fontSize: 8.5, color: _grey, height: 1.4)),
                 ]),
               ),
               const SizedBox(height: 24),
@@ -385,7 +492,7 @@ class _ReceiptSheet extends StatelessWidget {
               Expanded(child: OutlinedButton.icon(
                 onPressed: () async {
                   try {
-                    final bytes = await buildReceiptPdf(receipt);
+                    final bytes = await buildReceiptPdf(receipt, org: org);
                     final filename = 'Receipt_${receipt.receiptNo.replaceAll('/', '-')}.pdf';
                     final ok = await NativeFileSaver.saveBytes(filename, bytes, 'application/pdf');
                     if (context.mounted) {

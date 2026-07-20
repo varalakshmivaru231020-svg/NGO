@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/open_bytes.dart';
 import '../../../core/widgets/photo_picker_widget.dart';
 import 'students_screen.dart' show findStudentRecord;
@@ -21,11 +22,9 @@ const _coral500 = Color(0xFFF2685E);
 const _coral100 = Color(0xFFFFE3DF);
 const _sky500 = Color(0xFF2D9CDB);
 const _sky100 = Color(0xFFDCEFFB);
-const _onSurface1 = Color(0xFF15211E);
-const _onSurface2 = Color(0xFF5A6B67);
-const _onSurface3 = Color(0xFF93A29F);
-const _border = Color(0xFFE5EBE9);
-const _surface2 = Color(0xFFF4F7F6);
+// NOTE: surface/text/border colors are theme-aware — sourced from
+// context.textPrimary/textSub/textHint/border/surface2/cardBg/scaffoldBg
+// (see core/theme/app_theme.dart) instead of local hardcoded constants.
 
 // ── mock data ─────────────────────────────────────────────────────────
 final _kChildren = {
@@ -91,7 +90,7 @@ String _groupThousands(int n) {
 }
 Color _statusColor(String s) => switch (s) {
   'Active' => _brand600, 'Graduated' => _violet500,
-  'Relieved' => _amber600, 'Drop out' => _coral500, _ => _onSurface3,
+  'Relieved' => _amber600, 'Drop out' => _coral500, _ => const Color(0xFF93A29F),
 };
 
 final _vDivider = Container(
@@ -237,10 +236,10 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
         height: MediaQuery.of(ctx).size.height * 0.6,
-        decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
         child: Column(children: [
           Padding(padding: const EdgeInsets.fromLTRB(20, 14, 20, 10), child: Row(children: [
-            Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(2)))),
+            Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: context.border, borderRadius: BorderRadius.circular(2)))),
             const Spacer(),
             const Text('Select Sponsor', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
             const Spacer(),
@@ -254,8 +253,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
               }
               final donors = snap.data ?? const <Map<String, dynamic>>[];
               if (donors.isEmpty) {
-                return const Center(child: Padding(padding: EdgeInsets.all(24),
-                  child: Text('No donors yet. Add a donor first.', style: TextStyle(fontSize: 13.5, color: _onSurface3, fontWeight: FontWeight.w500))));
+                return Center(child: Padding(padding: const EdgeInsets.all(24),
+                  child: Text('No donors yet. Add a donor first.', style: TextStyle(fontSize: 13.5, color: context.textHint, fontWeight: FontWeight.w500))));
               }
               return ListView.separated(
                 padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
@@ -272,7 +271,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
                       decoration: const BoxDecoration(color: _brand100, shape: BoxShape.circle),
                       child: Center(child: Text(_initials(name), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _brand600)))),
                     title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
-                    subtitle: Text(city.isNotEmpty ? 'Donor · $city' : 'Donor', style: const TextStyle(fontSize: 12.5, color: _onSurface3)),
+                    subtitle: Text(city.isNotEmpty ? 'Donor · $city' : 'Donor', style: TextStyle(fontSize: 12.5, color: context.textHint)),
                     onTap: () {
                       Navigator.pop(ctx);
                       _assignSponsor(donorId: id, name: name, city: city);
@@ -298,7 +297,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
       builder: (ctx) => AlertDialog(
         title: const Text('Sponsorship Amount'),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Annual amount $name will sponsor this child with', style: const TextStyle(fontSize: 13, color: _onSurface3)),
+          Text('Annual amount $name will sponsor this child with', style: TextStyle(fontSize: 13, color: context.textHint)),
           const SizedBox(height: 10),
           TextField(
             controller: amountCtrl, autofocus: true, keyboardType: TextInputType.number,
@@ -423,13 +422,13 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
         Widget field(String label, TextEditingController ctrl, {TextInputType? kb, int lines = 1}) => Padding(
           padding: const EdgeInsets.only(bottom: 14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+            Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub)),
             const SizedBox(height: 6),
             TextField(
               controller: ctrl, keyboardType: kb, maxLines: lines,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               decoration: InputDecoration(
-                filled: true, fillColor: _surface2,
+                filled: true, fillColor: context.surface2,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                 focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12))),
@@ -438,7 +437,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
         Widget dateField(String label, String value, void Function(String) onPicked) => Padding(
           padding: const EdgeInsets.only(bottom: 14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+            Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub)),
             const SizedBox(height: 6),
             GestureDetector(
               behavior: HitTestBehavior.opaque,
@@ -454,11 +453,11 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
               },
               child: Container(
                 height: 46, padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(12)),
                 child: Row(children: [
                   Expanded(child: Text(value.isEmpty ? 'Select date' : value,
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: value.isEmpty ? _onSurface3 : _onSurface1))),
-                  const Icon(Icons.calendar_today_outlined, size: 17, color: _onSurface3),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: value.isEmpty ? context.textHint : context.textPrimary))),
+                  Icon(Icons.calendar_today_outlined, size: 17, color: context.textHint),
                 ]),
               ),
             ),
@@ -467,7 +466,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
         Widget chips(String label, List<String> options, String selected, void Function(String) onSelected) => Padding(
           padding: const EdgeInsets.only(bottom: 14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+            Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub)),
             const SizedBox(height: 6),
             Wrap(spacing: 8, runSpacing: 8, children: options.map((o) {
               final active = selected == o;
@@ -475,21 +474,21 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
                 onTap: () => setSheet(() => onSelected(o)),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(color: active ? _brand600 : _surface2, borderRadius: BorderRadius.circular(10)),
-                  child: Text(o, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : _onSurface2))));
+                  decoration: BoxDecoration(color: active ? _brand600 : context.surface2, borderRadius: BorderRadius.circular(10)),
+                  child: Text(o, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub))));
             }).toList()),
           ]));
 
         return Container(
-          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+          decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
           padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(ctx).viewInsets.bottom + 28),
           child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(2)))),
+              decoration: BoxDecoration(color: context.border, borderRadius: BorderRadius.circular(2)))),
             const Text('Edit Student', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            const Text('All fields collected at enrolment can be edited here.',
-              style: TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w500)),
+            Text('All fields collected at enrolment can be edited here.',
+              style: TextStyle(fontSize: 12.5, color: context.textHint, fontWeight: FontWeight.w500)),
             const SizedBox(height: 16),
             Center(child: PhotoPickerCircle(
               label: 'Profile Photo', size: 92,
@@ -642,24 +641,24 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
         Widget field(String label, TextEditingController ctrl, {TextInputType? kb, int lines = 1}) => Padding(
           padding: const EdgeInsets.only(bottom: 14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+            Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub)),
             const SizedBox(height: 6),
             TextField(
               controller: ctrl, keyboardType: kb, maxLines: lines,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               decoration: InputDecoration(
-                filled: true, fillColor: _surface2,
+                filled: true, fillColor: context.surface2,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                 focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12))),
           ]));
 
         return Container(
-          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+          decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
           padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(ctx).viewInsets.bottom + 28),
           child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(2)))),
+              decoration: BoxDecoration(color: context.border, borderRadius: BorderRadius.circular(2)))),
             const Text('Edit Identity Details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 16),
             field('PEN Number', pen),
@@ -723,14 +722,14 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) => Container(
-        decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
         padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(ctx).viewInsets.bottom + 28),
         child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
           Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(2)))),
+            decoration: BoxDecoration(color: context.border, borderRadius: BorderRadius.circular(2)))),
           const Text('Update Status', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          const Text("Update the child's enrolment status.", style: TextStyle(fontSize: 13.5, color: _onSurface2, fontWeight: FontWeight.w500)),
+          Text("Update the child's enrolment status.", style: TextStyle(fontSize: 13.5, color: context.textSub, fontWeight: FontWeight.w500)),
           const SizedBox(height: 16),
           ...statuses.map((s) {
             final sel = status == s.$1;
@@ -741,21 +740,21 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
                 child: Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: sel ? s.$5 : _surface2,
+                    color: sel ? s.$5 : context.surface2,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: sel ? s.$4 : _border, width: sel ? 2 : 1),
+                    border: Border.all(color: sel ? s.$4 : context.border, width: sel ? 2 : 1),
                   ),
                   child: Row(children: [
                     Container(width: 40, height: 40,
-                      decoration: BoxDecoration(color: sel ? s.$4 : Colors.white, borderRadius: BorderRadius.circular(10)),
-                      child: Icon(s.$3, color: sel ? Colors.white : _onSurface3, size: 20)),
+                      decoration: BoxDecoration(color: sel ? s.$4 : context.cardBg, borderRadius: BorderRadius.circular(10)),
+                      child: Icon(s.$3, color: sel ? Colors.white : context.textHint, size: 20)),
                     const SizedBox(width: 12),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(s.$1, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: sel ? s.$4 : _onSurface1)),
-                      Text(s.$2, style: const TextStyle(fontSize: 12.5, color: _onSurface2, fontWeight: FontWeight.w500)),
+                      Text(s.$1, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: sel ? s.$4 : context.textPrimary)),
+                      Text(s.$2, style: TextStyle(fontSize: 12.5, color: context.textSub, fontWeight: FontWeight.w500)),
                     ])),
                     if (sel) Icon(Icons.radio_button_checked, color: s.$4, size: 20)
-                    else const Icon(Icons.radio_button_unchecked, color: _onSurface3, size: 20),
+                    else Icon(Icons.radio_button_unchecked, color: context.textHint, size: 20),
                   ]),
                 ),
               ),
@@ -790,7 +789,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
     final color = _avColor(name);
 
     return Scaffold(
-      backgroundColor: _surface2,
+      backgroundColor: context.scaffoldBg,
       body: NestedScrollView(
         headerSliverBuilder: (ctx, inner) => [
           SliverAppBar(
@@ -1000,11 +999,11 @@ class _ProfileTab extends StatelessWidget {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(15),
-          decoration: BoxDecoration(color: _amber100, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border)),
+          decoration: BoxDecoration(color: _amber100, borderRadius: BorderRadius.circular(16), border: Border.all(color: context.border)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Row(children: [Icon(Icons.notes_outlined, size: 16, color: _amber600), SizedBox(width: 7), Text('Family Background', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: _amber600))]),
             const SizedBox(height: 8),
-            Text(data['familyNotes']!, style: const TextStyle(fontSize: 14, color: _onSurface1, fontWeight: FontWeight.w500, height: 1.5)),
+            Text(data['familyNotes']!, style: TextStyle(fontSize: 14, color: context.textPrimary, fontWeight: FontWeight.w500, height: 1.5)),
           ]),
         ),
       const SizedBox(height: 14),
@@ -1039,11 +1038,11 @@ class _ProfileTab extends StatelessWidget {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(15),
-          decoration: BoxDecoration(color: _coral100, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border)),
+          decoration: BoxDecoration(color: _coral100, borderRadius: BorderRadius.circular(16), border: Border.all(color: context.border)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Row(children: [Icon(Icons.medication_outlined, size: 16, color: _coral500), SizedBox(width: 7), Text('Medical History', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: _coral500))]),
             const SizedBox(height: 8),
-            Text(data['medHistory']!, style: const TextStyle(fontSize: 14, color: _onSurface1, fontWeight: FontWeight.w500, height: 1.5)),
+            Text(data['medHistory']!, style: TextStyle(fontSize: 14, color: context.textPrimary, fontWeight: FontWeight.w500, height: 1.5)),
           ]),
         ),
       ],
@@ -1160,9 +1159,9 @@ class _SponsorTab extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.cardBg,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _border),
+            border: Border.all(color: context.border),
             boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 8, offset: Offset(0, 2))],
           ),
           child: Row(children: [
@@ -1176,11 +1175,11 @@ class _SponsorTab extends StatelessWidget {
             ),
             const SizedBox(width: 13),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(sponsor, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _onSurface1)),
+              Text(sponsor, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: context.textPrimary)),
               const SizedBox(height: 3),
               Text(
                 city.isNotEmpty ? '$category · $city' : category,
-                style: const TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w600),
+                style: TextStyle(fontSize: 12.5, color: context.textHint, fontWeight: FontWeight.w600),
               ),
             ])),
             GestureDetector(
@@ -1197,7 +1196,7 @@ class _SponsorTab extends StatelessWidget {
 
         // ── Sponsorship details ─────────────────────────────────────
         Container(
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: _border)),
+          decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(20), border: Border.all(color: context.border)),
           child: Column(children: [
             _SpnRow('Sponsorship ID (Donor ID)', sponsorId, first: true),
             _SpnRow('Sponsorship Amount', amount),
@@ -1225,7 +1224,7 @@ class _SponsorTab extends StatelessWidget {
         const SizedBox(height: 22),
 
         // ── Sponsorship history ─────────────────────────────────────
-        const Text('SPONSORSHIP HISTORY', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900, color: _onSurface3, letterSpacing: 1.0)),
+        Text('SPONSORSHIP HISTORY', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900, color: context.textHint, letterSpacing: 1.0)),
         const SizedBox(height: 12),
         _TimelineEvent(
           dot: _brand600,
@@ -1234,7 +1233,7 @@ class _SponsorTab extends StatelessWidget {
           isFirst: true,
         ),
         _TimelineEvent(
-          dot: _onSurface3,
+          dot: context.textHint,
           title: 'Enrolled into programme',
           sub: enrollDate,
           isLast: true,
@@ -1250,15 +1249,15 @@ class _SponsorTab extends StatelessWidget {
       const SizedBox(height: 40),
       Container(
         width: double.infinity, padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22), border: Border.all(color: _border)),
+        decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(22), border: Border.all(color: context.border)),
         child: Column(children: [
           Container(width: 64, height: 64, decoration: const BoxDecoration(color: _brand100, shape: BoxShape.circle),
             child: const Icon(Icons.favorite_border, size: 30, color: _brand600)),
           const SizedBox(height: 16),
           const Text('No Sponsor Assigned', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
-          const Text('Assign a donor from the donor list to sponsor this child.',
-            textAlign: TextAlign.center, style: TextStyle(color: _onSurface2, fontSize: 13.5, fontWeight: FontWeight.w500)),
+          Text('Assign a donor from the donor list to sponsor this child.',
+            textAlign: TextAlign.center, style: TextStyle(color: context.textSub, fontSize: 13.5, fontWeight: FontWeight.w500)),
           const SizedBox(height: 20),
           ElevatedButton.icon(
             onPressed: onAssign,
@@ -1284,11 +1283,11 @@ class _SpnRow extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
     decoration: BoxDecoration(
-      border: last ? null : const Border(bottom: BorderSide(color: _border)),
+      border: last ? null : Border(bottom: BorderSide(color: context.border)),
     ),
     child: Row(children: [
-      Expanded(child: Text(label, style: const TextStyle(fontSize: 13, color: _onSurface3, fontWeight: FontWeight.w600))),
-      Text(value, style: TextStyle(fontSize: 13.5, fontWeight: valueBold ? FontWeight.w800 : FontWeight.w700, color: valueColor ?? _onSurface1)),
+      Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: context.textHint, fontWeight: FontWeight.w600))),
+      Text(value, style: TextStyle(fontSize: 13.5, fontWeight: valueBold ? FontWeight.w800 : FontWeight.w700, color: valueColor ?? context.textPrimary)),
     ]),
   );
 }
@@ -1303,15 +1302,15 @@ class _TimelineEvent extends StatelessWidget {
     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
       SizedBox(width: 20, child: Column(children: [
         Container(width: 10, height: 10, decoration: BoxDecoration(color: dot, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2), boxShadow: [BoxShadow(color: dot.withValues(alpha: 0.4), blurRadius: 4)])),
-        if (!isLast) Expanded(child: Container(width: 1.5, color: _border, margin: const EdgeInsets.symmetric(vertical: 3))),
+        if (!isLast) Expanded(child: Container(width: 1.5, color: context.border, margin: const EdgeInsets.symmetric(vertical: 3))),
       ])),
       const SizedBox(width: 12),
       Expanded(child: Padding(
         padding: const EdgeInsets.only(bottom: 16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _onSurface1)),
+          Text(title, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: context.textPrimary)),
           const SizedBox(height: 2),
-          Text(sub, style: const TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w500)),
+          Text(sub, style: TextStyle(fontSize: 12.5, color: context.textHint, fontWeight: FontWeight.w500)),
         ]),
       )),
     ]),
@@ -1398,7 +1397,7 @@ class _AchievementsTabState extends State<_AchievementsTab> {
     final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       title: const Text('Delete Achievement?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-      content: Text('This will permanently remove "${a.title}".', style: const TextStyle(fontSize: 13.5, color: _onSurface2)),
+      content: Text('This will permanently remove "${a.title}".', style: TextStyle(fontSize: 13.5, color: context.textSub)),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
         TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: _coral500, fontWeight: FontWeight.w700))),
@@ -1428,15 +1427,15 @@ class _AchievementsTabState extends State<_AchievementsTab> {
               padding: const EdgeInsets.fromLTRB(20, 18, 12, 0),
               child: Row(children: [
                 Expanded(child: Text(editing == null ? 'Add Achievement' : 'Edit Achievement',
-                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: _onSurface1))),
-                IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close_rounded, size: 22, color: _onSurface2)),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: context.textPrimary))),
+                IconButton(onPressed: () => Navigator.pop(ctx), icon: Icon(Icons.close_rounded, size: 22, color: context.textSub)),
               ]),
             ),
-            const Divider(height: 1, color: _border),
+            Divider(height: 1, color: context.border),
             Expanded(child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Category', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+                Text('Category', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub)),
                 const SizedBox(height: 8),
                 Wrap(spacing: 8, runSpacing: 6, children: _cats.map((c) {
                   final sel = cat == c;
@@ -1445,30 +1444,30 @@ class _AchievementsTabState extends State<_AchievementsTab> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
                       decoration: BoxDecoration(
-                        color: sel ? _brand600 : _surface2,
+                        color: sel ? _brand600 : context.surface2,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: sel ? _brand600 : _border),
+                        border: Border.all(color: sel ? _brand600 : context.border),
                       ),
-                      child: Text(c, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: sel ? Colors.white : _onSurface2)),
+                      child: Text(c, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: sel ? Colors.white : context.textSub)),
                     ),
                   );
                 }).toList()),
                 const SizedBox(height: 14),
-                const Text('Title *', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+                Text('Title *', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: titleCtrl,
                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                   decoration: InputDecoration(
                     hintText: 'e.g. Annual Sports Day',
-                    hintStyle: const TextStyle(color: _onSurface3, fontWeight: FontWeight.w400),
-                    filled: true, fillColor: _surface2,
+                    hintStyle: TextStyle(color: context.textHint, fontWeight: FontWeight.w400),
+                    filled: true, fillColor: context.surface2,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                     focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12)),
                 ),
                 const SizedBox(height: 14),
-                const Text('Date', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+                Text('Date', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub)),
                 const SizedBox(height: 6),
                 GestureDetector(
                   onTap: () async {
@@ -1477,24 +1476,24 @@ class _AchievementsTabState extends State<_AchievementsTab> {
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(12)),
+                    decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(12)),
                     child: Row(children: [
-                      const Icon(Icons.calendar_today_outlined, size: 16, color: _onSurface2),
+                      Icon(Icons.calendar_today_outlined, size: 16, color: context.textSub),
                       const SizedBox(width: 10),
                       Text(_fmtDate(date), style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
                     ]),
                   ),
                 ),
                 const SizedBox(height: 14),
-                const Text('Description', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+                Text('Description', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: descCtrl, maxLines: 3,
                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                   decoration: InputDecoration(
                     hintText: 'Brief description…',
-                    hintStyle: const TextStyle(color: _onSurface3, fontWeight: FontWeight.w400),
-                    filled: true, fillColor: _surface2,
+                    hintStyle: TextStyle(color: context.textHint, fontWeight: FontWeight.w400),
+                    filled: true, fillColor: context.surface2,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                     focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
                     contentPadding: const EdgeInsets.all(14)),
@@ -1506,7 +1505,7 @@ class _AchievementsTabState extends State<_AchievementsTab> {
               child: Row(children: [
                 Expanded(child: OutlinedButton(
                   onPressed: () => Navigator.pop(ctx),
-                  style: OutlinedButton.styleFrom(foregroundColor: _onSurface2, side: const BorderSide(color: _border),
+                  style: OutlinedButton.styleFrom(foregroundColor: context.textSub, side: BorderSide(color: context.border),
                     padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                   child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),
                 )),
@@ -1553,7 +1552,7 @@ class _AchievementsTabState extends State<_AchievementsTab> {
         padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
         child: Row(children: [
           Text('${list.length} Achievement${list.length == 1 ? '' : 's'}',
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _onSurface2)),
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.textSub)),
           const Spacer(),
           GestureDetector(
             onTap: () => _openSheet(),
@@ -1576,8 +1575,8 @@ class _AchievementsTabState extends State<_AchievementsTab> {
           style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
           decoration: InputDecoration(
             hintText: 'Search achievements…', isDense: true,
-            prefixIcon: const Icon(Icons.search, size: 18, color: _onSurface3),
-            filled: true, fillColor: _surface2,
+            prefixIcon: Icon(Icons.search, size: 18, color: context.textHint),
+            filled: true, fillColor: context.surface2,
             contentPadding: const EdgeInsets.symmetric(vertical: 10),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
           ),
@@ -1592,21 +1591,21 @@ class _AchievementsTabState extends State<_AchievementsTab> {
               onTap: () => setState(() => _catFilter = c),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-                decoration: BoxDecoration(color: sel ? _brand600 : _surface2, borderRadius: BorderRadius.circular(10)),
-                child: Text(c, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: sel ? Colors.white : _onSurface2)),
+                decoration: BoxDecoration(color: sel ? _brand600 : context.surface2, borderRadius: BorderRadius.circular(10)),
+                child: Text(c, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: sel ? Colors.white : context.textSub)),
               ),
             ));
           }),
           if (_years.isNotEmpty) ...[
-            Container(width: 1, height: 24, color: _border, margin: const EdgeInsets.symmetric(horizontal: 4)),
+            Container(width: 1, height: 24, color: context.border, margin: const EdgeInsets.symmetric(horizontal: 4)),
             ...(_years.toList()..sort((a, b) => b.compareTo(a))).map((y) {
               final sel = _yearFilter == y;
               return Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(
                 onTap: () => setState(() => _yearFilter = sel ? null : y),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-                  decoration: BoxDecoration(color: sel ? _brand600 : _surface2, borderRadius: BorderRadius.circular(10)),
-                  child: Text('$y', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: sel ? Colors.white : _onSurface2)),
+                  decoration: BoxDecoration(color: sel ? _brand600 : context.surface2, borderRadius: BorderRadius.circular(10)),
+                  child: Text('$y', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: sel ? Colors.white : context.textSub)),
                 ),
               ));
             }),
@@ -1618,11 +1617,11 @@ class _AchievementsTabState extends State<_AchievementsTab> {
           children: List.generate(3, (_) => const Padding(padding: EdgeInsets.only(bottom: 10), child: _SkeletonCard()))))
       else if (list.isEmpty)
         Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.emoji_events_outlined, size: 44, color: _onSurface3),
+          Icon(Icons.emoji_events_outlined, size: 44, color: context.textHint),
           const SizedBox(height: 12),
-          Text(_all.isEmpty ? 'No achievements yet' : 'No matching achievements', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _onSurface3)),
+          Text(_all.isEmpty ? 'No achievements yet' : 'No matching achievements', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: context.textHint)),
           const SizedBox(height: 6),
-          const Text('Tap + to add an achievement', style: TextStyle(fontSize: 13, color: _onSurface3)),
+          Text('Tap + to add an achievement', style: TextStyle(fontSize: 13, color: context.textHint)),
         ])))
       else
         Expanded(child: ListView.separated(
@@ -1637,8 +1636,8 @@ class _AchievementsTabState extends State<_AchievementsTab> {
             return Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white, borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: _border),
+                color: context.cardBg, borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: context.border),
                 boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 6, offset: Offset(0, 2))],
               ),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1649,13 +1648,13 @@ class _AchievementsTabState extends State<_AchievementsTab> {
                     child: Text(displayCat, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: fg)),
                   ),
                   const Spacer(),
-                  Text(_fmtDate(a.date), style: const TextStyle(fontSize: 12, color: _onSurface3, fontWeight: FontWeight.w500)),
+                  Text(_fmtDate(a.date), style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w500)),
                 ]),
                 const SizedBox(height: 8),
-                Text(a.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _onSurface1)),
+                Text(a.title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: context.textPrimary)),
                 if (a.description.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(a.description, style: const TextStyle(fontSize: 13, color: _onSurface2, height: 1.45)),
+                  Text(a.description, style: TextStyle(fontSize: 13, color: context.textSub, height: 1.45)),
                 ],
                 const SizedBox(height: 10),
                 Row(children: [
@@ -1759,13 +1758,17 @@ class _DocumentsTabState extends State<_DocumentsTab> {
       final bytes = result?.files.single.bytes;
       if (result != null && bytes != null && mounted) {
         final name = result.files.single.name;
-        await apiClient.post('/students/${widget.studentId}/documents', {
+        final res = await apiClient.post('/students/${widget.studentId}/documents', {
           'category': category, 'fileName': name, 'data': base64Encode(bytes),
         });
         await _load();
+        // Document uploads are exempted from the Super Admin approval queue
+        // (see ApprovalsService.EXEMPT_PATH_PATTERNS) so this should always
+        // save immediately — but if that ever changes, don't lie about it.
+        final pending = (res['meta'] as Map?)?['pendingApproval'] == true;
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('$name uploaded successfully', style: const TextStyle(fontWeight: FontWeight.w700)),
-          backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
+          content: Text(pending ? '$name submitted for approval' : '$name uploaded successfully', style: const TextStyle(fontWeight: FontWeight.w700)),
+          backgroundColor: pending ? _amber600 : _brand600, behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
       }
     } catch (_) {
@@ -1824,24 +1827,24 @@ class _DocumentsTabState extends State<_DocumentsTab> {
       padding: const EdgeInsets.only(bottom: 10),
       child: Container(
         padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
+        decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(18), border: Border.all(color: context.border)),
         child: Row(children: [
           Container(width: 44, height: 44,
-            decoration: BoxDecoration(color: uploaded ? _brand100 : _surface2, borderRadius: BorderRadius.circular(12)),
-            child: Icon(icon, size: 22, color: uploaded ? _brand600 : _onSurface3)),
+            decoration: BoxDecoration(color: uploaded ? _brand100 : context.surface2, borderRadius: BorderRadius.circular(12)),
+            child: Icon(icon, size: 22, color: uploaded ? _brand600 : context.textHint)),
           const SizedBox(width: 13),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
             const SizedBox(height: 3),
             Row(children: [
               Container(width: 6, height: 6, decoration: BoxDecoration(
-                color: uploaded ? _brand600 : _onSurface3, shape: BoxShape.circle)),
+                color: uploaded ? _brand600 : context.textHint, shape: BoxShape.circle)),
               const SizedBox(width: 5),
               Expanded(child: Text(
                 uploaded ? doc.fileName : 'Not uploaded',
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600,
-                  color: uploaded ? _brand600 : _onSurface3))),
+                  color: uploaded ? _brand600 : context.textHint))),
             ]),
           ])),
           const SizedBox(width: 10),
@@ -1940,18 +1943,18 @@ class _CardSection extends StatelessWidget {
   final String title; final IconData icon; final List<Widget> children; final Widget? trailing;
   @override
   Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: _border)),
+    decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(20), border: Border.all(color: context.border)),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
         child: Row(children: [
           Icon(icon, size: 17, color: _brand600),
           const SizedBox(width: 8),
-          Expanded(child: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _onSurface1))),
+          Expanded(child: Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: context.textPrimary))),
           if (trailing != null) trailing!,
         ]),
       ),
-      const Divider(height: 1, color: _border),
+      Divider(height: 1, color: context.border),
       ...children,
     ]),
   );
@@ -1976,10 +1979,10 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-    decoration: last ? null : const BoxDecoration(border: Border(bottom: BorderSide(color: _border))),
+    decoration: last ? null : BoxDecoration(border: Border(bottom: BorderSide(color: context.border))),
     child: Row(children: [
-      SizedBox(width: 120, child: Text(label, style: const TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w600))),
-      Expanded(child: Text(value, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _onSurface1))),
+      SizedBox(width: 120, child: Text(label, style: TextStyle(fontSize: 12.5, color: context.textHint, fontWeight: FontWeight.w600))),
+      Expanded(child: Text(value, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: context.textPrimary))),
     ]),
   );
 }
@@ -2057,14 +2060,14 @@ class _SingleDocSlotState extends State<_SingleDocSlot> {
     final uploaded = _doc != null;
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
+      decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(18), border: Border.all(color: context.border)),
       child: Row(children: [
         Container(width: 44, height: 44, decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)), child: Icon(widget.icon, color: _brand600, size: 22)),
         const SizedBox(width: 13),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(widget.category, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
           Text(uploaded ? _doc!.fileName : widget.sublabel, overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w500)),
+            style: TextStyle(fontSize: 12.5, color: context.textHint, fontWeight: FontWeight.w500)),
         ])),
         if (_loading)
           const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600))
@@ -2100,19 +2103,19 @@ class _UploadSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: _border)),
+    decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(18), border: Border.all(color: context.border)),
     child: Row(children: [
-      Container(width: 44, height: 44, decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(12)),
-        child: const Icon(Icons.upload_file_outlined, color: _onSurface3, size: 22)),
+      Container(width: 44, height: 44, decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(12)),
+        child: Icon(Icons.upload_file_outlined, color: context.textHint, size: 22)),
       const SizedBox(width: 13),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: _onSurface1)),
-        Text(sublabel, style: const TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w500)),
+        Text(label, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: context.textPrimary)),
+        Text(sublabel, style: TextStyle(fontSize: 12.5, color: context.textHint, fontWeight: FontWeight.w500)),
       ])),
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(10), border: Border.all(color: _border)),
-        child: const Text('Upload', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+        decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(10), border: Border.all(color: context.border)),
+        child: Text('Upload', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub)),
       ),
     ]),
   );
@@ -2276,24 +2279,24 @@ class _ProgressTabState extends State<_ProgressTab> {
         Widget field(String label, TextEditingController ctrl, {TextInputType? kb, int lines = 1}) => Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+            Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub)),
             const SizedBox(height: 6),
             TextField(
               controller: ctrl, keyboardType: kb, maxLines: lines,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               decoration: InputDecoration(
-                filled: true, fillColor: _surface2,
+                filled: true, fillColor: context.surface2,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                 focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12))),
           ]));
 
         return Container(
-          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+          decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
           padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(ctx).viewInsets.bottom + 28),
           child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(2)))),
+              decoration: BoxDecoration(color: context.border, borderRadius: BorderRadius.circular(2)))),
             const Text('Add Performance Record', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 16),
             GestureDetector(
@@ -2304,9 +2307,9 @@ class _ProgressTabState extends State<_ProgressTab> {
               child: Container(
                 margin: const EdgeInsets.only(bottom: 14),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(12)),
                 child: Row(children: [
-                  const Icon(Icons.calendar_today_outlined, size: 16, color: _onSurface2),
+                  Icon(Icons.calendar_today_outlined, size: 16, color: context.textSub),
                   const SizedBox(width: 10),
                   Text(_fmtDate(date), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                 ]),
@@ -2376,9 +2379,9 @@ class _ProgressTabState extends State<_ProgressTab> {
           },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(12)),
             child: Row(children: [
-              const Icon(Icons.calendar_today_outlined, size: 16, color: _onSurface2),
+              Icon(Icons.calendar_today_outlined, size: 16, color: context.textSub),
               const SizedBox(width: 10),
               Text('${date.day.toString().padLeft(2,'0')}/${date.month.toString().padLeft(2,'0')}/${date.year}',
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
@@ -2388,13 +2391,13 @@ class _ProgressTabState extends State<_ProgressTab> {
         const SizedBox(height: 12),
         TextField(
           controller: heightCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: 'Height (cm)', filled: true, fillColor: _surface2,
+          decoration: InputDecoration(labelText: 'Height (cm)', filled: true, fillColor: context.surface2,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
         ),
         const SizedBox(height: 12),
         TextField(
           controller: weightCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: 'Weight (kg)', filled: true, fillColor: _surface2,
+          decoration: InputDecoration(labelText: 'Weight (kg)', filled: true, fillColor: context.surface2,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
         ),
       ]),
@@ -2431,7 +2434,7 @@ class _ProgressTabState extends State<_ProgressTab> {
     physics: const BouncingScrollPhysics(),
     padding: const EdgeInsets.all(18),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Progress Overview', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _onSurface1)),
+      Text('Progress Overview', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: context.textPrimary)),
       const SizedBox(height: 14),
       _CardSection(title: 'Academic Summary', icon: Icons.bar_chart_outlined, children: [
         _InfoRow('Class / Grade',    _na(widget.data['class'])),
@@ -2443,7 +2446,7 @@ class _ProgressTabState extends State<_ProgressTab> {
 
       // ── Performance History ─────────────────────────────────────
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        const Text('Performance History', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _onSurface1)),
+        Text('Performance History', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: context.textPrimary)),
         GestureDetector(
           onTap: () => _showAddProgressDialog(context),
           behavior: HitTestBehavior.opaque,
@@ -2467,12 +2470,12 @@ class _ProgressTabState extends State<_ProgressTab> {
       else if (_progress.isEmpty)
         Container(
           width: double.infinity, padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border)),
-          child: const Column(children: [
-            Icon(Icons.insights_outlined, size: 34, color: _onSurface3),
-            SizedBox(height: 10),
+          decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: context.border)),
+          child: Column(children: [
+            Icon(Icons.insights_outlined, size: 34, color: context.textHint),
+            const SizedBox(height: 10),
             Text('No performance records available.',
-              textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: _onSurface3, fontWeight: FontWeight.w600)),
+              textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: context.textHint, fontWeight: FontWeight.w600)),
           ]),
         )
       else ...[
@@ -2489,8 +2492,8 @@ class _ProgressTabState extends State<_ProgressTab> {
                   onTap: _loadMoreProgress,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-                    decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(10), border: Border.all(color: _border)),
-                    child: const Text('Load More', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+                    decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(10), border: Border.all(color: context.border)),
+                    child: Text('Load More', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub)),
                   ),
                 ),
           )),
@@ -2500,7 +2503,7 @@ class _ProgressTabState extends State<_ProgressTab> {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(15),
-          decoration: BoxDecoration(color: _coral100, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border)),
+          decoration: BoxDecoration(color: _coral100, borderRadius: BorderRadius.circular(16), border: Border.all(color: context.border)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Row(children: [
               Icon(Icons.medication_outlined, size: 16, color: _coral500),
@@ -2508,14 +2511,14 @@ class _ProgressTabState extends State<_ProgressTab> {
               Text('Medical Notes', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: _coral500)),
             ]),
             const SizedBox(height: 8),
-            Text(widget.data['medHistory']!, style: const TextStyle(fontSize: 14, color: _onSurface1, fontWeight: FontWeight.w500, height: 1.5)),
+            Text(widget.data['medHistory']!, style: TextStyle(fontSize: 14, color: context.textPrimary, fontWeight: FontWeight.w500, height: 1.5)),
           ]),
         ),
         const SizedBox(height: 14),
       ],
       // ── Growth History ───────────────────────────────────────────
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        const Text('Growth History', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _onSurface1)),
+        Text('Growth History', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: context.textPrimary)),
         GestureDetector(
           onTap: () => _showAddGrowthDialog(context),
           behavior: HitTestBehavior.opaque,
@@ -2536,27 +2539,27 @@ class _ProgressTabState extends State<_ProgressTab> {
       else if (_growth.isEmpty)
         Container(
           width: double.infinity, padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border)),
-          child: const Center(child: Text('No growth records yet — tap Add Record to log the first height/weight entry.',
-            textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: _onSurface3, fontWeight: FontWeight.w600))),
+          decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: context.border)),
+          child: Center(child: Text('No growth records yet — tap Add Record to log the first height/weight entry.',
+            textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: context.textHint, fontWeight: FontWeight.w600))),
         )
       else ...[
         _GrowthChart(records: _growth),
         const SizedBox(height: 12),
         Container(
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border)),
+          decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: context.border)),
           child: Column(children: _growth.reversed.toList().asMap().entries.map((e) {
             final r = e.value;
             final isLast = e.key == _growth.length - 1;
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: isLast ? null : const BoxDecoration(border: Border(bottom: BorderSide(color: _border))),
+              decoration: isLast ? null : BoxDecoration(border: Border(bottom: BorderSide(color: context.border))),
               child: Row(children: [
-                Expanded(child: Text(r.dateLabel, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _onSurface1))),
+                Expanded(child: Text(r.dateLabel, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.textPrimary))),
                 Expanded(child: Text(r.heightCm != null ? '${r.heightCm!.toStringAsFixed(1)} cm' : '—',
-                  style: const TextStyle(fontSize: 13, color: _onSurface2, fontWeight: FontWeight.w600))),
+                  style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600))),
                 Expanded(child: Text(r.weightKg != null ? '${r.weightKg!.toStringAsFixed(1)} kg' : '—',
-                  style: const TextStyle(fontSize: 13, color: _onSurface2, fontWeight: FontWeight.w600))),
+                  style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600))),
                 GestureDetector(
                   onTap: () => _deleteGrowthRecord(r.id),
                   child: const Icon(Icons.delete_outline, size: 18, color: _coral500),
@@ -2587,7 +2590,7 @@ class _GrowthChart extends StatelessWidget {
     }
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 18, 16, 10),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border)),
+      decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: context.border)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Padding(padding: const EdgeInsets.only(left: 6, bottom: 8), child: Row(children: [
           _LegendDot(color: _brand600, label: 'Height (cm)'),
@@ -2598,13 +2601,13 @@ class _GrowthChart extends StatelessWidget {
           height: 180,
           child: LineChart(LineChartData(
             gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: 10,
-              getDrawingHorizontalLine: (_) => const FlLine(color: _border, strokeWidth: 1)),
+              getDrawingHorizontalLine: (_) => FlLine(color: context.border, strokeWidth: 1)),
             borderData: FlBorderData(show: false),
             titlesData: FlTitlesData(
               topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
               rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
               leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 34,
-                getTitlesWidget: (v, meta) => Text(v.toInt().toString(), style: const TextStyle(fontSize: 10, color: _onSurface3)))),
+                getTitlesWidget: (v, meta) => Text(v.toInt().toString(), style: TextStyle(fontSize: 10, color: context.textHint)))),
               bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 28,
                 getTitlesWidget: (v, meta) {
                   final i = v.toInt();
@@ -2613,7 +2616,7 @@ class _GrowthChart extends StatelessWidget {
                   if (records.length > 6 && i % (records.length / 5).ceil() != 0) return const SizedBox.shrink();
                   final d = records[i].date;
                   return Padding(padding: const EdgeInsets.only(top: 6),
-                    child: Text('${d.day}/${d.month}', style: const TextStyle(fontSize: 10, color: _onSurface3)));
+                    child: Text('${d.day}/${d.month}', style: TextStyle(fontSize: 10, color: context.textHint)));
                 })),
             ),
             lineBarsData: [
@@ -2638,7 +2641,7 @@ class _LegendDot extends StatelessWidget {
   Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
     Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
     const SizedBox(width: 5),
-    Text(label, style: const TextStyle(fontSize: 11.5, color: _onSurface2, fontWeight: FontWeight.w600)),
+    Text(label, style: TextStyle(fontSize: 11.5, color: context.textSub, fontWeight: FontWeight.w600)),
   ]);
 }
 
@@ -2666,35 +2669,35 @@ class _ProgressRecordCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _border),
+        color: context.cardBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: context.border),
         boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 8, offset: Offset(0, 2))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           const Icon(Icons.event_note_outlined, size: 15, color: _brand600),
           const SizedBox(width: 6),
-          Expanded(child: Text(r.dateLabel, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _onSurface1))),
+          Expanded(child: Text(r.dateLabel, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: context.textPrimary))),
           GestureDetector(onTap: onDelete, child: const Icon(Icons.delete_outline, size: 18, color: _coral500)),
         ]),
         if (chips.isNotEmpty) ...[
           const SizedBox(height: 10),
           Wrap(spacing: 8, runSpacing: 8, children: chips.map((c) => Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(8)),
-            child: Text('${c.label}: ${c.value}', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _onSurface2)),
+            decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(8)),
+            child: Text('${c.label}: ${c.value}', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: context.textSub)),
           )).toList()),
         ],
         if ((r.mentorRemarks ?? '').isNotEmpty) ...[
           const SizedBox(height: 10),
-          Text('Mentor: ${r.mentorRemarks}', style: const TextStyle(fontSize: 12.5, color: _onSurface2, fontWeight: FontWeight.w500, height: 1.4)),
+          Text('Mentor: ${r.mentorRemarks}', style: TextStyle(fontSize: 12.5, color: context.textSub, fontWeight: FontWeight.w500, height: 1.4)),
         ],
         if ((r.teacherRemarks ?? '').isNotEmpty) ...[
           const SizedBox(height: 4),
-          Text('Teacher: ${r.teacherRemarks}', style: const TextStyle(fontSize: 12.5, color: _onSurface2, fontWeight: FontWeight.w500, height: 1.4)),
+          Text('Teacher: ${r.teacherRemarks}', style: TextStyle(fontSize: 12.5, color: context.textSub, fontWeight: FontWeight.w500, height: 1.4)),
         ],
         if (chips.isEmpty && (r.mentorRemarks ?? '').isEmpty && (r.teacherRemarks ?? '').isEmpty) ...[
           const SizedBox(height: 6),
-          const Text('No details recorded for this entry.', style: TextStyle(fontSize: 12.5, color: _onSurface3, fontWeight: FontWeight.w500)),
+          Text('No details recorded for this entry.', style: TextStyle(fontSize: 12.5, color: context.textHint, fontWeight: FontWeight.w500)),
         ],
       ]),
     );
@@ -2707,6 +2710,6 @@ class _SkeletonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: 74, width: double.infinity,
-    decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(16)),
+    decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(16)),
   );
 }

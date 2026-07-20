@@ -59,10 +59,12 @@ class _Donation {
   _Donation({required this.id, required this.donorId, required this.name, required this.amount,
     required this.type, required this.method, required this.receipt, required this.date,
     required this.status, required this.attach,
-    this.donorPhone = '', this.donorCity = '', this.donorPan = ''});
+    this.donorPhone = '', this.donorCity = '', this.donorPan = '', this.donorEmail = '',
+    this.donorAddress = '', this.donorState = '', this.donorPincode = '', this.donorCountry = ''});
   final String id, donorId, name, type, method, receipt, date, status;
   final int amount, attach;
   final String donorPhone, donorCity, donorPan;
+  final String donorEmail, donorAddress, donorState, donorPincode, donorCountry;
 
   factory _Donation.fromApi(Map<String, dynamic> j) {
     final donor = j['donor'] as Map<String, dynamic>? ?? {};
@@ -83,6 +85,11 @@ class _Donation {
       donorPhone: donor['mobile'] as String? ?? '',
       donorCity:  donor['city']   as String? ?? '',
       donorPan:   donor['pan']    as String? ?? '',
+      donorEmail:   donor['email']   as String? ?? '',
+      donorAddress: donor['address'] as String? ?? '',
+      donorState:   donor['state']   as String? ?? '',
+      donorPincode: donor['pincode'] as String? ?? '',
+      donorCountry: donor['country'] as String? ?? '',
       amount:   j['amount']   as int?    ?? 0,
       type:     type['label'] as String? ?? 'General Donation',
       method:   _modeLabels[rawMode] ?? rawMode,
@@ -106,11 +113,29 @@ class _DonationsScreenState extends State<DonationsScreen> {
   List<_Donation> _donations = [];
   bool _loading = true;
   String? _error;
+  // Real donation types from the backend — falls back to _typeInfo's keys
+  // (below) only until this loads, so newly added categories (Settings >
+  // Donation Types) show up as filter chips without a hardcoded list to update.
+  List<String> _typeLabels = [];
+
+  Future<void> _loadTypes() async {
+    try {
+      final r = await apiClient.get('/donations/types');
+      final inner = r['data'];
+      final list = inner is List ? inner : (inner is Map ? (inner['data'] as List? ?? const []) : const []);
+      final labels = list.whereType<Map>()
+          .map((m) => m['label'] as String? ?? '')
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (mounted && labels.isNotEmpty) setState(() => _typeLabels = labels);
+    } catch (_) {}
+  }
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadTypes();
   }
 
   // No demo donations — the list reflects only real backend data.
@@ -225,7 +250,7 @@ class _DonationsScreenState extends State<DonationsScreen> {
     }
   }
 
-  List<String> get _types => ['All', ..._typeInfo.keys];
+  List<String> get _types => ['All', ...(_typeLabels.isNotEmpty ? _typeLabels : _typeInfo.keys)];
 
   List<_Donation> get _filtered =>
     _filter == 'All' ? _donations : _donations.where((d) => d.type == _filter).toList();
@@ -425,6 +450,11 @@ class _DonationCard extends StatelessWidget {
                   donorPhone:   d.donorPhone,
                   donorCity:    d.donorCity,
                   donorPan:     d.donorPan,
+                  donorEmail:   d.donorEmail,
+                  donorAddress: d.donorAddress,
+                  donorState:   d.donorState,
+                  donorPincode: d.donorPincode,
+                  donorCountry: d.donorCountry,
                   donationType: d.type,
                   amount:       d.amount,
                   paymentMode:  d.method,

@@ -48,6 +48,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   String? _categoryId;
   bool _loadingData = true;
 
+  // Authorized approvers (active staff) — GET /users/approvers.
+  List<({String id, String name, String role})> _approvers = [];
+  String? _approvedBy;
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +60,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     _date = '${now.day.toString().padLeft(2,'0')} ${months[now.month-1]} ${now.year}';
     _preparedByCtrl = TextEditingController(text: _currentUserName());
     _loadCategories();
+    _loadApprovers();
   }
 
   Future<void> _loadCategories() async {
@@ -75,6 +80,20 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       }
     } catch (_) {
       if (mounted) setState(() => _loadingData = false);
+    }
+  }
+
+  Future<void> _loadApprovers() async {
+    try {
+      final r = await apiClient.get('/users/approvers');
+      final inner = r['data'];
+      final list = inner is List ? inner : (inner is Map ? (inner['data'] as List? ?? []) : []);
+      final approvers = list.whereType<Map<String, dynamic>>()
+          .map((m) => (id: m['id'] as String? ?? '', name: m['name'] as String? ?? '', role: m['role'] as String? ?? ''))
+          .toList();
+      if (mounted) setState(() => _approvers = approvers);
+    } catch (_) {
+      // Non-fatal — Approved By falls back to a free-text field if this fails.
     }
   }
 
@@ -149,6 +168,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         'amount': int.parse(amountText),
         'paymentMode': _methodModes[_method] ?? 'CASH',
         'preparedBy': _preparedByCtrl.text.trim(),
+        if (_approvedBy != null && _approvedBy!.trim().isNotEmpty) 'approvedBy': _approvedBy,
         if (_receivedByCtrl.text.trim().isNotEmpty) 'receivedBy': _receivedByCtrl.text.trim(),
         if (_notesCtrl.text.trim().isNotEmpty) 'notes': _notesCtrl.text.trim(),
       });
@@ -178,7 +198,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       paymentMode:   _methodModes[_method] ?? 'CASH',
       date:          _date,
       preparedBy:    _preparedByCtrl.text.trim(),
-      approvedBy:    _currentUserName(),
+      approvedBy:    (_approvedBy != null && _approvedBy!.trim().isNotEmpty) ? _approvedBy! : _currentUserName(),
       receivedBy:    _receivedByCtrl.text.trim(),
     );
     // Persist locally so list shows it immediately
@@ -194,7 +214,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         'date': _date,
         'status': 'COMPLETED',
         'preparedBy': _preparedByCtrl.text.trim(),
-        'approvedBy': _currentUserName(),
+        'approvedBy': voucher.approvedBy,
         'receivedBy': _receivedByCtrl.text.trim(),
       });
     }
@@ -397,9 +417,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
             const SizedBox(height: 12),
 
-            // prepared by / received by
+            // prepared by / approved by / received by
             _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const _Label('Prepared / Received'),
+              const _Label('Prepared / Approved / Received'),
               const SizedBox(height: 12),
               Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -436,6 +456,37 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   ),
                 ])),
               ]),
+              const SizedBox(height: 14),
+              Text('Approved By', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: context.textHint)),
+              const SizedBox(height: 6),
+              if (_approvers.isNotEmpty)
+                Wrap(spacing: 8, runSpacing: 8, children: _approvers.map((a) {
+                  final active = _approvedBy == a.name;
+                  return GestureDetector(
+                    onTap: () => setState(() => _approvedBy = a.name),
+                    child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(color: active ? _orange.withValues(alpha: 0.12) : context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? _orange : context.border)),
+                      child: Text.rich(TextSpan(children: [
+                        TextSpan(text: a.name, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? _orange : context.textSub)),
+                        TextSpan(text: ' (${a.role})', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: (active ? _orange : context.textSub).withValues(alpha: 0.7))),
+                      ])),
+                    ),
+                  );
+                }).toList())
+              else
+                TextField(
+                  onChanged: (v) => _approvedBy = v,
+                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textPrimary),
+                  decoration: InputDecoration(
+                    hintText: "Approver's name",
+                    hintStyle: TextStyle(fontSize: 13, color: context.textHint, fontWeight: FontWeight.w500),
+                    filled: true, fillColor: context.scaffoldBg,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.border)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.border)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _orange)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                  ),
+                ),
             ])),
 
             const SizedBox(height: 12),

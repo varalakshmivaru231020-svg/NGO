@@ -350,6 +350,29 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         if (_incomeCertAmt.text.trim().isNotEmpty) 'incomeCertificateAmount': int.tryParse(_incomeCertAmt.text.trim()),
         if (_incomeCertRdNo.text.trim().isNotEmpty) 'incomeCertificateRdNumber': _incomeCertRdNo.text.trim(),
       };
+
+      // Bundle any documents picked before the student exists into this same
+      // request (rather than a separate follow-up call) — so they're created
+      // together with the real new student id, and survive verbatim if this
+      // whole request gets queued for Super Admin approval instead of
+      // executing immediately (see CreateStudentDto.documents on the backend).
+      final documents = <Map<String, dynamic>>[
+        for (final entry in _pendingDocs.entries)
+          {
+            'category': entry.key,
+            'fileName': entry.value.filename,
+            'data': base64Encode(entry.value.bytes),
+          },
+        for (final entry in _pendingMultiDocs.entries)
+          for (final file in entry.value)
+            {
+              'category': entry.key,
+              'fileName': file.filename,
+              'data': base64Encode(file.bytes),
+            },
+      ];
+      if (documents.isNotEmpty) body['documents'] = documents;
+
       Map<String, dynamic>? res;
       try {
         res = await apiClient.post('/students', body);
@@ -364,10 +387,15 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         if (mounted) {
           setState(() => _saving = false);
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: const Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.hourglass_top_rounded, color: Colors.white, size: 18),
-              SizedBox(width: 8),
-              Flexible(child: Text('Submitted for Super Admin approval', style: TextStyle(fontWeight: FontWeight.w700))),
+            content: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.hourglass_top_rounded, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Flexible(child: Text(
+                documents.isNotEmpty
+                    ? 'Submitted for Super Admin approval, documents included'
+                    : 'Submitted for Super Admin approval',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              )),
             ]),
             backgroundColor: _amber600, behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -440,30 +468,6 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         } catch (_) {}
       }
 
-      // Upload any documents picked before the student existed.
-      if (savedId != null) {
-        for (final entry in _pendingDocs.entries) {
-          try {
-            await apiClient.post('/students/$savedId/documents', {
-              'category': entry.key,
-              'fileName': entry.value.filename,
-              'data': base64Encode(entry.value.bytes),
-            });
-          } catch (_) {}
-        }
-        for (final entry in _pendingMultiDocs.entries) {
-          for (final file in entry.value) {
-            try {
-              await apiClient.post('/students/$savedId/documents', {
-                'category': entry.key,
-                'fileName': file.filename,
-                'data': base64Encode(file.bytes),
-              });
-            } catch (_) {}
-          }
-        }
-      }
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: const Row(mainAxisSize: MainAxisSize.min, children: [
@@ -530,8 +534,23 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                 // ── Basic Profile ────────────────────────────────────
                 _SectionCard(title: 'Basic Profile', children: [
                   _FieldLabel('Centre'),
-                  if (_centres.isEmpty)
-                    const Text('Loading centres...', style: TextStyle(color: _onSurface3, fontSize: 13))
+                  if (_loadingForm)
+                    const Padding(padding: EdgeInsets.symmetric(vertical: 4),
+                      child: Text('Loading centres…', style: TextStyle(color: _onSurface3, fontSize: 13)))
+                  else if (_centres.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(children: [
+                        const Expanded(child: Text('No centres yet — add one first.', style: TextStyle(color: _onSurface3, fontSize: 13))),
+                        TextButton(
+                          onPressed: () async {
+                            await context.push('/centres');
+                            if (mounted) _loadFormData();
+                          },
+                          child: const Text('Add Centre', style: TextStyle(fontWeight: FontWeight.w700)),
+                        ),
+                      ]),
+                    )
                   else
                     _SegmentedToggle(
                       options: _centres.map((c) => c.name).toList(),

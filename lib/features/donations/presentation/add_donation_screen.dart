@@ -73,7 +73,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
   bool _pickingFile = false;
 
   // Loaded from API
-  List<({String id, String name, String city, String tier, String mobile, String email, String pan})> _donors = [];
+  List<({String id, String name, String city, String tier, String mobile, String email, String pan, String address, String state, String pincode, String country})> _donors = [];
   Map<String, String> _typeLabelToId = {};
   List<String> _typeLabels = [];
   bool _loadingData = false;
@@ -91,10 +91,10 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     _loadFormData();
   }
 
-  List<({String id, String name, String city, String tier, String mobile, String email, String pan})> _fallbackDonors() {
+  List<({String id, String name, String city, String tier, String mobile, String email, String pan, String address, String state, String pincode, String country})> _fallbackDonors() {
     // Only not-yet-synced local donors — no demo/mock donors in the picker.
     final all = [...demoLocalDonors];
-    return all.map<({String id, String name, String city, String tier, String mobile, String email, String pan})>((d) => (
+    return all.map<({String id, String name, String city, String tier, String mobile, String email, String pan, String address, String state, String pincode, String country})>((d) => (
       id:     d['id']     as String? ?? '',
       name:   d['name']   as String? ?? '',
       city:   d['city']   as String? ?? '',
@@ -102,6 +102,10 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       mobile: d['mobile'] as String? ?? d['phone'] as String? ?? '',
       email:  d['email']  as String? ?? '',
       pan:    d['pan']    as String? ?? '',
+      address: d['address'] as String? ?? '',
+      state:   d['state']   as String? ?? '',
+      pincode: d['pincode'] as String? ?? '',
+      country: d['country'] as String? ?? '',
     )).toList();
   }
 
@@ -116,9 +120,9 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       final dRes = results[0];
       final dInner = dRes['data'];
       List<dynamic> dList = dInner is Map ? (dInner['data'] as List? ?? []) : (dInner as List? ?? []);
-      var donors = dList.map<({String id, String name, String city, String tier, String mobile, String email, String pan})>((d) {
+      var donors = dList.map<({String id, String name, String city, String tier, String mobile, String email, String pan, String address, String state, String pincode, String country})>((d) {
         final m = d as Map<String, dynamic>;
-        return (id: m['id'] as String? ?? '', name: m['name'] as String? ?? '', city: m['city'] as String? ?? '', tier: m['tier'] as String? ?? 'SILVER', mobile: m['mobile'] as String? ?? m['phone'] as String? ?? '', email: m['email'] as String? ?? '', pan: m['pan'] as String? ?? '');
+        return (id: m['id'] as String? ?? '', name: m['name'] as String? ?? '', city: m['city'] as String? ?? '', tier: m['tier'] as String? ?? 'SILVER', mobile: m['mobile'] as String? ?? m['phone'] as String? ?? '', email: m['email'] as String? ?? '', pan: m['pan'] as String? ?? '', address: m['address'] as String? ?? '', state: m['state'] as String? ?? '', pincode: m['pincode'] as String? ?? '', country: m['country'] as String? ?? '');
       }).toList();
 
       // Always include demo/local donors
@@ -297,6 +301,11 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       donorPhone:   selectedDonor?.mobile ?? '',
       donorCity:    selectedDonor?.city ?? '',
       donorPan:     selectedDonor?.pan ?? '',
+      donorEmail:   selectedDonor?.email ?? '',
+      donorAddress: selectedDonor?.address ?? '',
+      donorState:   selectedDonor?.state ?? '',
+      donorPincode: selectedDonor?.pincode ?? '',
+      donorCountry: selectedDonor?.country ?? '',
       donationType: _donationType,
       amount:       int.parse(amountText),
       paymentMode:  _method,

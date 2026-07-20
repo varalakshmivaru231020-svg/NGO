@@ -85,6 +85,7 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
 
   // categories loaded from API: name → id
   Map<String, String> _categoryNameToId = {};
+  bool _loadingCategories = true;
   bool get _isEditing => widget.donorId != null;
   bool _loadingDonor = false;
 
@@ -104,8 +105,10 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
         final m = c as Map<String, dynamic>;
         map[m['name'] as String? ?? ''] = m['id'] as String? ?? '';
       }
-      if (mounted) setState(() => _categoryNameToId = map);
-    } catch (_) {}
+      if (mounted) setState(() { _categoryNameToId = map; _loadingCategories = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loadingCategories = false);
+    }
   }
 
   String _fromIso(String iso) {
@@ -335,9 +338,29 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
                   ),
                   _Row2(
                     left:  _Field(label: 'Date of Birth',   child: _DateField(ctrl: _dob,   hint: 'DD / MM / YYYY', onTap: () => _pickDate(_dob))),
-                    right: _Field(label: 'Donor Category',  child: _CategoryDropdown(
-                      value: _category, categories: _categoryNameToId.keys.toList(),
-                      onChanged: (v) => setState(() => _category = v))),
+                    right: _Field(label: 'Donor Category',  child: _loadingCategories
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          child: Text('Loading categories…',
+                            style: TextStyle(color: context.textHint, fontSize: 13, fontWeight: FontWeight.w500)))
+                      : _categoryNameToId.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Row(children: [
+                              Expanded(child: Text('No categories yet.',
+                                style: TextStyle(color: context.textHint, fontSize: 13, fontWeight: FontWeight.w500))),
+                              TextButton(
+                                onPressed: () async {
+                                  await context.push('/donors/categories');
+                                  if (mounted) _loadCategories();
+                                },
+                                child: const Text('Add Category', style: TextStyle(fontWeight: FontWeight.w700)),
+                              ),
+                            ]),
+                          )
+                        : _CategoryDropdown(
+                            value: _category, categories: _categoryNameToId.keys.toList(),
+                            onChanged: (v) => setState(() => _category = v))),
                   ),
                 ]),
                 const SizedBox(height: 14),

@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +9,7 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/app_launcher.dart';
 import '../../../core/utils/native_file_saver.dart';
+import '../../../core/utils/open_bytes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/widgets/photo_picker_widget.dart';
@@ -683,6 +686,27 @@ class _TeamMembersState extends State<TeamMembersScreen> {
     );
   }
 
+  // Row 0 is the admin owner; member rows map to _memberRoles[idx - 1].
+  // Returns null for the admin row or for a legacy local-only account that
+  // was never synced to the backend (no backendId) — Documents needs a real
+  // backend user id.
+  String? _memberBackendId(int idx) {
+    final ai = idx - 1;
+    final members = _memberRoles;
+    if (ai < 0 || ai >= members.length) return null;
+    return members[ai].backendId;
+  }
+
+  void _showMemberDocuments(BuildContext context, int idx) {
+    final backendId = _memberBackendId(idx);
+    if (backendId == null) return;
+    final name = _members[idx]['name'] as String;
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: Colors.transparent, useSafeArea: true,
+      builder: (_) => _MemberDocumentsSheet(memberId: backendId, memberName: name),
+    );
+  }
+
   void _confirmRemove(int idx) {
     final name = _members[idx]['name'] as String;
     showDialog(context: context, builder: (ctx) => AlertDialog(
@@ -755,6 +779,14 @@ class _TeamMembersState extends State<TeamMembersScreen> {
                   fontSize: 11, fontWeight: FontWeight.w700,
                   color: m['status'] == 'Active' ? _brand600 : m['status'] == 'Invited' ? _sky500 : context.textHint))),
               if (!isSelf) ...[
+                if (_memberBackendId(i) != null) ...[
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: () => _showMemberDocuments(context, i),
+                    child: Container(padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(8)),
+                      child: Icon(Icons.folder_outlined, size: 16, color: context.textSub))),
+                ],
                 const SizedBox(width: 6),
                 GestureDetector(
                   onTap: () => _confirmRemove(i),
@@ -773,6 +805,212 @@ class _TeamMembersState extends State<TeamMembersScreen> {
       icon: const Icon(Icons.person_add_outlined),
       label: const Text('Invite Member', style: TextStyle(fontWeight: FontWeight.w700)),
     ),
+  );
+}
+
+// Document metadata for a team member's uploaded files — same shape as
+// settings_screen.dart's own "My Documents" _MyDoc, just fetched for an
+// arbitrary member id instead of the logged-in user.
+class _MemberDoc {
+  _MemberDoc({required this.id, required this.category, required this.fileName, this.mimeType});
+  final String id, category, fileName;
+  final String? mimeType;
+  factory _MemberDoc.fromJson(Map<String, dynamic> j) => _MemberDoc(
+    id: j['id'] as String, category: j['category'] as String,
+    fileName: j['fileName'] as String, mimeType: j['mimeType'] as String?);
+}
+
+// Bottom sheet: view / upload / delete a team member's documents.
+// Uses the same GET/POST/DELETE /users/:id/documents and
+// GET /users/documents/:docId endpoints as the "My Documents" section on
+// the logged-in team member's own profile (settings_screen.dart).
+class _MemberDocumentsSheet extends StatefulWidget {
+  const _MemberDocumentsSheet({required this.memberId, required this.memberName});
+  final String memberId;
+  final String memberName;
+  @override
+  State<_MemberDocumentsSheet> createState() => _MemberDocumentsSheetState();
+}
+
+class _MemberDocumentsSheetState extends State<_MemberDocumentsSheet> {
+  List<_MemberDoc> _docs = [];
+  bool _loading = true;
+  bool _uploading = false;
+  String? _viewingId;
+  String? _deletingId;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    if (mounted) setState(() => _loading = true);
+    try {
+      final r = await apiClient.get('/users/${widget.memberId}/documents');
+      final list = (r['data'] as List<dynamic>? ?? const []);
+      final docs = list.whereType<Map>().map((m) => _MemberDoc.fromJson(m.cast<String, dynamic>())).toList();
+      if (mounted) setState(() { _docs = docs; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _upload() async {
+    final nameCtrl = TextEditingController();
+    final category = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('Document Name', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        content: TextField(
+          controller: nameCtrl, autofocus: true,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            hintText: 'Enter document name',
+            filled: true, fillColor: ctx.surface2,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () { final v = nameCtrl.text.trim(); if (v.isNotEmpty) Navigator.pop(ctx, v); },
+            style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: const Text('Next'),
+          ),
+        ],
+      ),
+    );
+    if (category == null || !mounted) return;
+    setState(() => _uploading = true);
+    try {
+      final result = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
+      final bytes = result?.files.single.bytes;
+      if (result != null && bytes != null && mounted) {
+        final fileName = result.files.single.name;
+        await apiClient.post('/users/${widget.memberId}/documents', {
+          'category': category, 'fileName': fileName, 'mimeType': null, 'data': base64Encode(bytes),
+        });
+        await _load();
+        if (mounted) _snack(context, '$fileName uploaded successfully');
+      }
+    } catch (_) {
+      if (mounted) _snack(context, 'Upload failed — check your connection and try again');
+    }
+    if (mounted) setState(() => _uploading = false);
+  }
+
+  Future<void> _view(_MemberDoc d) async {
+    setState(() => _viewingId = d.id);
+    try {
+      final r = await apiClient.get('/users/documents/${d.id}');
+      final data = (r['data'] as Map).cast<String, dynamic>();
+      final b64 = data['data'] as String? ?? '';
+      if (b64.isNotEmpty) openBytesInBrowser(base64Decode(b64), d.fileName);
+    } catch (_) {
+      if (mounted) _snack(context, 'Could not open document');
+    }
+    if (mounted) setState(() => _viewingId = null);
+  }
+
+  void _confirmDelete(_MemberDoc d) {
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('Delete Document', style: TextStyle(fontWeight: FontWeight.w800)),
+      content: Text('Delete "${d.fileName}"? This cannot be undone.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () { Navigator.pop(ctx); _delete(d); },
+          child: const Text('Delete', style: TextStyle(color: _coral500, fontWeight: FontWeight.w700)),
+        ),
+      ],
+    ));
+  }
+
+  Future<void> _delete(_MemberDoc d) async {
+    setState(() => _deletingId = d.id);
+    try { await apiClient.delete('/users/documents/${d.id}'); } catch (_) {}
+    await _load();
+    if (mounted) setState(() => _deletingId = null);
+  }
+
+  Widget _row(_MemberDoc d) {
+    final viewing = _viewingId == d.id;
+    final deleting = _deletingId == d.id;
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+      leading: Container(width: 38, height: 38,
+        decoration: BoxDecoration(color: context.surface2, shape: BoxShape.circle),
+        child: Icon(Icons.insert_drive_file_outlined, size: 18, color: context.textSub)),
+      title: Text(d.fileName, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.textPrimary),
+        overflow: TextOverflow.ellipsis),
+      subtitle: Text(d.category, style: TextStyle(fontSize: 12.5, color: context.textHint)),
+      trailing: deleting
+        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _coral500))
+        : Row(mainAxisSize: MainAxisSize.min, children: [
+            GestureDetector(
+              onTap: viewing ? null : () => _view(d),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: viewing
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600))
+                  : const Text('View', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand600)),
+              ),
+            ),
+            GestureDetector(
+              onTap: () => _confirmDelete(d),
+              child: const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.delete_outline, size: 18, color: _coral500)),
+            ),
+          ]),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+    constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
+    decoration: BoxDecoration(color: context.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+    padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(context).viewInsets.bottom + 24),
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(color: context.border, borderRadius: BorderRadius.circular(2)))),
+      Row(children: [
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Documents', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          Text(widget.memberName, style: TextStyle(fontSize: 12.5, color: context.textHint, fontWeight: FontWeight.w500)),
+        ])),
+        GestureDetector(
+          onTap: _uploading ? null : _upload,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(10)),
+            child: _uploading
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.upload_file_outlined, size: 16, color: Colors.white),
+                  SizedBox(width: 6),
+                  Text('Upload', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white)),
+                ]),
+          ),
+        ),
+      ]),
+      const SizedBox(height: 8),
+      Flexible(child: _loading
+        ? const Padding(padding: EdgeInsets.symmetric(vertical: 30),
+            child: Center(child: SizedBox(width: 22, height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600))))
+        : _docs.isEmpty
+          ? Padding(padding: const EdgeInsets.symmetric(vertical: 30),
+              child: Center(child: Text('No documents uploaded yet',
+                style: TextStyle(fontSize: 13, color: context.textHint, fontWeight: FontWeight.w600))))
+          : ListView.separated(
+              shrinkWrap: true,
+              itemCount: _docs.length,
+              separatorBuilder: (_, __) => Divider(height: 1, color: context.border),
+              itemBuilder: (_, i) => _row(_docs[i]),
+            )),
+    ]),
   );
 }
 
@@ -1476,17 +1714,27 @@ class RazorpayCredentialsScreen extends StatefulWidget {
 }
 
 class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
-  final _keyIdCtrl     = TextEditingController();
-  final _keySecretCtrl = TextEditingController();
+  final _keyIdCtrl        = TextEditingController();
+  final _keySecretCtrl    = TextEditingController();
+  final _webhookSecretCtrl = TextEditingController();
   bool _loading = true;
   bool _saving  = false;
-  bool _obscureSecret = true;
+  bool _obscureSecret  = true;
+  bool _obscureWebhook = true;
+  // Backend restricts GET/PATCH /settings/razorpay to SUPER_ADMIN — a plain
+  // ADMIN (which also passes the app-side isAdmin check) gets a 403 here.
+  bool _forbidden = false;
 
   @override
   void initState() { super.initState(); _load(); }
 
   @override
-  void dispose() { _keyIdCtrl.dispose(); _keySecretCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _keyIdCtrl.dispose();
+    _keySecretCtrl.dispose();
+    _webhookSecretCtrl.dispose();
+    super.dispose();
+  }
 
   // Backend-persisted (Super Admin only) — the Key Secret must live server
   // side since only the backend ever calls Razorpay's API with it.
@@ -1495,26 +1743,38 @@ class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
       final r = await apiClient.get('/settings/razorpay');
       final d = (r['data'] as Map?)?.cast<String, dynamic>() ?? {};
       if (mounted) setState(() {
-        _keyIdCtrl.text     = d['keyId'] as String? ?? '';
-        _keySecretCtrl.text = d['keySecret'] as String? ?? '';
+        _keyIdCtrl.text         = d['keyId'] as String? ?? '';
+        _keySecretCtrl.text     = d['keySecret'] as String? ?? '';
+        _webhookSecretCtrl.text = d['webhookSecret'] as String? ?? '';
         _loading = false;
       });
+    } on DioException catch (e) {
+      if (mounted) setState(() { _loading = false; _forbidden = e.response?.statusCode == 403; });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _save() async {
-    final keyId     = _keyIdCtrl.text.trim();
-    final keySecret = _keySecretCtrl.text.trim();
+    final keyId         = _keyIdCtrl.text.trim();
+    final keySecret     = _keySecretCtrl.text.trim();
+    final webhookSecret = _webhookSecretCtrl.text.trim();
     if (keyId.isEmpty || keySecret.isEmpty) {
       _snack(context, 'Both Key ID and Key Secret are required');
       return;
     }
     setState(() => _saving = true);
     try {
-      await apiClient.patch('/settings/razorpay', {'keyId': keyId, 'keySecret': keySecret});
+      await apiClient.patch('/settings/razorpay', {
+        'keyId': keyId, 'keySecret': keySecret, 'webhookSecret': webhookSecret,
+      });
       if (mounted) _snack(context, '✓ Razorpay credentials saved');
+    } on DioException catch (e) {
+      if (mounted) {
+        _snack(context, e.response?.statusCode == 403
+          ? 'You do not have permission to update payment settings'
+          : 'Could not save — check your connection and try again');
+      }
     } catch (_) {
       if (mounted) _snack(context, 'Could not save — check your connection and try again');
     }
@@ -1524,9 +1784,15 @@ class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
   Future<void> _clear() async {
     setState(() => _saving = true);
     try {
-      await apiClient.patch('/settings/razorpay', {'keyId': '', 'keySecret': ''});
-      if (mounted) setState(() { _keyIdCtrl.clear(); _keySecretCtrl.clear(); });
+      await apiClient.patch('/settings/razorpay', {'keyId': '', 'keySecret': '', 'webhookSecret': ''});
+      if (mounted) setState(() { _keyIdCtrl.clear(); _keySecretCtrl.clear(); _webhookSecretCtrl.clear(); });
       if (mounted) _snack(context, 'Credentials cleared');
+    } on DioException catch (e) {
+      if (mounted) {
+        _snack(context, e.response?.statusCode == 403
+          ? 'You do not have permission to update payment settings'
+          : 'Could not clear — check your connection and try again');
+      }
     } catch (_) {
       if (mounted) _snack(context, 'Could not clear — check your connection and try again');
     }
@@ -1539,6 +1805,17 @@ class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
       _buildHeader(context, 'Razorpay Credentials', sub: 'Payment gateway configuration'),
       if (_loading)
         const Expanded(child: Center(child: CircularProgressIndicator()))
+      else if (_forbidden)
+        Expanded(child: Center(child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.lock_outline, size: 40, color: context.textHint),
+            const SizedBox(height: 12),
+            Text('You do not have permission to view payment settings',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.textSub)),
+          ]),
+        )))
       else
         Expanded(child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
@@ -1594,6 +1871,28 @@ class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
                   suffixIcon: IconButton(
                     icon: Icon(_obscureSecret ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: context.textHint),
                     onPressed: () => setState(() => _obscureSecret = !_obscureSecret)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12)),
+              ),
+            )),
+
+            const SizedBox(height: 16),
+            _buildSectionLabel(context, 'Webhook Secret (Private)'),
+            _buildCard(context, child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: TextField(
+                controller: _webhookSecretCtrl,
+                obscureText: _obscureWebhook,
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.webhook_outlined, size: 18, color: _brand600),
+                  hintText: '••••••••••••••••••••',
+                  hintStyle: TextStyle(fontSize: 12, color: context.textHint),
+                  filled: true, fillColor: context.surface2,
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureWebhook ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: context.textHint),
+                    onPressed: () => setState(() => _obscureWebhook = !_obscureWebhook)),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                   focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12)),
@@ -2621,7 +2920,7 @@ class AdminPanelScreen extends StatelessWidget {
                   icon: Icons.devices_outlined, fg: _sky500, value: '2 devices',
                   onTap: () => context.go('/settings/linked-devices')),
                 _buildRow(context, 'Audit Log',
-                  icon: Icons.history_outlined, fg: const Color(0xFF64748B), value: 'Coming soon',
+                  icon: Icons.history_outlined, fg: context.textSub, value: 'Coming soon',
                   last: true, onTap: null),
               ])),
             ]),
@@ -2800,7 +3099,7 @@ class _ManageCentresScreenState extends State<ManageCentresScreen> {
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
             hintText: 'Centre name',
-            filled: true, fillColor: const Color(0xFFF4F7F6),
+            filled: true, fillColor: ctx.surface2,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -2871,11 +3170,11 @@ class _ManageCentresScreenState extends State<ManageCentresScreen> {
         _buildHeader(context, 'Manage Centres', sub: '${demoCentres.length} centres'),
         Expanded(child: demoCentres.isEmpty
           ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.location_city_outlined, size: 48, color: Color(0xFFB0C4BF)),
+              Icon(Icons.location_city_outlined, size: 48, color: context.textHint),
               const SizedBox(height: 12),
-              const Text('No centres yet', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF5A6B67))),
+              Text('No centres yet', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.textSub)),
               const SizedBox(height: 6),
-              Text('Tap + to add a centre', style: TextStyle(fontSize: 13, color: const Color(0xFF93A29F))),
+              Text('Tap + to add a centre', style: TextStyle(fontSize: 13, color: context.textHint)),
             ]))
           : ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
@@ -2896,10 +3195,10 @@ class _ManageCentresScreenState extends State<ManageCentresScreen> {
                       decoration: const BoxDecoration(color: _brand100, shape: BoxShape.circle),
                       child: const Icon(Icons.location_city_outlined, color: _brand600, size: 20)),
                     title: Text(c.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                    subtitle: Text('ID: ${c.id}', style: const TextStyle(fontSize: 12, color: Color(0xFF93A29F))),
+                    subtitle: Text('ID: ${c.id}', style: TextStyle(fontSize: 12, color: context.textHint)),
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                       IconButton(
-                        icon: const Icon(Icons.edit_outlined, size: 19, color: Color(0xFF5A6B67)),
+                        icon: Icon(Icons.edit_outlined, size: 19, color: context.textSub),
                         onPressed: () => _openSheet(editing: c)),
                       IconButton(
                         icon: const Icon(Icons.delete_outline, size: 19, color: _coral500),

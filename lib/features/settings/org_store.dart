@@ -21,10 +21,21 @@ class OrgData {
     required this.regNo,
     required this.pan,
     required this.fcra,
+    this.city = '',
+    this.state = '',
+    this.country = '',
+    this.pincode = '',
+    this.email = '',
+    this.reg12A = '',
+    this.cert80G = '',
+    this.updatedAt = '',
     this.logoBase64,
   });
 
   final String name, website, address, phone, regNo, pan, fcra;
+  // Extra fields supported by the backend GET/PATCH /settings/organization
+  // shape that the original local-only store didn't have.
+  final String city, state, country, pincode, email, reg12A, cert80G, updatedAt;
   final String? logoBase64; // org logo image bytes, base64-encoded (null = default)
 
   Uint8List? get logoBytes {
@@ -68,6 +79,14 @@ class OrgData {
     String? regNo,
     String? pan,
     String? fcra,
+    String? city,
+    String? state,
+    String? country,
+    String? pincode,
+    String? email,
+    String? reg12A,
+    String? cert80G,
+    String? updatedAt,
     Object? logoBase64 = _unset, // pass null explicitly to clear the logo
   }) =>
       OrgData(
@@ -78,6 +97,14 @@ class OrgData {
         regNo: regNo ?? this.regNo,
         pan: pan ?? this.pan,
         fcra: fcra ?? this.fcra,
+        city: city ?? this.city,
+        state: state ?? this.state,
+        country: country ?? this.country,
+        pincode: pincode ?? this.pincode,
+        email: email ?? this.email,
+        reg12A: reg12A ?? this.reg12A,
+        cert80G: cert80G ?? this.cert80G,
+        updatedAt: updatedAt ?? this.updatedAt,
         logoBase64: identical(logoBase64, _unset)
             ? this.logoBase64
             : logoBase64 as String?,
@@ -91,6 +118,14 @@ class OrgData {
         'regNo': regNo,
         'pan': pan,
         'fcra': fcra,
+        'city': city,
+        'state': state,
+        'country': country,
+        'pincode': pincode,
+        'email': email,
+        'reg12A': reg12A,
+        'cert80G': cert80G,
+        'updatedAt': updatedAt,
         'logo': logoBase64,
       };
 
@@ -102,8 +137,61 @@ class OrgData {
         regNo: (j['regNo'] as String?) ?? _defaultOrg.regNo,
         pan: (j['pan'] as String?) ?? _defaultOrg.pan,
         fcra: (j['fcra'] as String?) ?? _defaultOrg.fcra,
+        city: (j['city'] as String?) ?? '',
+        state: (j['state'] as String?) ?? '',
+        country: (j['country'] as String?) ?? '',
+        pincode: (j['pincode'] as String?) ?? '',
+        email: (j['email'] as String?) ?? '',
+        reg12A: (j['reg12A'] as String?) ?? '',
+        cert80G: (j['cert80G'] as String?) ?? '',
+        updatedAt: (j['updatedAt'] as String?) ?? '',
         logoBase64: j['logo'] as String?,
       );
+
+  // Maps the REAL backend shape (GET/PATCH /settings/organization) onto the
+  // local cache. Falls back to whatever is already cached for any field the
+  // backend didn't return, so a partial response never blanks the UI.
+  factory OrgData.fromBackend(Map<String, dynamic> j, {OrgData? fallback}) {
+    final f = fallback ?? _defaultOrg;
+    String s(String key, String fallbackVal) => (j[key] as String?)?.isNotEmpty == true ? j[key] as String : fallbackVal;
+    return OrgData(
+      name: s('name', f.name),
+      website: s('website', f.website),
+      address: s('address', f.address),
+      phone: s('phone', f.phone),
+      regNo: s('registrationNumber', f.regNo),
+      pan: s('pan', f.pan),
+      fcra: s('fcra', f.fcra),
+      city: s('city', f.city),
+      state: s('state', f.state),
+      country: s('country', f.country),
+      pincode: s('pincode', f.pincode),
+      email: s('email', f.email),
+      reg12A: s('reg12A', f.reg12A),
+      cert80G: s('cert80G', f.cert80G),
+      updatedAt: (j['updatedAt'] as String?) ?? f.updatedAt,
+      logoBase64: (j['logoBase64'] as String?)?.isNotEmpty == true ? j['logoBase64'] as String : f.logoBase64,
+    );
+  }
+
+  // Maps this local cache onto the backend PATCH shape.
+  Map<String, dynamic> toBackendJson() => {
+        'name': name,
+        'address': address,
+        'city': city,
+        'state': state,
+        'country': country,
+        'pincode': pincode,
+        'phone': phone,
+        'email': email,
+        'website': website,
+        'registrationNumber': regNo,
+        'pan': pan,
+        'reg12A': reg12A,
+        'cert80G': cert80G,
+        'fcra': fcra,
+        if (logoBase64 != null) 'logoBase64': logoBase64,
+      };
 }
 
 const _unset = Object();
