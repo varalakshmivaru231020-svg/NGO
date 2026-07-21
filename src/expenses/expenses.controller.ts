@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { SessionUser } from '../approvals/approvals.service';
 import { ExpensesService } from './expenses.service';
@@ -11,7 +13,7 @@ import { CreateExpenseCategoryDto } from './dto/create-expense-category.dto';
 
 @ApiTags('expenses')
 @ApiBearerAuth('JWT')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('expenses')
 export class ExpensesController {
   constructor(private svc: ExpensesService) {}
@@ -30,7 +32,8 @@ export class ExpensesController {
   @Get('categories') @ApiOperation({ summary: 'List expense categories' })
   findCategories() { return this.svc.findCategories(); }
 
-  @Post('categories') @ApiOperation({ summary: 'Create an expense category' })
+  // Admin/Super Admin only — a role member picks from the existing list.
+  @Post('categories') @Roles('ADMIN') @ApiOperation({ summary: 'Create an expense category' })
   createCategory(@Body() dto: CreateExpenseCategoryDto) { return this.svc.createCategory(dto); }
 
   @Get(':id') @ApiOperation({ summary: 'Get expense by ID' })
