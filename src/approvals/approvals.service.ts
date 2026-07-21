@@ -21,11 +21,15 @@ const MUTATING = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
 // module level — 'students'/'users' stay approval-gated for every other
 // mutation (profile edits, etc.), only their document upload/delete
 // sub-routes bypass the queue so uploads save and appear immediately.
+// Creating an expense category is a reference-data addition (a label), not a
+// financial record — gating it behind approval only blocked the staff member
+// from finishing the expense they were adding, for no real benefit.
 const EXEMPT_PATH_PATTERNS: RegExp[] = [
   /^students\/[^/]+\/documents$/i,
   /^students\/documents\/[^/]+$/i,
   /^users\/[^/]+\/documents$/i,
   /^users\/documents\/[^/]+$/i,
+  /^expenses\/categories$/i,
 ];
 
 export interface SessionUser {
