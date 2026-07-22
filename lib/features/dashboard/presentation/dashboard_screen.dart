@@ -156,10 +156,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       } catch (_) { return null; }
     }
     
-    final sCount = await count('/students');
-    final dCount = await count('/donors');
-    final oCount = await count('/offices');
-    
+    // The 4 fetches below are independent of each other — run them
+    // concurrently instead of one-after-another, so the dashboard's load time
+    // is bounded by the slowest single request, not the sum of all four.
+    Future<Map<String, dynamic>> loadDonationStats() async {
     int? raised = 0;
     int? today = 0;
     List<_Donation> recent = [];
@@ -301,18 +301,32 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     } catch (_) {}
 
+    return {
+      'raised': raised, 'today': today, 'recent': recent, 'slices': slices,
+      'trend7M': trend7M, 'trend1Y': trend1Y, 'totalAmt': totalAmt,
+    };
+    }
+
+    final results = await Future.wait<dynamic>([
+      count('/students'),
+      count('/donors'),
+      count('/offices'),
+      loadDonationStats(),
+    ]);
+    final donationStats = results[3] as Map<String, dynamic>;
+
     if (mounted) {
       setState(() {
-        _students = sCount;
-        _donors = dCount;
-        _offices = oCount;
-        _raised = raised;
-        _todayRaised = today;
-        _dynamicRecentDonations = recent;
-        _dynamicTypeSlices = slices;
-        _dynamicTrend7M = trend7M;
-        _dynamicTrend1Y = trend1Y;
-        _totalDonationsAmount = totalAmt;
+        _students = results[0] as int?;
+        _donors = results[1] as int?;
+        _offices = results[2] as int?;
+        _raised = donationStats['raised'] as int?;
+        _todayRaised = donationStats['today'] as int?;
+        _dynamicRecentDonations = donationStats['recent'] as List<_Donation>;
+        _dynamicTypeSlices = donationStats['slices'] as List<_TypeSlice>;
+        _dynamicTrend7M = donationStats['trend7M'] as List<MapEntry<String, double>>;
+        _dynamicTrend1Y = donationStats['trend1Y'] as List<MapEntry<String, double>>;
+        _totalDonationsAmount = donationStats['totalAmt'] as int;
       });
     }
   }

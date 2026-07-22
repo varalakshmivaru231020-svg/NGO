@@ -40,13 +40,17 @@ class _Donor {
         categoryColor = (j['categories'] as List<dynamic>? ?? []).isNotEmpty
             ? (j['categories'][0]['category']?['color'] as String?)
             : null,
-        avatar = j['avatar'] as String?;
+        avatar = j['avatar'] as String?,
+        isPending = (j['_pendingApproval'] as bool?) ?? false;
 
   final String id, name, mobile, city, tier, gender;
   final int donationCount;
   final List<String> categories;
   final String? categoryColor;
   final String? avatar;
+  // True for a non-Super-Admin's own just-submitted donor, awaiting approval —
+  // synthesized from GET /approvals/mine, not a real backend donor yet.
+  final bool isPending;
 
   // Profile photo bytes: locally-cached image (instant) or the DB avatar.
   Uint8List? get photoBytes {
@@ -119,20 +123,52 @@ final donorRefreshProvider = StateProvider<int>((ref) => 0);
 // No demo donors — the list reflects only real backend data.
 final mockDonorData = <Map<String, dynamic>>[];
 
+// The logged-in (non-Super-Admin) user's own donor submissions still awaiting
+// approval — otherwise a staff member's just-created donor simply disappears
+// until a Super Admin approves it. Backend-driven (GET /approvals/mine) so it
+// survives reloads and vanishes once approved/rejected.
+Future<List<_Donor>> _loadMyPendingDonors() async {
+  try {
+    final r = await apiClient.get('/approvals/mine');
+    final inner = r['data'];
+    final reqs = inner is List
+        ? inner
+        : (inner is Map ? (inner['data'] as List<dynamic>? ?? const []) : const []);
+    final donorReqs = reqs.whereType<Map<String, dynamic>>().where((q) =>
+        (q['module'] as String?)?.toLowerCase() == 'donors' &&
+        (q['action'] as String?)?.toUpperCase() == 'CREATE' &&
+        (q['status'] as String?)?.toUpperCase() == 'PENDING').toList();
+    return donorReqs.map((q) {
+      final payload = (q['payload'] as Map?)?.cast<String, dynamic>() ?? const {};
+      return _Donor.fromJson({
+        ...payload,
+        'id': 'pending-${q['id']}',
+        'name': payload['name'] ?? 'Unknown',
+        '_pendingApproval': true,
+      });
+    }).toList();
+  } catch (_) {
+    return const [];
+  }
+}
+
 // ── Provider ──────────────────────────────────────────────────────────
 final donorsProvider = FutureProvider<List<_Donor>>((ref) async {
   ref.watch(donorRefreshProvider); // re-run whenever refresh counter changes
+  final pending = await _loadMyPendingDonors();
   try {
     final res = await apiClient.get('/donors', params: {'limit': '100', 'page': '1'});
     final list = (res['data'] as List<dynamic>? ?? []);
     // Backend is the source of truth even when empty (clean DB = empty list).
     return [
+      ...pending,
       ...demoLocalDonors.map(_Donor.fromJson),
       ...list.map((e) => _Donor.fromJson(e as Map<String, dynamic>)),
     ];
   } catch (_) {}
   // Backend unreachable → demo/mock so the app still works offline.
   return [
+    ...pending,
     ...demoLocalDonors.map(_Donor.fromJson),
     ...mockDonorData.map(_Donor.fromJson),
   ];
@@ -278,8 +314,12 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
         ]),
         data: (allDonors) {
           final donors = _filtered(allDonors);
-          final maleCount = allDonors.where((d) => d.gender == 'MALE').length;
-          final femaleCount = allDonors.where((d) => d.gender != 'MALE').length;
+          // Pending (not-yet-approved) donors show up in the list so the staff
+          // member who created them can track status, but aren't real donors
+          // yet — excluded from every aggregate count below.
+          final realDonors = allDonors.where((d) => !d.isPending).toList();
+          final maleCount = realDonors.where((d) => d.gender == 'MALE').length;
+          final femaleCount = realDonors.where((d) => d.gender != 'MALE').length;
 
           return RefreshIndicator(
             color: _brand600,
@@ -293,7 +333,7 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text('Donors', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: -0.5, height: 1, color: context.textPrimary)),
                     const SizedBox(height: 3),
-                    Text('${allDonors.length} total · ${categories.length} categories',
+                    Text('${realDonors.length} total · ${categories.length} categories',
                       style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
                   ])),
                   GestureDetector(
@@ -323,7 +363,7 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text('Total Donors', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textSub)),
                       const SizedBox(height: 3),
-                      Text('${allDonors.length}', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: -1, height: 1, color: context.textPrimary)),
+                      Text('${realDonors.length}', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: -1, height: 1, color: context.textPrimary)),
                     ])),
                     Row(children: [
                       _GenderPill(count: '$maleCount', label: 'Male', bg: _brand100, fg: _brand600),
@@ -382,11 +422,11 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
                           padding: const EdgeInsets.only(right: 8),
                           child: GestureDetector(
                             onTap: () => setState(() => _activeFilter = 'All'),
-                            child: _buildChip(context, 'All', allDonors.length, _activeFilter == 'All'),
+                            child: _buildChip(context, 'All', realDonors.length, _activeFilter == 'All'),
                           ),
                         ),
                         ...categories.map((cat) {
-                          final realCount = allDonors.where((d) => d.displayCategory == cat.name).length;
+                          final realCount = realDonors.where((d) => d.displayCategory == cat.name).length;
                           return Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: GestureDetector(
@@ -418,8 +458,10 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
                       itemBuilder: (ctx, i) => _DonorCard(
                         donor: donors[i],
-                        onTap: () => ctx.go('/donors/${donors[i].id}'),
-                        onDelete: () => _confirmDelete(donors[i]),
+                        // A pending donor has no real backend record yet — no
+                        // detail page to open, no delete action to send.
+                        onTap: donors[i].isPending ? () {} : () => ctx.go('/donors/${donors[i].id}'),
+                        onDelete: donors[i].isPending ? null : () => _confirmDelete(donors[i]),
                       ),
                     ),
               ),
@@ -573,7 +615,18 @@ class _DonorCard extends StatelessWidget {
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Flexible(child: Text(donor.name, style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, letterSpacing: -0.2, height: 1, color: context.textPrimary), overflow: TextOverflow.ellipsis)),
-              if (donor.categories.isNotEmpty) ...[
+              if (donor.isPending) ...[
+                const SizedBox(width: 7),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: _amber100, borderRadius: BorderRadius.circular(8)),
+                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.schedule_outlined, size: 11, color: _amber600),
+                    SizedBox(width: 4),
+                    Text('Pending Approval', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: _amber600)),
+                  ]),
+                ),
+              ] else if (donor.categories.isNotEmpty) ...[
                 const SizedBox(width: 7),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

@@ -359,16 +359,19 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                         child: Text(c.label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? _orange : context.textSub))),
                     );
                   }),
-                  GestureDetector(
-                    onTap: _addCategory,
-                    child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.border, style: BorderStyle.solid)),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.add, size: 14, color: context.textSub),
-                        const SizedBox(width: 4),
-                        Text('New', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub)),
-                      ])),
-                  ),
+                  // Only the Super Admin can add a new category — a role
+                  // member picks from the existing list.
+                  if (isAdmin)
+                    GestureDetector(
+                      onTap: _addCategory,
+                      child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.border, style: BorderStyle.solid)),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.add, size: 14, color: context.textSub),
+                          const SizedBox(width: 4),
+                          Text('New', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub)),
+                        ])),
+                    ),
                 ]),
             ])),
 

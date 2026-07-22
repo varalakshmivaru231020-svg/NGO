@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/auth/role_auth.dart';
+import '../approval_store.dart';
 
 const _brand600 = Color(0xFFFF9933);
 const _brand100 = Color(0xFFFFE8CC);
@@ -18,7 +19,7 @@ const _border = Color(0xFFE5EBE9);
 const _surface2 = Color(0xFFF4F7F6);
 
 // Fields we never want to render literally in the diff (base64 blobs, ids).
-const _hiddenKeys = {'photo', 'avatar', 'password', 'passwordHash'};
+const _hiddenKeys = {'photo', 'avatar', 'password', 'passwordHash', 'tier'};
 
 class ApprovalsScreen extends StatefulWidget {
   const ApprovalsScreen({super.key});
@@ -34,6 +35,10 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
   String _search = '';
   String _moduleFilter = 'All';
   final Set<String> _selected = {};
+  // Ids currently mid-approve/reject — the buttons had no loading/disabled
+  // state at all, so clicking again before the first request's round trip
+  // (server + DB) resolved fired duplicate requests. Guards against that.
+  final Set<String> _actioning = {};
 
   // Lookups so the ids stored in a request payload (donorId, typeId, centerId)
   // render as human-readable names in the diff view and the card subject.
@@ -67,6 +72,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
         'approved': (sd['approved'] as int?) ?? 0,
         'rejected': (sd['rejected'] as int?) ?? 0,
       };
+      // Keep the sidebar badge in sync with what this screen just fetched.
+      pendingApprovalsCount.value = _stats['pending']!;
       await _loadLookups();
     } catch (_) {
       // leave existing data; a toast on actions will surface errors
@@ -129,6 +136,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
   ));
 
   Future<void> _approve(String id) async {
+    if (_actioning.contains(id)) return;
+    setState(() => _actioning.add(id));
     try {
       await apiClient.post('/approvals/$id/approve', {});
       _toast('Approved & applied');
@@ -136,9 +145,12 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
     } catch (e) {
       _toast(_errMsg(e), error: true);
     }
+    if (mounted) setState(() => _actioning.remove(id));
   }
 
   Future<void> _reject(String id, String reason) async {
+    if (_actioning.contains(id)) return;
+    setState(() => _actioning.add(id));
     try {
       await apiClient.post('/approvals/$id/reject', {'reason': reason});
       _toast('Request rejected');
@@ -146,6 +158,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
     } catch (e) {
       _toast(_errMsg(e), error: true);
     }
+    if (mounted) setState(() => _actioning.remove(id));
   }
 
   Future<void> _bulkApprove(List<String> ids) async {
@@ -510,21 +523,26 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
         ],
         if (status == 'PENDING') ...[
           const SizedBox(height: 12),
-          Row(children: [
+          Builder(builder: (_) {
+            final busy = _actioning.contains(id);
+            return Row(children: [
             Expanded(child: OutlinedButton.icon(
-              onPressed: () => _confirmReject(id: id),
+              onPressed: busy ? null : () => _confirmReject(id: id),
               icon: const Icon(Icons.close_rounded, size: 17),
               label: const Text('Reject', style: TextStyle(fontWeight: FontWeight.w800)),
               style: OutlinedButton.styleFrom(foregroundColor: _coral500, side: const BorderSide(color: _coral500), padding: const EdgeInsets.symmetric(vertical: 11)),
             )),
             const SizedBox(width: 10),
             Expanded(child: ElevatedButton.icon(
-              onPressed: () => _approve(id),
-              icon: const Icon(Icons.check_rounded, size: 17),
-              label: const Text('Approve', style: TextStyle(fontWeight: FontWeight.w800)),
+              onPressed: busy ? null : () => _approve(id),
+              icon: busy
+                  ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.check_rounded, size: 17),
+              label: Text(busy ? 'Approving…' : 'Approve', style: const TextStyle(fontWeight: FontWeight.w800)),
               style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0, padding: const EdgeInsets.symmetric(vertical: 11)),
             )),
-          ]),
+          ]);
+          }),
         ],
       ]),
     );

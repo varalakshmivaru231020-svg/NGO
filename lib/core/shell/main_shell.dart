@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/auth/role_auth.dart';
 import '../../features/notifications/notification_store.dart';
+import '../../features/approvals/approval_store.dart';
 import '../../features/settings/profile_store.dart';
 import '../../features/settings/org_store.dart';
 
@@ -237,6 +238,16 @@ class _NavRow extends StatelessWidget {
     if (n.route == '/notifications') {
       return ValueListenableBuilder<int>(
         valueListenable: unreadNotifCount,
+        builder: (context, count, _) => _row(context, count > 0 ? count : null),
+      );
+    }
+    // The Approvals row shows the live pending-request count — only ever
+    // built for a Super Admin (the only role this nav item is visible to),
+    // matching who GET /approvals/stats is restricted to.
+    if (n.route == '/approvals') {
+      refreshPendingApprovalsCount();
+      return ValueListenableBuilder<int>(
+        valueListenable: pendingApprovalsCount,
         builder: (context, count, _) => _row(context, count > 0 ? count : null),
       );
     }

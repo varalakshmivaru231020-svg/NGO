@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'ssl_bypass.dart' if (dart.library.io) 'ssl_bypass_io.dart';
 
@@ -7,7 +8,11 @@ class ApiClient {
   //  • local dev (localhost / 127.0.0.1)  -> http://localhost:3001/api/v1
   //  • production (any other host)         -> https://<that host>/api/v1
   //    (the site reverse-proxies /api to the backend, so it's same-origin).
+  // On a native build (APK/desktop) there's no "current host" to read —
+  // Uri.base doesn't reflect a real domain — so it must point straight at
+  // the live server instead of falling through to the web-only localhost case.
   static String get defaultBaseUrl {
+    if (!kIsWeb) return 'https://sket.krishnashraya.in/api/v1';
     final host = Uri.base.host;
     if (host.isEmpty || host == 'localhost' || host == '127.0.0.1') {
       return 'http://localhost:3001/api/v1';

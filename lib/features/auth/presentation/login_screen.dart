@@ -162,8 +162,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     _inputField(
       controller: _nameCtrl,
-      label: 'Email or Role Name',
-      hint: 'Enter email or role name',
+      label: 'Email',
+      hint: 'Enter your email',
       prefix: Icons.person_outline_rounded,
       action: TextInputAction.next,
     ),
@@ -242,27 +242,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final name     = _nameCtrl.text.trim();
     final password = _passCtrl.text;
     if (name.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Please enter your name/email and password');
+      setState(() => _error = 'Please enter your email and password');
       return;
     }
     setState(() { _loading = true; _error = null; });
 
     // 1. Backend login — accounts persist server-side, so they work across
-    //    devices/browsers. Email logins are tried here first.
-    if (name.contains('@')) {
-      try {
-        final response = await apiClient.post('/auth/login', {'email': name, 'password': password});
-        final tokens = (response['data'] as Map).cast<String, dynamic>();
-        await apiClient.saveTokens(tokens['accessToken'] as String, tokens['refreshToken'] as String);
-        final meResp = await apiClient.get('/auth/me');
-        final me = (meResp['data'] as Map).cast<String, dynamic>();
-        final route = applyBackendUser(me);
-        if (mounted) { setState(() => _loading = false); context.go(route); }
-        return;
-      } catch (_) {
-        // Not a backend account (or backend unreachable) → fall back to local.
-        await apiClient.clearTokens();
-      }
+    //    devices/browsers.
+    try {
+      final response = await apiClient.post('/auth/login', {'email': name, 'password': password});
+      final tokens = (response['data'] as Map).cast<String, dynamic>();
+      await apiClient.saveTokens(tokens['accessToken'] as String, tokens['refreshToken'] as String);
+      final meResp = await apiClient.get('/auth/me');
+      final me = (meResp['data'] as Map).cast<String, dynamic>();
+      final route = applyBackendUser(me);
+      if (mounted) { setState(() => _loading = false); context.go(route); }
+      return;
+    } catch (_) {
+      // Not a backend account (or backend unreachable) → fall back to local.
+      await apiClient.clearTokens();
     }
 
     // 2. Local admin credentials (offline fallback)
@@ -273,9 +271,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
-    // 3. Local role accounts (seeded / created offline, by name or email)
+    // 3. Local role accounts (seeded / created offline), by email only.
     final role = appRoles.where(
-      (r) => (r.name.toLowerCase() == name.toLowerCase() || r.email.toLowerCase() == name.toLowerCase()) && r.password == password,
+      (r) => r.email.toLowerCase() == name.toLowerCase() && r.password == password,
     ).firstOrNull;
     if (role != null) {
       // An "Admin" role has full access — treat it as a full admin so Settings,

@@ -541,6 +541,12 @@ class _TeamMembersState extends State<TeamMembersScreen> {
     return _avatarPalette[h % _avatarPalette.length];
   }
 
+  @override
+  void initState() {
+    super.initState();
+    _loadPendingMembers();
+  }
+
   // The team = the admin owner (row 0, self) + every persisted login account
   // (appRoles). Editing this list changes who can actually log in & what they see.
   // Team members below the owner — everyone in appRoles except the admin.
@@ -559,6 +565,38 @@ class _TeamMembersState extends State<TeamMembersScreen> {
         'self':   false,
       },
   ];
+
+  // The current (non-Super-Admin) user's own "Create User" submissions still
+  // awaiting approval — otherwise an invited member they just created simply
+  // disappears until a Super Admin approves it. Rendered separately (below
+  // the real members) since they have no backend id yet — no documents/remove
+  // actions make sense for them.
+  List<Map<String, dynamic>> _pendingMembers = [];
+
+  Future<void> _loadPendingMembers() async {
+    try {
+      final r = await apiClient.get('/approvals/mine');
+      final inner = r['data'];
+      final reqs = inner is List
+          ? inner
+          : (inner is Map ? (inner['data'] as List<dynamic>? ?? const []) : const []);
+      final userReqs = reqs.whereType<Map<String, dynamic>>().where((q) =>
+          (q['module'] as String?)?.toLowerCase() == 'users' &&
+          (q['action'] as String?)?.toUpperCase() == 'CREATE' &&
+          (q['status'] as String?)?.toUpperCase() == 'PENDING').toList();
+      final pending = userReqs.map((q) {
+        final payload = (q['payload'] as Map?)?.cast<String, dynamic>() ?? const {};
+        final name = payload['name'] as String? ?? 'Unknown';
+        return {
+          'name': name,
+          'role': payload['role'] as String? ?? 'Custom',
+          'email': payload['email'] as String? ?? '',
+          'color': _memberColor(name),
+        };
+      }).toList();
+      if (mounted) setState(() => _pendingMembers = pending);
+    } catch (_) {}
+  }
 
   void _showInviteSheet() {
     final nameCtrl     = TextEditingController();
@@ -655,6 +693,7 @@ class _TeamMembersState extends State<TeamMembersScreen> {
                   if ((res['meta'] as Map?)?['pendingApproval'] == true) {
                     if (ctx.mounted) Navigator.pop(ctx);
                     if (mounted) _snack(context, 'Submitted for Super Admin approval');
+                    _loadPendingMembers();
                     return;
                   }
                   backendUserId = ((res['data'] as Map?)?.cast<String, dynamic>())?['id'] as String?;
@@ -751,7 +790,8 @@ class _TeamMembersState extends State<TeamMembersScreen> {
       Expanded(child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
-        child: _buildCard(context, child: Column(children: _members.asMap().entries.map((e) {
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _buildCard(context, child: Column(children: _members.asMap().entries.map((e) {
           final i = e.key; final m = e.value;
           final c = m['color'] as Color;
           final name = m['name'] as String;
@@ -797,7 +837,45 @@ class _TeamMembersState extends State<TeamMembersScreen> {
             ]),
           );
         }).toList())),
-      )),
+        if (_pendingMembers.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: Text('PENDING APPROVAL', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: context.textHint, letterSpacing: 0.8)),
+          ),
+          const SizedBox(height: 10),
+          _buildCard(context, child: Column(children: _pendingMembers.asMap().entries.map((e) {
+            final i = e.key; final m = e.value;
+            final c = m['color'] as Color;
+            final name = m['name'] as String;
+            final initials = name.split(' ').map((w) => w.isNotEmpty ? w[0] : '').take(2).join();
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: i < _pendingMembers.length - 1 ? BoxDecoration(border: Border(bottom: BorderSide(color: context.border))) : null,
+              child: Row(children: [
+                Container(width: 42, height: 42,
+                  decoration: BoxDecoration(color: c.withValues(alpha: 0.15), shape: BoxShape.circle),
+                  child: Center(child: Text(initials, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: c)))),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(name, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+                  Text('${m['role']}  ·  ${m['email']}', style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
+                ])),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: const Color(0xFFFFF1D6), borderRadius: BorderRadius.circular(8)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.schedule_outlined, size: 11, color: _amber600),
+                    const SizedBox(width: 4),
+                    Text('Pending Approval', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _amber600)),
+                  ]),
+                ),
+              ]),
+            );
+          }).toList())),
+        ],
+      ]))),
     ]),
     floatingActionButton: FloatingActionButton.extended(
       onPressed: _showInviteSheet,
@@ -2303,7 +2381,7 @@ class _ManageRolesState extends State<ManageRolesScreen> {
     }
     final parts = <String>[];
     for (final entry in {
-      'donors': 'Donors', 'donations': 'Donations', 'students': 'Students',
+      'donors': 'Donors', 'donations': 'Donations', 'expenses': 'Expenses', 'students': 'Students',
       'offices': 'Offices', 'reminders': 'Reminders',
       'donationTracker': 'Tracker', 'paymentLinks': 'Pay Links', 'achievements': 'Achievements',
     }.entries) {
@@ -2330,6 +2408,7 @@ class _ManageRolesState extends State<ManageRolesScreen> {
     final perms = <String, Map<String, bool>>{
       'donors':          initPerm('donors',          ['view', 'add', 'edit', 'delete']),
       'donations':       initPerm('donations',       ['view', 'add', 'edit', 'delete']),
+      'expenses':        initPerm('expenses',        ['view', 'add', 'edit', 'delete']),
       'students':        initPerm('students',        ['view', 'add', 'edit', 'delete']),
       'offices':         initPerm('offices',         ['view', 'add', 'edit', 'delete']),
       'reports':         initPerm('reports',         ['view', 'export']),
@@ -2421,6 +2500,18 @@ class _ManageRolesState extends State<ManageRolesScreen> {
                     if (v && k != 'view') perms['donations']!['view'] = true;
                     if (v && k == 'delete') perms['donations']!['edit'] = true;
                     if (!v && k == 'view') { perms['donations']!['add'] = false; perms['donations']!['edit'] = false; perms['donations']!['delete'] = false; }
+                  }),
+                ),
+                const SizedBox(height: 10),
+                _PermModule(
+                  icon: Icons.payments_outlined, color: _coral500, title: 'Expenses',
+                  perms: perms['expenses']!,
+                  labels: const {'view': 'View', 'add': 'Add', 'edit': 'Edit', 'delete': 'Delete'},
+                  onToggle: (k, v) => setSt(() {
+                    perms['expenses']![k] = v;
+                    if (v && k != 'view') perms['expenses']!['view'] = true;
+                    if (v && k == 'delete') perms['expenses']!['edit'] = true;
+                    if (!v && k == 'view') { perms['expenses']!['add'] = false; perms['expenses']!['edit'] = false; perms['expenses']!['delete'] = false; }
                   }),
                 ),
                 const SizedBox(height: 10),
