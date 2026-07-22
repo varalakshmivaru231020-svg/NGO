@@ -9,6 +9,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/utils/open_bytes.dart';
 import '../../../core/utils/native_file_saver.dart';
 import '../../../core/utils/video_player.dart';
+import '../../donations/presentation/receipt_generator.dart';
 import '../../../core/auth/role_auth.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../settings/profile_store.dart';
@@ -543,6 +544,10 @@ class _DonationsTabState extends State<_DonationsTab> {
         final method = (d['paymentMode'] as String? ?? d['paymentMethod'] as String? ?? '—')
             .replaceAll('_', ' ');
         final c = _typeColor(label);
+        // Only a recorded (COMPLETED) donation has a real receipt to show —
+        // one still awaiting approval has no invoice yet.
+        final status = d['status'] as String? ?? '';
+        final donorMap = (d['donor'] as Map?)?.cast<String, dynamic>() ?? const {};
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -550,25 +555,67 @@ class _DonationsTabState extends State<_DonationsTab> {
             border: Border.all(color: context.border),
             boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 6, offset: Offset(0, 2))],
           ),
-          child: Row(children: [
-            Container(width: 44, height: 44,
-              decoration: BoxDecoration(color: c.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
-              child: Center(child: Icon(Icons.account_balance_wallet_outlined, color: c, size: 20))),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Expanded(child: Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.textPrimary))),
-                Text(_fmtAmount(amount), style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: c)),
-              ]),
-              const SizedBox(height: 4),
-              Text('$date  ·  $receipt', style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(6)),
-                child: Text(method, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: context.textSub)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Container(width: 44, height: 44,
+                decoration: BoxDecoration(color: c.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+                child: Center(child: Icon(Icons.account_balance_wallet_outlined, color: c, size: 20))),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Expanded(child: Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.textPrimary))),
+                  Text(_fmtAmount(amount), style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: c)),
+                ]),
+                const SizedBox(height: 4),
+                Text('$date  ·  $receipt', style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(6)),
+                  child: Text(method, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: context.textSub)),
+                ),
+              ])),
+            ]),
+            if (status == 'COMPLETED') ...[
+              const SizedBox(height: 10),
+              Divider(height: 1, color: context.border),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: GestureDetector(
+                  onTap: () => showReceiptSheet(context, DonationReceipt(
+                    receiptNo:    receipt,
+                    donorName:    donorMap['name'] as String? ?? 'Donor',
+                    donorPhone:   donorMap['mobile'] as String? ?? '',
+                    donorCity:    donorMap['city'] as String? ?? '',
+                    donorPan:     donorMap['pan'] as String? ?? '',
+                    donorEmail:   donorMap['email'] as String? ?? '',
+                    donorAddress: donorMap['address'] as String? ?? '',
+                    donorState:   donorMap['state'] as String? ?? '',
+                    donorPincode: donorMap['pincode'] as String? ?? '',
+                    donorCountry: donorMap['country'] as String? ?? '',
+                    donationType: label,
+                    amount:       amount,
+                    paymentMode:  method,
+                    date:         date,
+                    taxExemption: d['taxExemption'] as bool? ?? false,
+                    reference:    d['reference'] as String? ?? '',
+                  )),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: _brand100, borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _brand600.withValues(alpha: 0.25)),
+                    ),
+                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.receipt_long_outlined, size: 14, color: _brand600),
+                      SizedBox(width: 5),
+                      Text('Invoice', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _brand600)),
+                    ]),
+                  ),
+                ),
               ),
-            ])),
+            ],
           ]),
         );
       },
