@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../../../core/utils/native_file_saver.dart';
 import '../../../core/network/api_client.dart';
 
@@ -24,10 +25,10 @@ Future<Map<String, dynamic>?> fetchOrgSettings() async {
 // to blank/missing org details.
 const _orgFallback = {
   'name': 'Sri Krishnashraya Educational Trust',
-  'address': '# 88/1, 84/1, 84/5, Thammarasanahalli, Sulibele, Bangalore - 562129',
+  'address': '# 88/1, 84/1, 84/5, Sant Baba Hardas Ram Dam, Thammarasanahalli, Chikka Haralagere, Sulibele, Bangalore - 562129',
   'pan': 'AATTS6672D',
-  'reg12A': 'AATTS6672D25BL01',
-  'cert80G': 'AATTS6672D25BL02',
+  'reg12A': 'ITBA/EXM/S/12AA/2018-19/A/10252',
+  'cert80G': 'ATTS6672DF20221',
   'email': 'krishnashryahome@gmail.com',
 };
 
@@ -39,7 +40,6 @@ String _org(Map<String, dynamic>? org, String key) {
 
 // Receipt palette (shared by the on-screen sheet + the PDF export).
 const _orange   = Color(0xFFF97316);
-const _orangeLt = Color(0xFFFFF1E7);
 const _grey     = Color(0xFF6B7280);
 const _dark     = Color(0xFF1F2937);
 const _border   = Color(0xFFE5E7EB);
@@ -62,6 +62,7 @@ class DonationReceipt {
     this.donorState = '',
     this.donorPincode = '',
     this.donorCountry = '',
+    this.reference = '',
   });
 
   final String receiptNo;
@@ -79,6 +80,7 @@ class DonationReceipt {
   final String donorState;
   final String donorPincode;
   final String donorCountry;
+  final String reference;
 
   // Full postal address for display — donorCity/donorState/etc. are separate
   // fields on the donor record, joined here for a single-line render.
@@ -137,8 +139,9 @@ Thanks for your support!
 ''';
 
 // ── PDF receipt (branded, with logo) ──────────────────────────────────────────
-// Compact half-page layout: A5 cut from A4 (full A4 width, half A4 height),
-// the way physical trust/NGO receipt books are commonly printed.
+// Full-page A4 invoice-style layout — logo, orange address bar, recipient +
+// receipt-info columns, itemized donation table, amount-in-words / totals,
+// and a statutory registration footer.
 // Uses "Rs." instead of the ₹ glyph because the default PDF font (Helvetica)
 // can't render the rupee symbol.
 Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}) async {
@@ -147,144 +150,184 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
   final logo = pw.MemoryImage(logoData.buffer.asUint8List());
 
   final orange   = PdfColor.fromInt(0xFFF97316);
-  final orangeLt = PdfColor.fromInt(0xFFFFF1E7);
   final grey     = PdfColor.fromInt(0xFF6B7280);
   final dark     = PdfColor.fromInt(0xFF1F2937);
   final brd      = PdfColor.fromInt(0xFFE5E7EB);
   final bgLight  = PdfColor.fromInt(0xFFF8FAFC);
+  final white    = PdfColor.fromInt(0xFFFFFFFF);
   final amtStr   = 'Rs. ${_fmt(r.amount)}.00';
-  final orgName    = _org(org, 'name');
   final orgAddress = _org(org, 'address');
   final orgPan     = _org(org, 'pan');
   final org12A     = _org(org, 'reg12A');
   final org80G     = _org(org, 'cert80G');
+  final orgEmail   = _org(org, 'email');
+  final locationLine = [r.donorCity, r.donorState, r.donorCountry]
+      .where((s) => s.trim().isNotEmpty).join(', ');
 
   // MultiPage (not a fixed-size Page): a Page silently clips/positions any
-  // content past its bottom edge when it overflows — with real donor data
-  // (long addresses, every optional line populated at once) the compact A5
-  // layout can run taller than one page, and everything after the header
-  // would vanish with no error. MultiPage flows the overflow onto another
-  // page instead.
+  // content past its bottom edge when it overflows. MultiPage flows the
+  // overflow onto another page instead.
   doc.addPage(pw.MultiPage(
-    pageFormat: PdfPageFormat.a5.landscape,
-    margin: const pw.EdgeInsets.fromLTRB(22, 18, 22, 16),
+    pageFormat: PdfPageFormat.a4,
+    margin: const pw.EdgeInsets.fromLTRB(36, 30, 36, 30),
     build: (ctx) => [pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-      // Header: logo + org (left) | receipt no + date + mode (right)
-      pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-        pw.Image(logo, height: 32),
-        pw.SizedBox(width: 10),
-        pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-          pw.Text(orgName, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: dark)),
-          pw.SizedBox(height: 1),
-          if (orgAddress.isNotEmpty)
-            pw.Text(orgAddress, style: pw.TextStyle(fontSize: 7.5, color: grey)),
-        ])),
-        pw.SizedBox(width: 12),
-        pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
-          pw.Text('Receipt No: ${r.receiptNo}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: orange)),
-          pw.SizedBox(height: 2),
-          pw.Text('Date: ${r.date}', style: pw.TextStyle(fontSize: 8.5, color: grey)),
-          pw.Text('Payment: ${r.paymentMode}', style: pw.TextStyle(fontSize: 8.5, color: grey)),
-        ]),
-      ]),
-      pw.SizedBox(height: 8),
-      pw.Divider(color: brd, thickness: 1),
-      pw.SizedBox(height: 8),
+      // Header: logo (wordmark is baked into the asset)
+      pw.Image(logo, height: 46),
+      pw.SizedBox(height: 16),
 
-      // Donor Details | Donation Details, side by side
-      pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
-        pw.Expanded(flex: 4, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-          pw.Text('DONOR DETAILS', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: orange, letterSpacing: 0.5)),
-          pw.SizedBox(height: 4),
-          pw.Text(r.donorName, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: dark)),
-          if (r.donorPhone.isNotEmpty) pw.Text('Mobile: ${r.donorPhone}', style: pw.TextStyle(fontSize: 9, color: grey)),
-          if (r.donorEmail.isNotEmpty) pw.Text('Email: ${r.donorEmail}', style: pw.TextStyle(fontSize: 9, color: grey)),
-          if (r.donorFullAddress.isNotEmpty) pw.Text(r.donorFullAddress, style: pw.TextStyle(fontSize: 8.5, color: grey)),
-          if (r.donorPan.isNotEmpty) pw.Text('PAN: ${r.donorPan}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: orange)),
-        ])),
-        pw.Container(width: 1, margin: const pw.EdgeInsets.symmetric(horizontal: 7.5), color: brd),
-        pw.Expanded(flex: 5, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-          pw.Text('DONATION DETAILS', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: orange, letterSpacing: 0.5)),
-          pw.SizedBox(height: 4),
-          pw.Text(r.donationType, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: dark)),
-          pw.Text('Amount: $amtStr    Qty: 1', style: pw.TextStyle(fontSize: 9, color: grey)),
-          pw.SizedBox(height: 2),
-          pw.Text('Contribution towards trust operational support, community educational aid, and welfare programs.',
-              style: pw.TextStyle(fontSize: 8, color: grey, lineSpacing: 1.5)),
-        ])),
-      ]),
-      pw.SizedBox(height: 10),
-      pw.Divider(color: brd, thickness: 1),
-      pw.SizedBox(height: 8),
-
-      // Amount in words (left) | Subtotal / Tax / Grand Total box (right)
-      pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-        pw.Expanded(child: pw.Container(
-          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: pw.BoxDecoration(color: orangeLt, borderRadius: pw.BorderRadius.circular(5)),
-          child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text('AMOUNT IN WORDS', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: orange, letterSpacing: 0.5)),
-            pw.SizedBox(height: 2),
-            pw.Text(_amountInWords(r.amount), style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: dark)),
-          ]),
-        )),
-        pw.SizedBox(width: 14),
+      // Full-width orange address bar
+      if (orgAddress.isNotEmpty)
         pw.Container(
+          width: double.infinity,
+          color: orange,
           padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: pw.BoxDecoration(border: pw.Border.all(color: brd), borderRadius: pw.BorderRadius.circular(5)),
-          child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
-            _totRowPdf('Subtotal', amtStr, grey),
-            _totRowPdf('Tax (0%)', 'Rs. 0.00', grey),
-            pw.Container(margin: const pw.EdgeInsets.symmetric(vertical: 3), width: 140, height: 1, color: brd),
-            _totRowPdf('Grand Total', amtStr, orange, bold: true),
-          ]),
+          child: pw.Text(orgAddress, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: white)),
         ),
-      ]),
-      pw.SizedBox(height: 10),
+      pw.SizedBox(height: 20),
 
-      // Thank-you note + authorized signature line
-      pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
-        pw.Expanded(child: pw.Text(
-          'Thank you for your generous contribution. Your support is helping transform '
-          "children's lives through education, care, and holistic development.",
-          style: pw.TextStyle(fontSize: 7.5, color: grey, lineSpacing: 1.4))),
-        pw.SizedBox(width: 14),
-        pw.Column(children: [
-          pw.Container(width: 110, height: 1, color: dark),
-          pw.SizedBox(height: 3),
-          pw.Text('Authorized Signature', style: pw.TextStyle(fontSize: 7, color: grey)),
-        ]),
+      // Recipient (left) | Receipt info (right)
+      pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        pw.Expanded(flex: 6, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+          pw.Text('RECIPIENT:', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: dark, letterSpacing: 0.5)),
+          pw.SizedBox(height: 5),
+          pw.Text(r.donorName, style: pw.TextStyle(fontSize: 18, color: dark)),
+          pw.SizedBox(height: 4),
+          if (r.donorPhone.isNotEmpty) pw.Text(r.donorPhone, style: pw.TextStyle(fontSize: 9.5, color: grey)),
+          if (locationLine.isNotEmpty) pw.Text(locationLine, style: pw.TextStyle(fontSize: 9.5, color: grey)),
+          if (r.donorPan.isNotEmpty) ...[
+            pw.SizedBox(height: 3),
+            pw.Text('PAN: ${r.donorPan}', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: orange)),
+          ],
+        ])),
+        pw.SizedBox(width: 16),
+        pw.Expanded(flex: 5, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+          pw.Container(
+            width: double.infinity,
+            color: orange,
+            padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: pw.Text('Receipt for #${r.receiptNo}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: white)),
+          ),
+          pw.Container(
+            width: double.infinity,
+            color: bgLight,
+            padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+              pw.Text('Transaction Date: ${r.date}', style: pw.TextStyle(fontSize: 8.5, color: dark)),
+              pw.SizedBox(height: 2),
+              pw.Text('Mode: ${r.paymentMode}', style: pw.TextStyle(fontSize: 8.5, color: dark)),
+              if (r.reference.isNotEmpty) ...[
+                pw.SizedBox(height: 2),
+                pw.Text('Gateway Ref: ${r.reference}', style: pw.TextStyle(fontSize: 8.5, color: dark)),
+              ],
+            ]),
+          ),
+        ])),
       ]),
-      pw.SizedBox(height: 8),
+      pw.SizedBox(height: 22),
 
-      // Statutory footer bar (PAN / 12A / 80G) + disclaimer
+      // Itemized donation table
+      pw.Table(
+        columnWidths: const {
+          0: pw.FlexColumnWidth(2.6),
+          1: pw.FlexColumnWidth(3.6),
+          2: pw.FlexColumnWidth(1),
+          3: pw.FlexColumnWidth(1.5),
+          4: pw.FlexColumnWidth(1.7),
+        },
+        children: [
+          pw.TableRow(decoration: pw.BoxDecoration(color: orange), children: [
+            _th('DONATION / SERVICE'),
+            _th('DESCRIPTION'),
+            _th('UNIT', align: pw.TextAlign.center),
+            _th('COST', align: pw.TextAlign.right),
+            _th('TOTAL', align: pw.TextAlign.right),
+          ]),
+          pw.TableRow(children: [
+            _td(r.donationType, dark, bold: true),
+            _td(
+              'Contribution allocated towards trust operational support, community '
+              'educational aid, and welfare programs.'
+              '${r.taxExemption ? ' Clean tax exemption applicable.' : ''}',
+              grey, size: 8.5,
+            ),
+            _td('1', dark, align: pw.TextAlign.center),
+            _td(_fmt(r.amount), dark, align: pw.TextAlign.right),
+            _td(amtStr, dark, bold: true, align: pw.TextAlign.right),
+          ]),
+        ],
+      ),
+      pw.SizedBox(height: 18),
+      pw.Container(height: 1.2, color: dark),
+      pw.SizedBox(height: 22),
+
+      pw.Center(child: pw.Text('Receipt for Payment', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: dark))),
+      pw.SizedBox(height: 18),
+
+      // Amount in words (left) | Subtotal / Tax / Total (right)
+      pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        pw.Expanded(flex: 6, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+          pw.Text('RECEIPT FOR PAYMENT (AMOUNT IN WORDS)', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: dark, letterSpacing: 0.3)),
+          pw.SizedBox(height: 8),
+          pw.Text(_amountInWords(r.amount), style: pw.TextStyle(fontSize: 13, fontStyle: pw.FontStyle.italic, color: orange)),
+        ])),
+        pw.SizedBox(width: 16),
+        pw.Expanded(flex: 4, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+          _totRowPdf('Subtotal', amtStr, grey),
+          _totRowPdf('Tax (0%)', 'Rs. 0.00', grey),
+          _totRowPdf('Total', amtStr, dark, bold: true),
+        ])),
+      ]),
+      pw.SizedBox(height: 22),
+      pw.Container(height: 1, color: brd),
+      pw.SizedBox(height: 20),
+
+      pw.Center(child: pw.Text('Thanks for your support!',
+          style: pw.TextStyle(fontSize: 14, fontStyle: pw.FontStyle.italic, fontWeight: pw.FontWeight.bold, color: orange))),
+      pw.SizedBox(height: 22),
+
+      // Statutory footer bar (PAN / 12AA / 80G) + disclaimer
       pw.Container(
         width: double.infinity,
-        padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: pw.BoxDecoration(color: bgLight, borderRadius: pw.BorderRadius.circular(5), border: pw.Border.all(color: brd, width: 0.5)),
+        decoration: pw.BoxDecoration(color: bgLight, border: pw.Border(left: pw.BorderSide(color: orange, width: 3))),
+        padding: const pw.EdgeInsets.fromLTRB(12, 10, 12, 10),
         child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+          pw.Text('STATUTORY REGISTRATION DETAILS (TAX BENEFITS)',
+              style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: orange, letterSpacing: 0.3)),
+          pw.SizedBox(height: 5),
+          pw.Text('Trust PAN: $orgPan   |   12AA Registration: $org12A   |   80G Certification: $org80G',
+              style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: dark)),
+          pw.SizedBox(height: 5),
           pw.Text(
-            'PAN: $orgPan   |   12A: $org12A   |   80G: $org80G'
-            '${r.taxExemption ? '   |   Eligible for 80G Tax Exemption' : ''}',
-            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: dark)),
-          pw.SizedBox(height: 3),
-          pw.Text('Electronically generated receipt — no signature required. Thanks for your support!',
-              style: pw.TextStyle(fontSize: 7, color: grey)),
+            'This is an electronically generated receipt confirmation. No physical signature is required.'
+            '${orgEmail.isNotEmpty ? ' For verification or support, write to $orgEmail.' : ''}',
+            style: pw.TextStyle(fontSize: 7.5, color: grey)),
         ]),
       ),
-    ]),
-  ]));
+    ])],
+  ));
   return doc.save();
 }
 
+pw.Widget _th(String label, {pw.TextAlign align = pw.TextAlign.left}) => pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: pw.Text(label, textAlign: align,
+          style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColor.fromInt(0xFFFFFFFF), letterSpacing: 0.3)),
+    );
+
+pw.Widget _td(String text, PdfColor color, {bool bold = false, double size = 9, pw.TextAlign align = pw.TextAlign.left}) => pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      child: pw.Text(text, textAlign: align,
+          style: pw.TextStyle(fontSize: size, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: color, lineSpacing: 1.4)),
+    );
+
 pw.Widget _totRowPdf(String label, String value, PdfColor color, {bool bold = false}) =>
     pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+      padding: const pw.EdgeInsets.symmetric(vertical: 3),
       child: pw.Row(mainAxisSize: pw.MainAxisSize.min, children: [
-        pw.Text(label, style: pw.TextStyle(fontSize: bold ? 11 : 9, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: color)),
+        pw.Text(label, style: pw.TextStyle(fontSize: bold ? 12 : 10, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: color)),
         pw.SizedBox(width: 24),
-        pw.SizedBox(width: 80, child: pw.Text(value, textAlign: pw.TextAlign.right,
-            style: pw.TextStyle(fontSize: bold ? 11 : 9, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: color))),
+        pw.SizedBox(width: 84, child: pw.Text(value, textAlign: pw.TextAlign.right,
+            style: pw.TextStyle(fontSize: bold ? 12 : 10, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: color))),
       ]));
 
 // ── Receipt Bottom Sheet ──────────────────────────────────────────────────────
@@ -310,12 +353,13 @@ class _ReceiptSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final amtStr = '₹${_fmt(receipt.amount)}.00';
-    final orgName    = _org(org, 'name');
     final orgAddress = _org(org, 'address');
     final orgPan     = _org(org, 'pan');
     final org12A     = _org(org, 'reg12A');
     final org80G     = _org(org, 'cert80G');
     final orgEmail   = _org(org, 'email');
+    final locationLine = [receipt.donorCity, receipt.donorState, receipt.donorCountry]
+        .where((s) => s.trim().isNotEmpty).join(', ');
 
     return DraggableScrollableSheet(
       initialChildSize: 0.94,
@@ -334,127 +378,133 @@ class _ReceiptSheet extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
 
-              // ── HEADER: logo + org (left) | receipt no / date / mode (right) ──
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Image.asset('assets/images/sket-logo.png',
-                    height: 34, fit: BoxFit.contain, alignment: Alignment.centerLeft),
-                const SizedBox(width: 10),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(orgName,
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _dark)),
-                  if (orgAddress.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(orgAddress, style: const TextStyle(fontSize: 9, color: _grey)),
-                  ],
-                ])),
-                const SizedBox(width: 12),
-                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('Receipt No: ${receipt.receiptNo}',
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: _orange)),
-                  const SizedBox(height: 3),
-                  Text('Date: ${receipt.date}',
-                      style: const TextStyle(fontSize: 10, color: _grey, fontWeight: FontWeight.w500)),
-                  Text('Payment: ${receipt.paymentMode}',
-                      style: const TextStyle(fontSize: 10, color: _grey, fontWeight: FontWeight.w500)),
-                ]),
-              ]),
-
+              // ── HEADER: logo (wordmark baked into the asset) ──────────
+              Image.asset('assets/images/sket-logo.png',
+                  height: 40, fit: BoxFit.contain, alignment: Alignment.centerLeft),
               const SizedBox(height: 14),
-              Divider(color: _border, thickness: 1),
-              const SizedBox(height: 12),
 
-              // ── DONOR DETAILS | DONATION DETAILS ────────────────────
+              // ── Full-width orange address bar ─────────────────────────
+              if (orgAddress.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  decoration: BoxDecoration(color: _orange, borderRadius: BorderRadius.circular(4)),
+                  child: Text(orgAddress,
+                      style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Colors.white)),
+                ),
+              const SizedBox(height: 18),
+
+              // ── RECIPIENT (left) | Receipt info (right) ───────────────
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(flex: 4, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('DONOR DETAILS',
-                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: _orange, letterSpacing: 0.6)),
-                  const SizedBox(height: 5),
+                Expanded(flex: 6, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('RECIPIENT:',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: _dark, letterSpacing: 0.5)),
+                  const SizedBox(height: 6),
                   Text(receipt.donorName,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _dark)),
-                  if (receipt.donorPhone.isNotEmpty) ...[
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: _dark)),
+                  const SizedBox(height: 5),
+                  if (receipt.donorPhone.isNotEmpty)
+                    Text(receipt.donorPhone, style: const TextStyle(fontSize: 11.5, color: _grey)),
+                  if (locationLine.isNotEmpty) ...[
                     const SizedBox(height: 2),
-                    Text('Mobile: ${receipt.donorPhone}', style: const TextStyle(fontSize: 11, color: _grey)),
-                  ],
-                  if (receipt.donorEmail.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text('Email: ${receipt.donorEmail}', style: const TextStyle(fontSize: 11, color: _grey)),
-                  ],
-                  if (receipt.donorFullAddress.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(receipt.donorFullAddress, style: const TextStyle(fontSize: 10.5, color: _grey, height: 1.35)),
+                    Text(locationLine, style: const TextStyle(fontSize: 11.5, color: _grey)),
                   ],
                   if (receipt.donorPan.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text('PAN: ${receipt.donorPan}',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _orange)),
+                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _orange)),
                   ],
                 ])),
                 const SizedBox(width: 14),
-                Container(width: 1, color: _border, margin: const EdgeInsets.only(top: 2)),
-                const SizedBox(width: 14),
                 Expanded(flex: 5, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('DONATION DETAILS',
-                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: _orange, letterSpacing: 0.6)),
-                  const SizedBox(height: 5),
-                  Text(receipt.donationType,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _dark)),
-                  const SizedBox(height: 2),
-                  Text('Amount: $amtStr   ·   Qty: 1',
-                      style: const TextStyle(fontSize: 11, color: _grey)),
-                  const SizedBox(height: 4),
-                  const Text(
-                      'Contribution towards trust operational support, community educational aid, and welfare programs.',
-                      style: TextStyle(fontSize: 10, color: _grey, height: 1.4)),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: const BoxDecoration(
+                      color: _orange,
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(6)),
+                    ),
+                    child: Text('Receipt for #${receipt.receiptNo}',
+                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Colors.white)),
+                  ),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: const BoxDecoration(
+                      color: _bgLight,
+                      borderRadius: BorderRadius.vertical(bottom: Radius.circular(6)),
+                    ),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Transaction Date: ${receipt.date}', style: const TextStyle(fontSize: 10.5, color: _dark)),
+                      const SizedBox(height: 3),
+                      Text('Mode: ${receipt.paymentMode}', style: const TextStyle(fontSize: 10.5, color: _dark)),
+                      if (receipt.reference.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text('Gateway Ref: ${receipt.reference}', style: const TextStyle(fontSize: 10.5, color: _dark)),
+                      ],
+                    ]),
+                  ),
                 ])),
               ]),
+              const SizedBox(height: 20),
 
-              const SizedBox(height: 16),
-              Divider(color: _border, thickness: 1),
-              const SizedBox(height: 12),
-
-              // ── Amount in words (left) | Subtotal / Tax / Grand Total (right) ──
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(color: _orangeLt, borderRadius: BorderRadius.circular(8)),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('AMOUNT IN WORDS',
-                        style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: _orange, letterSpacing: 0.6)),
-                    const SizedBox(height: 3),
-                    Text(_amountInWords(receipt.amount),
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _dark)),
-                  ]),
-                )),
-                const SizedBox(width: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(border: Border.all(color: _border), borderRadius: BorderRadius.circular(8)),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                    _totRow('Subtotal', amtStr),
-                    _totRow('Tax (0%)', '₹0.00'),
-                    const Divider(thickness: 1, color: _border, height: 12),
-                    _totRow('Grand Total', amtStr, bold: true, large: true, color: _orange),
-                  ]),
-                ),
-              ]),
-
-              const SizedBox(height: 14),
-
-              // ── Thank-you note + authorized signature ────────────────
-              Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                const Expanded(child: Text(
-                    "Thank you for your generous contribution. Your support is helping transform "
-                    "children's lives through education, care, and holistic development.",
-                    style: TextStyle(fontSize: 10.5, color: _grey, height: 1.5))),
-                const SizedBox(width: 14),
-                Column(children: [
-                  Container(width: 120, height: 1, color: _dark),
-                  const SizedBox(height: 4),
-                  const Text('Authorized Signature', style: TextStyle(fontSize: 9.5, color: _grey)),
+              // ── Itemized donation table ────────────────────────────────
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(color: _orange, borderRadius: BorderRadius.circular(4)),
+                child: Row(children: const [
+                  Expanded(flex: 3, child: Text('DONATION / SERVICE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.white))),
+                  Expanded(flex: 4, child: Text('DESCRIPTION', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.white))),
+                  Expanded(flex: 1, child: Text('UNIT', textAlign: TextAlign.center, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.white))),
+                  Expanded(flex: 2, child: Text('TOTAL', textAlign: TextAlign.right, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.white))),
                 ]),
-              ]),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(flex: 3, child: Text(receipt.donationType,
+                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _dark))),
+                  Expanded(flex: 4, child: Text(
+                      'Contribution allocated towards trust operational support, community educational aid, and welfare programs.'
+                      '${receipt.taxExemption ? ' Clean tax exemption applicable.' : ''}',
+                      style: const TextStyle(fontSize: 10, color: _grey, height: 1.4))),
+                  const Expanded(flex: 1, child: Text('1', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: _dark))),
+                  Expanded(flex: 2, child: Text(amtStr, textAlign: TextAlign.right,
+                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: _dark))),
+                ]),
+              ),
+              const SizedBox(height: 8),
+              Container(height: 1.4, color: _dark),
+              const SizedBox(height: 18),
 
-              const SizedBox(height: 14),
+              const Center(child: Text('Receipt for Payment',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _dark))),
+              const SizedBox(height: 16),
+
+              // ── Amount in words (left) | Subtotal / Tax / Total (right) ──
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(flex: 6, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('RECEIPT FOR PAYMENT (AMOUNT IN WORDS)',
+                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: _dark, letterSpacing: 0.3)),
+                  const SizedBox(height: 6),
+                  Text(_amountInWords(receipt.amount),
+                      style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700, color: _orange)),
+                ])),
+                const SizedBox(width: 12),
+                Expanded(flex: 4, child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  _totRow('Subtotal', amtStr),
+                  _totRow('Tax (0%)', '₹0.00'),
+                  _totRow('Total', amtStr, bold: true, large: true, color: _dark),
+                ])),
+              ]),
+              const SizedBox(height: 18),
+              Container(height: 1, color: _border),
+              const SizedBox(height: 16),
+
+              const Center(child: Text('Thanks for your support!',
+                  style: TextStyle(fontSize: 15, fontStyle: FontStyle.italic, fontWeight: FontWeight.w800, color: _orange))),
+              const SizedBox(height: 18),
 
               // ── STATUTORY FOOTER BAR ─────────────────────────────────
               Container(
@@ -462,18 +512,20 @@ class _ReceiptSheet extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   color: _bgLight,
-                  border: Border.all(color: _border),
-                  borderRadius: BorderRadius.circular(8),
+                  border: const Border(left: BorderSide(color: _orange, width: 3)),
+                  borderRadius: BorderRadius.circular(4),
                 ),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('STATUTORY REGISTRATION DETAILS (TAX BENEFITS)',
+                      style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: _orange, letterSpacing: 0.3)),
+                  const SizedBox(height: 6),
                   Text(
-                      'PAN: $orgPan  |  12A: $org12A  |  80G: $org80G'
-                      '${receipt.taxExemption ? '  |  Eligible for 80G Tax Exemption' : ''}',
+                      'Trust PAN: $orgPan  |  12AA Registration: $org12A  |  80G Certification: $org80G',
                       style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: _dark, height: 1.4)),
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 6),
                   Text(
-                      'Electronically generated receipt — no signature required. Thanks for your support! '
-                      '${orgEmail.isNotEmpty ? 'For verification or support, write to $orgEmail.' : ''}',
+                      'This is an electronically generated receipt confirmation. No physical signature is required.'
+                      '${orgEmail.isNotEmpty ? ' For verification or support, write to $orgEmail.' : ''}',
                       style: const TextStyle(fontSize: 8.5, color: _grey, height: 1.4)),
                 ]),
               ),
@@ -489,6 +541,29 @@ class _ReceiptSheet extends StatelessWidget {
               boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, -4))],
             ),
             child: Row(children: [
+              OutlinedButton(
+                onPressed: () async {
+                  try {
+                    await Printing.layoutPdf(onLayout: (_) => buildReceiptPdf(receipt, org: org));
+                  } catch (_) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Could not open print dialog'),
+                        backgroundColor: Color(0xFFF2685E),
+                        behavior: SnackBarBehavior.floating,
+                      ));
+                    }
+                  }
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _orange,
+                  side: const BorderSide(color: _orange),
+                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Icon(Icons.print_outlined, size: 18),
+              ),
+              const SizedBox(width: 12),
               Expanded(child: OutlinedButton.icon(
                 onPressed: () async {
                   try {

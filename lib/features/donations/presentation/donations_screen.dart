@@ -60,11 +60,13 @@ class _Donation {
     required this.type, required this.method, required this.receipt, required this.date,
     required this.status, required this.attach,
     this.donorPhone = '', this.donorCity = '', this.donorPan = '', this.donorEmail = '',
-    this.donorAddress = '', this.donorState = '', this.donorPincode = '', this.donorCountry = ''});
+    this.donorAddress = '', this.donorState = '', this.donorPincode = '', this.donorCountry = '',
+    this.reference = ''});
   final String id, donorId, name, type, method, receipt, date, status;
   final int amount, attach;
   final String donorPhone, donorCity, donorPan;
   final String donorEmail, donorAddress, donorState, donorPincode, donorCountry;
+  final String reference;
 
   factory _Donation.fromApi(Map<String, dynamic> j) {
     final donor = j['donor'] as Map<String, dynamic>? ?? {};
@@ -97,6 +99,7 @@ class _Donation {
       date:     formattedDate,
       status:   rawStatus == 'COMPLETED' ? 'Received' : rawStatus,
       attach:   0,
+      reference: j['reference'] as String? ?? '',
     );
   }
 }
@@ -460,6 +463,7 @@ class _DonationCard extends StatelessWidget {
                   paymentMode:  d.method,
                   date:         d.date,
                   taxExemption: true,
+                  reference:    d.reference,
                 )),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),

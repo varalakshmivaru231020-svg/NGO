@@ -7,6 +7,7 @@ import 'add_donor_screen.dart' show AddDonorScreen;
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/utils/open_bytes.dart';
+import '../../../core/utils/native_file_saver.dart';
 import '../../../core/utils/video_player.dart';
 import '../../../core/auth/role_auth.dart';
 import '../../../core/theme/app_theme.dart';
@@ -299,7 +300,7 @@ class _DonorDetailScreenState extends State<DonorDetailScreen> with SingleTicker
             unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            tabs: const [Tab(text: 'Overview'), Tab(text: 'Donations'), Tab(text: 'Sponsored'), Tab(text: 'Documents'), Tab(text: 'Activities')],
+            tabs: const [Tab(text: 'Personal Details'), Tab(text: 'Donations'), Tab(text: 'Sponsored'), Tab(text: 'Documents'), Tab(text: 'Activities')],
           ),
         ),
 
@@ -580,6 +581,22 @@ class _DonationsTabState extends State<_DonationsTab> {
 final _donorUploadedDocs = <String, Set<String>>{};
 final _donorExtraDocs    = <String, List<String>>{};
 final _donorDocBytes     = <String, Map<String, Uint8List>>{};
+final _donorDocFilenames = <String, Map<String, String>>{};
+
+// Best-effort mime type from a filename's extension — used so downloads
+// carry the correct type/extension instead of a generic octet-stream.
+String _mimeFor(String filename) {
+  final ext = filename.toLowerCase().split('.').last;
+  switch (ext) {
+    case 'pdf': return 'application/pdf';
+    case 'png': return 'image/png';
+    case 'jpg':
+    case 'jpeg': return 'image/jpeg';
+    case 'doc': return 'application/msword';
+    case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    default: return 'application/octet-stream';
+  }
+}
 
 // ── documents tab ─────────────────────────────────────────────────────
 class _DocEntry {
@@ -623,18 +640,38 @@ class _DocumentsTabState extends State<_DocumentsTab> {
     _donorUploadedDocs.putIfAbsent(widget.donorId, () => {}).add(name);
   }
 
-  void _storeBytes(String docName, Uint8List? bytes) {
+  void _storeBytes(String docName, Uint8List? bytes, {String? originalFilename}) {
     if (bytes == null) return;
     _donorDocBytes.putIfAbsent(widget.donorId, () => {})[docName] = bytes;
+    if (originalFilename != null && originalFilename.trim().isNotEmpty) {
+      _donorDocFilenames.putIfAbsent(widget.donorId, () => {})[docName] = originalFilename;
+    }
   }
 
   Uint8List? _getBytes(String docName) =>
       _donorDocBytes[widget.donorId]?[docName];
 
+  String _getFilename(String docName) =>
+      _donorDocFilenames[widget.donorId]?[docName] ?? docName;
+
   void _viewDoc(String docName) {
     final bytes = _getBytes(docName);
     if (bytes == null) return;
-    openBytesInBrowser(bytes, docName);
+    openBytesInBrowser(bytes, _getFilename(docName));
+  }
+
+  Future<void> _downloadDoc(String docName) async {
+    final bytes = _getBytes(docName);
+    if (bytes == null) return;
+    final filename = _getFilename(docName);
+    final ok = await NativeFileSaver.saveBytes(filename, bytes, _mimeFor(filename));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ok ? 'Downloaded $filename' : 'Failed to download'),
+        backgroundColor: ok ? _brand600 : _coral500,
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
   }
 
   Future<void> _pick(String docName) async {
@@ -642,7 +679,7 @@ class _DocumentsTabState extends State<_DocumentsTab> {
     try {
       final r = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
       if (r != null && r.files.isNotEmpty && mounted) {
-        _storeBytes(docName, r.files.single.bytes);
+        _storeBytes(docName, r.files.single.bytes, originalFilename: r.files.single.name);
         setState(() => _markUploaded(docName));
       }
     } catch (_) {}
@@ -677,7 +714,7 @@ class _DocumentsTabState extends State<_DocumentsTab> {
     try {
       final r = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
       if (r != null && r.files.isNotEmpty && mounted) {
-        _storeBytes(name, r.files.single.bytes);
+        _storeBytes(name, r.files.single.bytes, originalFilename: r.files.single.name);
         setState(() {
           _docs.add(_DocEntry(name, 'Attachment'));
           _markUploaded(name);
@@ -755,6 +792,15 @@ class _DocumentsTabState extends State<_DocumentsTab> {
                   ])),
                   const SizedBox(width: 8),
                   if (uploaded) ...[
+                    GestureDetector(
+                      onTap: () => _downloadDoc(doc.name),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(8)),
+                        child: Icon(Icons.download_rounded, size: 16, color: context.textSub),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
                     GestureDetector(
                       onTap: () => _viewDoc(doc.name),
                       child: Container(
@@ -936,35 +982,47 @@ class _SponsoredTabState extends State<_SponsoredTab> {
 
   Future<void> _promptAmountAndSave(Map<String, dynamic> student) async {
     final amountCtrl = TextEditingController();
+    final purposeCtrl = TextEditingController();
     final name = student['name'] as String? ?? 'this child';
-    final amount = await showDialog<int>(
+    final result = await showDialog<(int, String)>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Sponsorship Amount'),
+        title: const Text('Add Sponsorship'),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Annual amount this donor will sponsor $name with', style: TextStyle(fontSize: 13, color: context.textHint)),
-          const SizedBox(height: 10),
+          Text('Annual sponsorship this donor will provide $name', style: TextStyle(fontSize: 13, color: context.textHint)),
+          const SizedBox(height: 14),
+          Text('Sponsorship Amount', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: context.textSub)),
+          const SizedBox(height: 6),
           TextField(
             controller: amountCtrl, autofocus: true, keyboardType: TextInputType.number,
             decoration: const InputDecoration(prefixText: '₹ ', hintText: 'e.g. 18000'),
+          ),
+          const SizedBox(height: 14),
+          Text('Sponsorship Purpose', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: context.textSub)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: purposeCtrl,
+            decoration: const InputDecoration(hintText: 'e.g. Education, Health, General welfare'),
           ),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           TextButton(onPressed: () {
             final v = int.tryParse(amountCtrl.text.trim());
-            if (v != null && v > 0) Navigator.pop(ctx, v);
+            if (v != null && v > 0) Navigator.pop(ctx, (v, purposeCtrl.text.trim()));
           }, child: const Text('Assign')),
         ],
       ),
     );
-    if (amount == null || !mounted) return;
+    if (result == null || !mounted) return;
+    final (amount, purpose) = result;
 
     try {
       await apiClient.post('/students/${student['id']}/sponsorships', {
         'donorId': widget.donorId,
         'amount': amount,
         'frequency': 'ANNUAL',
+        if (purpose.isNotEmpty) 'notes': purpose,
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -1058,6 +1116,7 @@ class _SponsoredTabState extends State<_SponsoredTab> {
           final sp = sponsorships.isNotEmpty ? (sponsorships.first as Map).cast<String, dynamic>() : null;
           final centreName = (child['center'] as Map?)?['name'] as String? ?? '—';
           final amount = sp?['amount'];
+          final purpose = (sp?['notes'] as String?)?.trim() ?? '';
           return Container(
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(16),
@@ -1097,6 +1156,16 @@ class _SponsoredTabState extends State<_SponsoredTab> {
                 _SpnDetail(label: 'Amount', value: amount != null ? '₹${_fmtAmt(amount as num)} / yr' : '—'),
                 _SpnDetail(label: 'Centre', value: centreName),
               ]),
+              if (purpose.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Divider(height: 1, color: context.border),
+                const SizedBox(height: 12),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Purpose', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: context.textHint)),
+                  const SizedBox(height: 3),
+                  Text(purpose, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: context.textPrimary)),
+                ]),
+              ],
             ]),
           );
         }),
