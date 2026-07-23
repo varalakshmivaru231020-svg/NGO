@@ -25,6 +25,7 @@ class ExpenseVoucher {
     this.preparedBy = '',
     this.approvedBy = '',
     this.receivedBy = '',
+    this.notes = '',
   });
 
   final String voucherNo;
@@ -38,6 +39,7 @@ class ExpenseVoucher {
   final String preparedBy;
   final String approvedBy;
   final String receivedBy;
+  final String notes;
 }
 
 String _amountInWords(int n) {
@@ -155,6 +157,13 @@ Future<Uint8List> buildVoucherPdf(ExpenseVoucher v) async {
                 pw.TextSpan(text: 'Rupees ', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: dark)),
                 pw.TextSpan(text: _amountInWords(v.amount), style: pw.TextStyle(fontSize: 10, color: dark)),
               ])),
+              if (v.notes.trim().isNotEmpty) ...[
+                pw.SizedBox(height: 14),
+                pw.RichText(text: pw.TextSpan(children: [
+                  pw.TextSpan(text: 'Internal Notes: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: grey)),
+                  pw.TextSpan(text: v.notes.trim(), style: pw.TextStyle(fontSize: 9, color: grey)),
+                ])),
+              ],
             ]),
           )),
           pw.Expanded(flex: 3, child: pw.Container(
@@ -303,6 +312,13 @@ class _VoucherSheet extends StatelessWidget {
                         const TextSpan(text: 'Rupees ', style: TextStyle(fontWeight: FontWeight.w800)),
                         TextSpan(text: _amountInWords(voucher.amount)),
                       ])),
+                      if (voucher.notes.trim().isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        RichText(text: TextSpan(style: const TextStyle(fontSize: 11.5, color: _grey), children: [
+                          const TextSpan(text: 'Internal Notes: ', style: TextStyle(fontWeight: FontWeight.w800)),
+                          TextSpan(text: voucher.notes.trim()),
+                        ])),
+                      ],
                     ]),
                   )),
                   Expanded(flex: 3, child: Container(

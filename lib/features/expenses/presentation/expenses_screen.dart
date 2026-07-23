@@ -43,10 +43,10 @@ final demoLocalExpenses = <Map<String, dynamic>>[];
 class _Expense {
   _Expense({required this.id, required this.paidTo, required this.purpose, required this.amount,
     required this.category, required this.method, required this.voucherNo, required this.date,
-    required this.status, this.preparedBy = '', this.approvedBy = '', this.receivedBy = '', this.reference = ''});
+    required this.status, this.preparedBy = '', this.approvedBy = '', this.receivedBy = '', this.reference = '', this.notes = ''});
   final String id, paidTo, purpose, category, method, voucherNo, date, status;
   final int amount;
-  final String preparedBy, approvedBy, receivedBy, reference;
+  final String preparedBy, approvedBy, receivedBy, reference, notes;
 
   factory _Expense.fromApi(Map<String, dynamic> j) {
     final category = j['category'] as Map<String, dynamic>?;
@@ -73,6 +73,7 @@ class _Expense {
       approvedBy: j['approvedBy'] as String? ?? '',
       receivedBy: j['receivedBy'] as String? ?? '',
       reference:  j['reference'] as String? ?? '',
+      notes:      j['notes'] as String? ?? '',
     );
   }
 }
@@ -380,6 +381,7 @@ class _ExpenseCard extends StatelessWidget {
                   preparedBy:    e.preparedBy,
                   approvedBy:    e.approvedBy,
                   receivedBy:    e.receivedBy,
+                  notes:         e.notes,
                 )),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),

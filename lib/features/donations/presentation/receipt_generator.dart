@@ -358,7 +358,7 @@ Future<Uint8List> buildDonationStatementPdf({
   final orgEmail   = _org(org, 'email');
 
   DateTime? parseDate(Map<String, dynamic> d) {
-    final raw = d['createdAt'] as String? ?? d['date'] as String?;
+    final raw = d['date'] as String? ?? d['createdAt'] as String?;
     return raw != null ? DateTime.tryParse(raw) : null;
   }
 

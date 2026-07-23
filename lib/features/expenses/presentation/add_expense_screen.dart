@@ -41,6 +41,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   late final TextEditingController _preparedByCtrl;
   String _method = 'Cash';
   String _date = '';
+  DateTime _selectedDate = DateTime.now();
   bool _saving = false;
 
   // Loaded from API
@@ -59,6 +60,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     super.initState();
     final now = DateTime.now();
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    _selectedDate = now;
     _date = '${now.day.toString().padLeft(2,'0')} ${months[now.month-1]} ${now.year}';
     _preparedByCtrl = TextEditingController(text: _currentUserName());
     _loadCategories();
@@ -143,11 +145,14 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
   void _pickDate() async {
     final d = await showDatePicker(
-      context: context, initialDate: DateTime.now(),
+      context: context, initialDate: _selectedDate,
       firstDate: DateTime(2020), lastDate: DateTime(2030),
       builder: (ctx, child) => Theme(data: Theme.of(ctx).copyWith(colorScheme: const ColorScheme.light(primary: _orange)), child: child!),
     );
-    if (d != null) setState(() => _date = '${d.day.toString().padLeft(2, '0')} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.month - 1]} ${d.year}');
+    if (d != null) setState(() {
+      _selectedDate = d;
+      _date = '${d.day.toString().padLeft(2, '0')} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.month - 1]} ${d.year}';
+    });
   }
 
   void _save() async {
@@ -169,6 +174,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         'purpose': _purposeCtrl.text.trim(),
         'amount': int.parse(amountText),
         'paymentMode': _methodModes[_method] ?? 'CASH',
+        'date': _selectedDate.toIso8601String(),
         'preparedBy': _preparedByCtrl.text.trim(),
         if (_approvedByCtrl.text.trim().isNotEmpty) 'approvedBy': _approvedByCtrl.text.trim(),
         if (_receivedByCtrl.text.trim().isNotEmpty) 'receivedBy': _receivedByCtrl.text.trim(),
@@ -202,6 +208,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       preparedBy:    _preparedByCtrl.text.trim(),
       approvedBy:    _approvedByCtrl.text.trim().isNotEmpty ? _approvedByCtrl.text.trim() : _currentUserName(),
       receivedBy:    _receivedByCtrl.text.trim(),
+      notes:         _notesCtrl.text.trim(),
     );
     // Persist locally so list shows it immediately
     if (!backendOk) {
@@ -218,6 +225,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         'preparedBy': _preparedByCtrl.text.trim(),
         'approvedBy': voucher.approvedBy,
         'receivedBy': _receivedByCtrl.text.trim(),
+        'notes': _notesCtrl.text.trim(),
       });
     }
     await showVoucherSheet(context, voucher);

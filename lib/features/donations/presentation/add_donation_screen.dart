@@ -69,6 +69,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
   String _donationType = 'Education Fund';
   String _method = 'UPI';
   String _date = '';
+  DateTime _selectedDate = DateTime.now();
   bool _saving = false;
   final List<String> _attachments = [];
   bool _pickingFile = false;
@@ -84,6 +85,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     super.initState();
     final now = DateTime.now();
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    _selectedDate = now;
     _date = '${now.day.toString().padLeft(2,'0')} ${months[now.month-1]} ${now.year}';
     // pre-populate synchronously so the form always has data even if API fails
     _donors = _fallbackDonors();
@@ -173,11 +175,14 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
 
   void _pickDate() async {
     final d = await showDatePicker(
-      context: context, initialDate: DateTime(2026, 6, 4),
+      context: context, initialDate: _selectedDate,
       firstDate: DateTime(2020), lastDate: DateTime(2030),
       builder: (ctx, child) => Theme(data: Theme.of(ctx).copyWith(colorScheme: const ColorScheme.light(primary: _brand600)), child: child!),
     );
-    if (d != null) setState(() => _date = '${d.day.toString().padLeft(2, '0')} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.month - 1]} ${d.year}');
+    if (d != null) setState(() {
+      _selectedDate = d;
+      _date = '${d.day.toString().padLeft(2, '0')} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.month - 1]} ${d.year}';
+    });
   }
 
   Future<void> _openDonorPicker() async {
@@ -277,6 +282,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
         'typeId': typeId,
         'amount': int.parse(amountText),
         'paymentMode': _methodModes[_method] ?? 'CASH',
+        'date': _selectedDate.toIso8601String(),
         if (_descriptionCtrl.text.trim().isNotEmpty) 'notes': _descriptionCtrl.text.trim(),
       });
       // Non-Super-Admins: queued for approval — no receipt, nothing recorded yet.

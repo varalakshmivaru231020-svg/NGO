@@ -145,7 +145,7 @@ class _DonorDetailScreenState extends State<DonorDetailScreen> with SingleTicker
   String get _lastGift {
     if (_donations.isNotEmpty) {
       final d = _donations.first;
-      return _fmtDate(d['createdAt'] as String? ?? d['date'] as String?);
+      return _fmtDate(d['date'] as String? ?? d['createdAt'] as String?);
     }
     final ld = _donor?['lastDonationDate'] as String?;
     return ld != null ? _fmtDate(ld) : '—';
@@ -590,7 +590,7 @@ class _DonationsTabState extends State<_DonationsTab> {
         final typeMap = d['type'] as Map<String, dynamic>?;
         final label = typeMap?['label'] as String? ?? d['donationType'] as String? ?? 'Donation';
         final amount = d['amount'] as int? ?? 0;
-        final date = _fmtDate(d['createdAt'] as String? ?? d['date'] as String?);
+        final date = _fmtDate(d['date'] as String? ?? d['createdAt'] as String?);
         final receipt = d['receiptNo'] as String? ?? '—';
         final method = (d['paymentMode'] as String? ?? d['paymentMethod'] as String? ?? '—')
             .replaceAll('_', ' ');
