@@ -1,11 +1,15 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:excel/excel.dart' as xl;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
+import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/app_launcher.dart';
 import '../../../core/utils/native_file_saver.dart';
@@ -1248,6 +1252,229 @@ class _ExportDataState extends State<ExportDataScreen> {
   bool _reports   = false;
   bool _exporting = false;
 
+  // Start of the selected date range — null means "All Time" (no filter).
+  DateTime? get _rangeStart {
+    final now = DateTime.now();
+    switch (_range) {
+      case 'This Month': return DateTime(now.year, now.month, 1);
+      case 'Last 3 Months': return DateTime(now.year, now.month - 3, now.day);
+      case 'This Year': return DateTime(now.year, 1, 1);
+      default: return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchList(String path) async {
+    try {
+      final r = await apiClient.get(path, params: const {'limit': '500', 'page': '1'});
+      final inner = r['data'];
+      final list = inner is Map ? (inner['data'] as List? ?? const []) : (inner is List ? inner : const []);
+      return list.whereType<Map>().map((m) => m.cast<String, dynamic>()).toList();
+    } catch (_) { return const []; }
+  }
+
+  Future<Map<String, dynamic>> _fetchOverview() async {
+    try {
+      final r = await apiClient.get('/reports/overview');
+      return (r['data'] as Map).cast<String, dynamic>();
+    } catch (_) { return const {}; }
+  }
+
+  List<Map<String, dynamic>> _filterByDate(List<Map<String, dynamic>> rows, String dateKey) {
+    final start = _rangeStart;
+    if (start == null) return rows;
+    return rows.where((r) {
+      final dt = DateTime.tryParse(r[dateKey] as String? ?? '');
+      return dt != null && !dt.isBefore(start);
+    }).toList();
+  }
+
+  ({List<String> headers, List<List<String>> rows}) _donorRows(List<Map<String, dynamic>> donors) => (
+    headers: const ['#', 'Donor Code', 'Name', 'Mobile', 'City', 'Tier', 'Total Donations'],
+    rows: donors.asMap().entries.map((e) {
+      final i = e.key, r = e.value;
+      final count = (r['_count'] as Map?)?['donations'] as int? ?? 0;
+      return ['${i + 1}', r['donorCode'] as String? ?? '', r['name'] as String? ?? '',
+        r['mobile'] as String? ?? '', r['city'] as String? ?? '', r['tier'] as String? ?? '', '$count'];
+    }).toList(),
+  );
+
+  ({List<String> headers, List<List<String>> rows}) _donationRows(List<Map<String, dynamic>> donations) => (
+    headers: const ['#', 'Receipt No.', 'Donor', 'Date', 'Type', 'Payment Mode', 'Amount (₹)'],
+    rows: donations.asMap().entries.map((e) {
+      final i = e.key, r = e.value;
+      final donor = (r['donor'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final type = (r['type'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final amount = (r['amount'] as num?)?.toInt() ?? 0;
+      return ['${i + 1}', r['receiptNo'] as String? ?? '', donor['name'] as String? ?? '',
+        (r['date'] as String? ?? '').split('T').first, type['label'] as String? ?? '',
+        r['paymentMode'] as String? ?? '', amount.toString()];
+    }).toList(),
+  );
+
+  ({List<String> headers, List<List<String>> rows}) _studentRows(List<Map<String, dynamic>> students) => (
+    headers: const ['#', 'Child ID', 'Name', 'Centre', 'Class', 'Status', 'Gender'],
+    rows: students.asMap().entries.map((e) {
+      final i = e.key, r = e.value;
+      final centre = (r['center'] as Map?)?['name'] as String? ?? '';
+      return ['${i + 1}', r['childId'] as String? ?? '', r['name'] as String? ?? '',
+        centre, r['class'] as String? ?? '', r['status'] as String? ?? '', r['gender'] as String? ?? ''];
+    }).toList(),
+  );
+
+  ({List<String> headers, List<List<String>> rows}) _summaryRows(Map<String, dynamic> overview) => (
+    headers: const ['Metric', 'Value'],
+    rows: [
+      ['Total Raised (₹)', '${((overview['donations'] as Map?)?['totalRaised'] as num?)?.toInt() ?? 0}'],
+      ['Total Donors', '${((overview['donors'] as Map?)?['total'] as num?)?.toInt() ?? 0}'],
+      ['Active Students', '${((overview['students'] as Map?)?['active'] as num?)?.toInt() ?? 0}'],
+    ],
+  );
+
+  String _csvEscape(String v) =>
+      (v.contains(',') || v.contains('"') || v.contains('\n')) ? '"${v.replaceAll('"', '""')}"' : v;
+
+  String _buildCsv({
+    required List<Map<String, dynamic>> donors,
+    required List<Map<String, dynamic>> donations,
+    required List<Map<String, dynamic>> students,
+    Map<String, dynamic>? overview,
+  }) {
+    final out = StringBuffer();
+    out.writeln('Sri Krishnashraya Educational Trust — Data Export');
+    out.writeln('Range: $_range  |  Generated: ${DateTime.now().toString().substring(0, 16)}');
+    void section(String title, ({List<String> headers, List<List<String>> rows}) t) {
+      out.writeln('');
+      out.writeln('--- $title ---');
+      out.writeln(t.headers.map(_csvEscape).join(','));
+      for (final row in t.rows) { out.writeln(row.map(_csvEscape).join(',')); }
+    }
+    if (_donors) section('DONORS', _donorRows(donors));
+    if (_donations) section('DONATIONS', _donationRows(donations));
+    if (_students) section('STUDENTS', _studentRows(students));
+    if (_reports && overview != null) section('SUMMARY', _summaryRows(overview));
+    return out.toString();
+  }
+
+  xl.CellStyle _xlHeaderStyle() => xl.CellStyle(
+    bold: true,
+    backgroundColorHex: xl.ExcelColor.fromHexString('#FF9933'),
+    fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
+  );
+
+  void _xlWriteSheet(xl.Excel excel, String name, ({List<String> headers, List<List<String>> rows}) t) {
+    final sheet = excel[name];
+    for (int c = 0; c < t.headers.length; c++) {
+      final cell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0));
+      cell.value = xl.TextCellValue(t.headers[c]);
+      cell.cellStyle = _xlHeaderStyle();
+    }
+    for (int r = 0; r < t.rows.length; r++) {
+      for (int c = 0; c < t.rows[r].length; c++) {
+        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r + 1)).value = xl.TextCellValue(t.rows[r][c]);
+      }
+    }
+  }
+
+  Uint8List? _buildExcel({
+    required List<Map<String, dynamic>> donors,
+    required List<Map<String, dynamic>> donations,
+    required List<Map<String, dynamic>> students,
+    Map<String, dynamic>? overview,
+  }) {
+    final excel = xl.Excel.createExcel();
+    if (_donors) _xlWriteSheet(excel, 'Donors', _donorRows(donors));
+    if (_donations) _xlWriteSheet(excel, 'Donations', _donationRows(donations));
+    if (_students) _xlWriteSheet(excel, 'Students', _studentRows(students));
+    if (_reports && overview != null) _xlWriteSheet(excel, 'Summary', _summaryRows(overview));
+    if (excel.sheets.containsKey('Sheet1')) excel.delete('Sheet1');
+    final bytes = excel.encode();
+    return bytes == null ? null : Uint8List.fromList(bytes);
+  }
+
+  Future<Uint8List> _buildPdf({
+    required List<Map<String, dynamic>> donors,
+    required List<Map<String, dynamic>> donations,
+    required List<Map<String, dynamic>> students,
+    Map<String, dynamic>? overview,
+  }) async {
+    final doc = pw.Document();
+    final orange = PdfColor.fromInt(0xFFF97316);
+    final dark   = PdfColor.fromInt(0xFF1F2937);
+    final grey   = PdfColor.fromInt(0xFF6B7280);
+
+    pw.Widget section(String title, ({List<String> headers, List<List<String>> rows}) t) => pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.SizedBox(height: 16),
+        pw.Text(title, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: dark)),
+        pw.SizedBox(height: 6),
+        pw.TableHelper.fromTextArray(
+          headers: t.headers,
+          data: t.rows,
+          headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+          headerDecoration: pw.BoxDecoration(color: orange),
+          cellStyle: const pw.TextStyle(fontSize: 8),
+          cellHeight: 22,
+          cellAlignment: pw.Alignment.centerLeft,
+        ),
+      ],
+    );
+
+    doc.addPage(pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.fromLTRB(28, 28, 28, 28),
+      build: (ctx) => [
+        pw.Text('Sri Krishnashraya Educational Trust', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: dark)),
+        pw.Text('Data Export', style: pw.TextStyle(fontSize: 11, color: grey)),
+        pw.SizedBox(height: 4),
+        pw.Text('Range: $_range   |   Generated: ${DateTime.now().toString().substring(0, 16)}',
+            style: pw.TextStyle(fontSize: 9, color: grey)),
+        if (_donors) section('Donors', _donorRows(donors)),
+        if (_donations) section('Donations', _donationRows(donations)),
+        if (_students) section('Students', _studentRows(students)),
+        if (_reports && overview != null) section('Summary', _summaryRows(overview)),
+      ],
+    ));
+    return doc.save();
+  }
+
+  Future<void> _export() async {
+    setState(() => _exporting = true);
+    try {
+      final donors = _donors ? await _fetchList('/donors') : <Map<String, dynamic>>[];
+      final donations = _donations ? _filterByDate(await _fetchList('/donations'), 'date') : <Map<String, dynamic>>[];
+      final students = _students ? await _fetchList('/students') : <Map<String, dynamic>>[];
+      final overview = _reports ? await _fetchOverview() : null;
+
+      final dateStr = DateFormat('ddMMyyyy').format(DateTime.now());
+      bool ok;
+      String filename;
+
+      if (_format == 'CSV') {
+        filename = 'SKET_Export_$dateStr.csv';
+        ok = await NativeFileSaver.saveCsv(filename, _buildCsv(donors: donors, donations: donations, students: students, overview: overview));
+      } else if (_format == 'Excel') {
+        filename = 'SKET_Export_$dateStr.xlsx';
+        final bytes = _buildExcel(donors: donors, donations: donations, students: students, overview: overview);
+        ok = bytes != null && await NativeFileSaver.saveBytes(filename, bytes,
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      } else {
+        filename = 'SKET_Export_$dateStr.pdf';
+        final bytes = await _buildPdf(donors: donors, donations: donations, students: students, overview: overview);
+        ok = await NativeFileSaver.saveBytes(filename, bytes, 'application/pdf');
+      }
+
+      if (!mounted) return;
+      setState(() => _exporting = false);
+      _snack(context, ok ? '✓ Downloaded $filename' : 'Failed to save file');
+    } catch (_) {
+      if (mounted) {
+        setState(() => _exporting = false);
+        _snack(context, 'Export failed — check your connection and try again');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     body: Column(children: [
@@ -1294,44 +1521,7 @@ class _ExportDataState extends State<ExportDataScreen> {
           ])),
           const SizedBox(height: 24),
           SizedBox(width: double.infinity, child: ElevatedButton.icon(
-            onPressed: _exporting ? null : () async {
-              setState(() => _exporting = true);
-              await Future.delayed(const Duration(milliseconds: 800));
-              if (!mounted) return;
-              // Build a sample CSV/text export
-              final csv = StringBuffer();
-              csv.writeln('Sri Krishnashraya Educational Trust — Data Export');
-              csv.writeln('Format: $_format  |  Range: $_range');
-              csv.writeln('Generated: ${DateTime.now().toString().substring(0, 16)}');
-              csv.writeln('');
-              if (_donors) {
-                csv.writeln('--- DONORS ---');
-                csv.writeln('ID,Name,Category,Mobile,Email,City,Status');
-                csv.writeln('SF-D-0001,Rajesh Khanna,Major Donor,9876543210,rajesh@example.com,Mumbai,Active');
-                csv.writeln('SF-D-0002,Priya Sharma,Child Sponsor,9812345678,priya@example.com,Pune,Active');
-                csv.writeln('SF-D-0003,Arjun Mehta,Corporate,9800012345,arjun@example.com,Bengaluru,Active');
-                csv.writeln('');
-              }
-              if (_donations) {
-                csv.writeln('--- DONATIONS ---');
-                csv.writeln('ID,Donor,Amount,Type,Method,Date,Status');
-                csv.writeln('SF/26-27/0423,Priya Sharma,18000,Child Sponsorship,UPI,04 Jun 2026,Received');
-                csv.writeln('SF/26-27/0422,Sanjay Gupta,75000,Education,Bank Transfer,04 Jun 2026,Received');
-                csv.writeln('SF/26-27/0421,Vikram Singh,30000,Medical,UPI,03 Jun 2026,Received');
-                csv.writeln('');
-              }
-              if (_students) {
-                csv.writeln('--- STUDENTS ---');
-                csv.writeln('ID,Name,Centre,Gender,Class,Status');
-                csv.writeln('SKT-C-0001,Imran Qureshi,Sulibele,Male,Class 9,Active');
-                csv.writeln('SKT-C-0002,Diya Reddy,Medahalli,Female,Class 8,Active');
-                csv.writeln('');
-              }
-              final filename = 'SKET_Export_${DateTime.now().millisecondsSinceEpoch}.${_format.toLowerCase()}';
-              final ok = await NativeFileSaver.saveCsv(filename, csv.toString());
-              setState(() => _exporting = false);
-              _snack(context, ok ? '✓ Downloaded to Downloads/$filename' : 'Failed to save file');
-            },
+            onPressed: _exporting ? null : _export,
             icon: _exporting
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
               : const Icon(Icons.download_outlined, size: 20),

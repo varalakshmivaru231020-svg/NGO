@@ -200,6 +200,7 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
           pw.Text(r.donorName, style: pw.TextStyle(fontSize: 18, color: dark)),
           pw.SizedBox(height: 4),
           if (r.donorPhone.isNotEmpty) pw.Text(r.donorPhone, style: pw.TextStyle(fontSize: 9.5, color: grey)),
+          if (r.donorAddress.isNotEmpty) pw.Text(r.donorAddress, style: pw.TextStyle(fontSize: 9.5, color: grey)),
           if (locationLine.isNotEmpty) pw.Text(locationLine, style: pw.TextStyle(fontSize: 9.5, color: grey)),
           if (r.donorPan.isNotEmpty) ...[
             pw.SizedBox(height: 3),
@@ -212,7 +213,7 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
             width: double.infinity,
             color: orange,
             padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            child: pw.Text('Receipt for #${r.receiptNo}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: white)),
+            child: pw.Text('Receipt No:${r.receiptNo}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: white)),
           ),
           pw.Container(
             width: double.infinity,
@@ -224,7 +225,9 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
               pw.Text('Mode: ${r.paymentMode}', style: pw.TextStyle(fontSize: 8.5, color: dark)),
               if (r.reference.isNotEmpty) ...[
                 pw.SizedBox(height: 2),
-                pw.Text('Gateway Ref: ${r.reference}', style: pw.TextStyle(fontSize: 8.5, color: dark)),
+                pw.Text('Transaction ID : ${r.reference}', style: pw.TextStyle(fontSize: 8.5, color: dark)),
+                pw.SizedBox(height: 2),
+                pw.Text('Gateway Ref : ${r.reference}', style: pw.TextStyle(fontSize: 8.5, color: dark)),
               ],
             ]),
           ),
@@ -243,7 +246,7 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
         },
         children: [
           pw.TableRow(decoration: pw.BoxDecoration(color: orange), children: [
-            _th('DONATION / SERVICE'),
+            _th('DONATION'),
             _th('DESCRIPTION'),
             _th('UNIT', align: pw.TextAlign.center),
             _th('COST', align: pw.TextAlign.right),
@@ -303,7 +306,7 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
           pw.Text('STATUTORY REGISTRATION DETAILS (TAX BENEFITS)',
               style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: orange, letterSpacing: 0.3)),
           pw.SizedBox(height: 5),
-          pw.Text('Trust PAN: $orgPan   |   12AA Registration: $org12A   |   80G Certification: $org80G',
+          pw.Text('• Trust PAN: $orgPan | • 12AA Registration: $org12A | • 80G Certification: $org80G',
               style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: dark)),
           pw.SizedBox(height: 5),
           pw.Text(
@@ -670,6 +673,10 @@ class _ReceiptSheet extends StatelessWidget {
                   const SizedBox(height: 5),
                   if (receipt.donorPhone.isNotEmpty)
                     Text(receipt.donorPhone, style: const TextStyle(fontSize: 11.5, color: _grey)),
+                  if (receipt.donorAddress.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(receipt.donorAddress, style: const TextStyle(fontSize: 11.5, color: _grey)),
+                  ],
                   if (locationLine.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Text(locationLine, style: const TextStyle(fontSize: 11.5, color: _grey)),
@@ -689,7 +696,7 @@ class _ReceiptSheet extends StatelessWidget {
                       color: _orange,
                       borderRadius: BorderRadius.vertical(top: Radius.circular(6)),
                     ),
-                    child: Text('Receipt for #${receipt.receiptNo}',
+                    child: Text('Receipt No:${receipt.receiptNo}',
                         style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Colors.white)),
                   ),
                   Container(
@@ -705,7 +712,9 @@ class _ReceiptSheet extends StatelessWidget {
                       Text('Mode: ${receipt.paymentMode}', style: const TextStyle(fontSize: 10.5, color: _dark)),
                       if (receipt.reference.isNotEmpty) ...[
                         const SizedBox(height: 3),
-                        Text('Gateway Ref: ${receipt.reference}', style: const TextStyle(fontSize: 10.5, color: _dark)),
+                        Text('Transaction ID : ${receipt.reference}', style: const TextStyle(fontSize: 10.5, color: _dark)),
+                        const SizedBox(height: 3),
+                        Text('Gateway Ref : ${receipt.reference}', style: const TextStyle(fontSize: 10.5, color: _dark)),
                       ],
                     ]),
                   ),
@@ -719,7 +728,7 @@ class _ReceiptSheet extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(color: _orange, borderRadius: BorderRadius.circular(4)),
                 child: Row(children: const [
-                  Expanded(flex: 3, child: Text('DONATION / SERVICE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.white))),
+                  Expanded(flex: 3, child: Text('DONATION', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.white))),
                   Expanded(flex: 4, child: Text('DESCRIPTION', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.white))),
                   Expanded(flex: 1, child: Text('UNIT', textAlign: TextAlign.center, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.white))),
                   Expanded(flex: 2, child: Text('TOTAL', textAlign: TextAlign.right, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.white))),
@@ -787,7 +796,7 @@ class _ReceiptSheet extends StatelessWidget {
                       style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: _orange, letterSpacing: 0.3)),
                   const SizedBox(height: 6),
                   Text(
-                      'Trust PAN: $orgPan  |  12AA Registration: $org12A  |  80G Certification: $org80G',
+                      '• Trust PAN: $orgPan | • 12AA Registration: $org12A | • 80G Certification: $org80G',
                       style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: _dark, height: 1.4)),
                   const SizedBox(height: 6),
                   Text(
