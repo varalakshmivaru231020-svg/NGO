@@ -1,14 +1,19 @@
-// Saksham Foundation — Prisma Schema (PostgreSQL)
+// Saksham Foundation — Prisma Schema (MySQL)
 // Status/role/enum-like values are stored as String for flexibility.
+//
+// @db.Text / @db.LongText annotations below are required for MySQL — the
+// default String maps to VARCHAR(191), which silently truncates free-text
+// notes/addresses and (especially) the base64-encoded file-content fields.
+// Never add these to an @id / @unique / @@index field — MySQL can't index
+// a TEXT/LONGTEXT column without an explicit prefix length.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL") // pooled (runtime)
-  directUrl = env("DIRECT_URL") // direct (migrations)
+  provider = "mysql"
+  url      = env("DATABASE_URL")
 }
 
 // ─────────────────────────────────────────
@@ -23,7 +28,7 @@ model User {
   passwordHash String
   role         String    @default("STAFF")
   modules      String? // CSV of frontend module keys this member can access
-  avatar       String?
+  avatar       String?   @db.LongText // profile photo, base64-encoded
   officeId     String?
   isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
@@ -47,7 +52,7 @@ model UserDocument {
   category  String
   fileName  String
   mimeType  String?
-  data      String // base64-encoded file content
+  data      String   @db.LongText // base64-encoded file content
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -94,7 +99,7 @@ model Donor {
   gender      String    @default("MALE")
   dob         DateTime?
   anniversary DateTime?
-  address     String?
+  address     String?   @db.Text
   city        String?
   state       String?
   country     String?
@@ -102,8 +107,8 @@ model Donor {
   occupation  String?
   company     String?
   tier        String    @default("SILVER")
-  notes       String?
-  avatar      String? // profile photo, base64-encoded
+  notes       String?   @db.Text
+  avatar      String?   @db.LongText // profile photo, base64-encoded
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -135,7 +140,7 @@ model DonorActivityVideo {
   activityDate DateTime @default(now())
   fileName     String
   mimeType     String? // video/mp4, video/quicktime, video/x-msvideo, video/webm
-  data         String // base64-encoded file content
+  data         String   @db.LongText // base64-encoded file content
   uploadedBy   String?
   createdAt    DateTime @default(now())
 
@@ -154,7 +159,7 @@ model DonorActivityImage {
   activityDate DateTime @default(now())
   fileName     String
   mimeType     String? // image/jpeg, image/png, image/webp
-  data         String // base64-encoded file content
+  data         String   @db.LongText // base64-encoded file content
   uploadedBy   String?
   createdAt    DateTime @default(now())
 
@@ -167,7 +172,7 @@ model DonorActivityImage {
 model DonorCategory {
   id          String   @id @default(cuid())
   name        String   @unique
-  description String?
+  description String?  @db.Text
   icon        String   @default("users")
   color       String   @default("#0E8C76")
   sortOrder   Int      @default(0)
@@ -200,7 +205,7 @@ model DonationType {
   key         String   @unique
   label       String
   icon        String   @default("gift")
-  description String?
+  description String?  @db.Text
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
@@ -219,7 +224,7 @@ model Donation {
   paymentMode  String   @default("CASH")
   status       String   @default("COMPLETED")
   reference    String?
-  notes        String?
+  notes        String?  @db.Text
   chequeNo     String?
   bankName     String?
   date         DateTime @default(now())
@@ -242,7 +247,7 @@ model ExpenseCategory {
   key         String   @unique
   label       String
   icon        String   @default("wallet")
-  description String?
+  description String?  @db.Text
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
@@ -256,7 +261,7 @@ model Expense {
   voucherNo   String   @unique
   categoryId  String
   paidTo      String
-  purpose     String
+  purpose     String   @db.Text
   amount      Int
   paymentMode String   @default("CASH")
   status      String   @default("COMPLETED")
@@ -266,7 +271,7 @@ model Expense {
   preparedBy  String?
   approvedBy  String?
   receivedBy  String?
-  notes       String?
+  notes       String?  @db.Text
   date        DateTime @default(now())
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -283,7 +288,7 @@ model PaymentLink {
   slug       String    @unique
   donorId    String?
   amount     Int?
-  purpose    String?
+  purpose    String?   @db.Text
   donationId String?   @unique
   status     String    @default("ACTIVE")
   expiresAt  DateTime?
@@ -316,7 +321,7 @@ model Center {
   id        String   @id @default(cuid())
   name      String   @unique
   city      String?
-  address   String?
+  address   String?  @db.Text
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
@@ -335,17 +340,17 @@ model Student {
   class            String?
   school           String?
   status           String    @default("ACTIVE")
-  photo            String?
+  photo            String?   @db.LongText
   fatherName       String?
   motherName       String?
   guardianName     String?
   guardianRelation String?
   guardianPhone    String?
-  address          String?
-  medicalNotes     String?
+  address          String?   @db.Text
+  medicalNotes     String?   @db.Text
   admissionDate    DateTime  @default(now())
   exitDate         DateTime?
-  notes            String?
+  notes            String?   @db.Text
 
   // Education Details tab
   admissionNo      String?
@@ -354,7 +359,7 @@ model Student {
   section          String?
   permanence       String?
   studentType      String?
-  educationRemarks String?
+  educationRemarks String?   @db.Text
 
   // Identity / government IDs
   aadhaarNumber         String?
@@ -368,8 +373,8 @@ model Student {
   subCaste              String?
 
   // Financial / welfare
-  bankAccountDetails        String?
-  siblingNames              String?
+  bankAccountDetails        String? @db.Text
+  siblingNames              String? @db.Text
   incomeCertificateAmount   Int?
   incomeCertificateRdNumber String?
 
@@ -397,7 +402,7 @@ model GrowthRecord {
   date      DateTime
   heightCm  Float?
   weightKg  Float?
-  notes     String?
+  notes     String?  @db.Text
   createdAt DateTime @default(now())
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -415,7 +420,7 @@ model StudentDocument {
   category  String
   fileName  String
   mimeType  String?
-  data      String // base64-encoded file content
+  data      String   @db.LongText // base64-encoded file content
   createdAt DateTime @default(now())
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -436,8 +441,8 @@ model ProgressRecord {
   communicationSkills String?
   leadership          String?
   sportsPerformance   String?
-  mentorRemarks       String?
-  teacherRemarks      String?
+  mentorRemarks       String?  @db.Text
+  teacherRemarks      String?  @db.Text
   examResult          String?
   grade               String?
   createdAt           DateTime @default(now())
@@ -456,7 +461,7 @@ model Sponsorship {
   endDate   DateTime?
   amount    Int
   frequency String    @default("ANNUAL")
-  notes     String?
+  notes     String?   @db.Text
   isActive  Boolean   @default(true)
   createdAt DateTime  @default(now())
 
@@ -471,7 +476,7 @@ model Attendance {
   studentId String
   date      DateTime
   present   Boolean  @default(true)
-  notes     String?
+  notes     String?  @db.Text
   createdAt DateTime @default(now())
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -488,7 +493,7 @@ model Achievement {
   id          String   @id @default(cuid())
   studentId   String
   title       String
-  description String?
+  description String?  @db.Text
   category    String   @default("ACADEMICS")
   date        DateTime @default(now())
   photos      Int      @default(0)
@@ -511,7 +516,7 @@ model Reminder {
   donorId   String?
   type      String
   title     String
-  message   String?
+  message   String?  @db.Text
   dueDate   DateTime
   isDone    Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -531,7 +536,7 @@ model Office {
   name      String
   city      String
   state     String?
-  address   String?
+  address   String?  @db.Text
   phone     String?
   email     String?
   isHQ      Boolean  @default(false)
@@ -552,7 +557,7 @@ model Notification {
   id        String   @id @default(cuid())
   userId    String
   title     String
-  body      String
+  body      String   @db.Text
   icon      String?
   route     String?
   status    String   @default("UNREAD")
@@ -574,8 +579,8 @@ model AuditLog {
   action    String
   entity    String
   entityId  String?
-  oldValue  String?
-  newValue  String?
+  oldValue  String?  @db.Text
+  newValue  String?  @db.Text
   ipAddress String?
   userAgent String?
   createdAt DateTime @default(now())
@@ -604,7 +609,7 @@ model ApprovalRequest {
   payload       Json? // request body (the proposed new data)
   previousData  Json? // snapshot of the record before the change (for the diff view)
   status        String    @default("PENDING") // PENDING | APPROVED | REJECTED
-  reason        String? // rejection reason (mandatory on reject)
+  reason        String?   @db.Text // rejection reason (mandatory on reject)
   requesterId   String
   requesterName String
   requesterRole String
@@ -613,7 +618,7 @@ model ApprovalRequest {
   reviewerName  String?
   reviewedAt    DateTime?
   resultId      String? // id of the created/updated record after approval
-  error         String? // last replay error, if execution failed on approval
+  error         String?   @db.Text // last replay error, if execution failed on approval
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -632,7 +637,7 @@ model WhatsappSetting {
   id            String   @id @default("singleton")
   storeNumber   String? // sender display number, e.g. 919832399399
   phoneNumberId String? // Meta Phone Number ID, sent with each message
-  apiToken      String? // Bearer token
+  apiToken      String?  @db.Text // Bearer token
   apiUrl        String? // send endpoint (override); default botsyncwa messages URL
   // Native-Meta-passthrough mode (apiUrl containing "/api/meta"): the send URL
   // is built as `${apiUrl}/${apiVersion}/${phoneNumberId}/messages`. wabaId /
@@ -659,8 +664,11 @@ model RazorpaySetting {
 }
 
 // Atomic per-key sequence counter — powers donation receipt numbers and
-// donor codes via a single INSERT ... ON CONFLICT ... DO UPDATE statement,
-// which is race-free under concurrent requests by construction.
+// donor codes via a single INSERT ... ON DUPLICATE KEY UPDATE statement using
+// MySQL's LAST_INSERT_ID(expr) trick (wrapped in a Prisma interactive
+// transaction so both statements share one connection), which is race-free
+// under concurrent requests by construction — MySQL has no RETURNING clause,
+// so this replaces the previous Postgres ON CONFLICT ... RETURNING approach.
 model SequenceCounter {
   key String @id
   seq Int    @default(0)
@@ -674,7 +682,7 @@ model SequenceCounter {
 model OrgSettings {
   id                 String   @id @default("singleton")
   name               String?
-  address            String?
+  address            String?  @db.Text
   city               String?
   state              String?
   country            String?
@@ -687,7 +695,7 @@ model OrgSettings {
   reg12A             String?
   cert80G            String?
   fcra               String?
-  logoBase64         String?
+  logoBase64         String?  @db.LongText
   updatedAt          DateTime @updatedAt
 
   @@map("org_settings")

@@ -237,10 +237,10 @@ export class ApprovalsService {
     if (q.q && q.q.trim()) {
       const term = q.q.trim();
       where.OR = [
-        { requesterName: { contains: term, mode: 'insensitive' } },
-        { module: { contains: term, mode: 'insensitive' } },
-        { action: { contains: term, mode: 'insensitive' } },
-        { requesterRole: { contains: term, mode: 'insensitive' } },
+        { requesterName: { contains: term } },
+        { module: { contains: term } },
+        { action: { contains: term } },
+        { requesterRole: { contains: term } },
       ];
     }
     return this.prisma.approvalRequest.findMany({

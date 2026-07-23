@@ -23,7 +23,7 @@ export class AchievementsService {
   async findAll(query: AchievementQueryDto) {
     const { page = 1, limit = 20, search, category, studentId } = query;
     const where: any = {};
-    if (search) where.title = { contains: search, mode: 'insensitive' };
+    if (search) where.title = { contains: search };
     if (category) where.category = category;
     if (studentId) where.studentId = studentId;
     const [data, total] = await Promise.all([

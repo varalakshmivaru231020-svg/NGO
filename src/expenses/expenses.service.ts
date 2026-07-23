@@ -40,8 +40,8 @@ export class ExpensesService {
     const where: any = {};
     if (search) {
       where.OR = [
-        { voucherNo: { contains: search, mode: 'insensitive' } },
-        { paidTo: { contains: search, mode: 'insensitive' } },
+        { voucherNo: { contains: search } },
+        { paidTo: { contains: search } },
       ];
     }
     if (status) where.status = status;

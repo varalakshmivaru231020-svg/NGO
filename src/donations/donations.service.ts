@@ -25,19 +25,23 @@ export class DonationsService {
     type: true,
   };
 
-  // Atomic per-year sequence: a single INSERT ... ON CONFLICT ... DO UPDATE
-  // statement means Postgres holds the row lock through conflict resolution,
-  // so concurrent requests can never receive the same number. A new year
-  // gets a fresh row (and fresh 00001) the first time it's used.
+  // Atomic per-year sequence: MySQL has no RETURNING clause, so this uses
+  // SELECT ... FOR UPDATE inside an interactive transaction — the row lock
+  // blocks any concurrent request from reading the counter until this one
+  // commits its increment, which is race-free under concurrent requests by
+  // construction. A new year gets a fresh row (and fresh 00001) the first
+  // time it's used.
   private async nextReceiptNo(): Promise<string> {
     const year = new Date().getFullYear();
     const key = `donation-receipt:${year}`;
-    const rows = await this.prisma.$queryRaw<{ seq: number }[]>`
-      INSERT INTO sequence_counters (key, seq) VALUES (${key}, 1)
-      ON CONFLICT (key) DO UPDATE SET seq = sequence_counters.seq + 1
-      RETURNING seq;
-    `;
-    return `SKET/${year}/${String(rows[0].seq).padStart(5, '0')}`;
+    const seq = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`INSERT IGNORE INTO sequence_counters (\`key\`, seq) VALUES (${key}, 0)`;
+      const rows = await tx.$queryRaw<{ seq: number }[]>`SELECT seq FROM sequence_counters WHERE \`key\` = ${key} FOR UPDATE`;
+      const next = rows[0].seq + 1;
+      await tx.$executeRaw`UPDATE sequence_counters SET seq = ${next} WHERE \`key\` = ${key}`;
+      return next;
+    });
+    return `SKET/${year}/${String(seq).padStart(5, '0')}`;
   }
 
   async create(dto: CreateDonationDto) {
@@ -76,8 +80,8 @@ export class DonationsService {
     const where: any = {};
     if (search) {
       where.OR = [
-        { receiptNo: { contains: search, mode: 'insensitive' } },
-        { donor: { name: { contains: search, mode: 'insensitive' } } },
+        { receiptNo: { contains: search } },
+        { donor: { name: { contains: search } } },
       ];
     }
     if (status) where.status = status;

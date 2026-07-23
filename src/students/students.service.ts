@@ -64,9 +64,9 @@ export class StudentsService {
     const where: any = {};
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { childId: { contains: search, mode: 'insensitive' } },
-        { fatherName: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search } },
+        { childId: { contains: search } },
+        { fatherName: { contains: search } },
       ];
     }
     if (status) where.status = status;

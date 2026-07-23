@@ -22,16 +22,19 @@ export class DonorsService {
     _count: { select: { donations: true, sponsorships: true } },
   };
 
-  // Atomic — see DonationsService.nextReceiptNo() for why a single
-  // INSERT ... ON CONFLICT ... DO UPDATE is race-free under concurrent
-  // requests (relevant now that public/anonymous donor creation exists).
+  // Atomic — see DonationsService.nextReceiptNo() for why SELECT ... FOR
+  // UPDATE inside a transaction is race-free under concurrent requests
+  // (relevant now that public/anonymous donor creation exists).
   private async nextCode(): Promise<string> {
-    const rows = await this.prisma.$queryRaw<{ seq: number }[]>`
-      INSERT INTO sequence_counters (key, seq) VALUES ('donor-code', 1)
-      ON CONFLICT (key) DO UPDATE SET seq = sequence_counters.seq + 1
-      RETURNING seq;
-    `;
-    return `DID${String(rows[0].seq).padStart(5, '0')}`;
+    const key = 'donor-code';
+    const seq = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`INSERT IGNORE INTO sequence_counters (\`key\`, seq) VALUES (${key}, 0)`;
+      const rows = await tx.$queryRaw<{ seq: number }[]>`SELECT seq FROM sequence_counters WHERE \`key\` = ${key} FOR UPDATE`;
+      const next = rows[0].seq + 1;
+      await tx.$executeRaw`UPDATE sequence_counters SET seq = ${next} WHERE \`key\` = ${key}`;
+      return next;
+    });
+    return `DID${String(seq).padStart(5, '0')}`;
   }
 
   async create(dto: CreateDonorDto) {
@@ -56,14 +59,14 @@ export class DonorsService {
     const where: any = { isActive: true };
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search } },
         { mobile: { contains: search } },
-        { email: { contains: search, mode: 'insensitive' } },
-        { donorCode: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search } },
+        { donorCode: { contains: search } },
       ];
     }
     if (tier) where.tier = tier;
-    if (city) where.city = { contains: city, mode: 'insensitive' };
+    if (city) where.city = { contains: city };
     if (categoryId) where.categories = { some: { categoryId } };
 
     const [data, total] = await Promise.all([
