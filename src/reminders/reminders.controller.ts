@@ -17,6 +17,16 @@ export class RemindersController {
   @Get('birthdays') @ApiOperation({ summary: 'Donor birthdays today' })
   birthdays() { return this.svc.birthdaysToday(); }
 
+  @Get('upcoming-birthdays') @ApiOperation({ summary: 'Donor + student birthdays in the next N days (default 31)' })
+  upcomingBirthdays(@Query('days') days?: string) {
+    return this.svc.upcomingBirthdays(days ? parseInt(days, 10) : 31);
+  }
+
+  @Get('upcoming-anniversaries') @ApiOperation({ summary: 'Donor anniversaries in the next N days (default 31)' })
+  upcomingAnniversaries(@Query('days') days?: string) {
+    return this.svc.upcomingAnniversaries(days ? parseInt(days, 10) : 31);
+  }
+
   @Post() @ApiOperation({ summary: 'Create reminder' })
   create(@Body() dto: CreateReminderDto) { return this.svc.create(dto); }
 

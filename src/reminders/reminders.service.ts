@@ -61,6 +61,102 @@ export class RemindersService {
     );
   }
 
+  // Next occurrence (this year or next) of a recurring month/day, relative to
+  // `from` (e.g. a birthday or anniversary) — used to project real donor/
+  // student dob & anniversary fields onto upcoming dates for the Reminders
+  // screen, which previously only ever showed hardcoded sample data.
+  private nextOccurrence(month: number, day: number, from: Date): Date {
+    const fromMidnight = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+    let next = new Date(fromMidnight.getFullYear(), month, day);
+    if (next < fromMidnight) next = new Date(fromMidnight.getFullYear() + 1, month, day);
+    return next;
+  }
+
+  // Donor + student birthdays falling within the next `days` days (default a
+  // month out), each annotated with the age they'll be turning.
+  async upcomingBirthdays(days = 31) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const horizon = new Date(today);
+    horizon.setDate(horizon.getDate() + days);
+
+    const [donors, students] = await Promise.all([
+      this.prisma.donor.findMany({
+        where: { isActive: true, dob: { not: null } },
+        select: { id: true, name: true, mobile: true, whatsapp: true, dob: true },
+      }),
+      this.prisma.student.findMany({
+        where: { status: 'ACTIVE' },
+        select: { id: true, name: true, guardianPhone: true, dob: true },
+      }),
+    ]);
+
+    const result: {
+      id: string; name: string; type: 'Donor' | 'Student';
+      mobile: string; date: string; turningAge: number;
+    }[] = [];
+
+    for (const d of donors) {
+      if (!d.dob) continue;
+      const dob = new Date(d.dob);
+      const next = this.nextOccurrence(dob.getMonth(), dob.getDate(), today);
+      if (next < horizon) {
+        result.push({
+          id: d.id, name: d.name, type: 'Donor',
+          mobile: d.whatsapp || d.mobile || '',
+          date: next.toISOString(), turningAge: next.getFullYear() - dob.getFullYear(),
+        });
+      }
+    }
+    for (const s of students) {
+      const dob = new Date(s.dob);
+      const next = this.nextOccurrence(dob.getMonth(), dob.getDate(), today);
+      if (next < horizon) {
+        result.push({
+          id: s.id, name: s.name, type: 'Student',
+          mobile: s.guardianPhone || '',
+          date: next.toISOString(), turningAge: next.getFullYear() - dob.getFullYear(),
+        });
+      }
+    }
+    result.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return result;
+  }
+
+  // Donor wedding/relationship anniversaries falling within the next `days`
+  // days, annotated with the number of years.
+  async upcomingAnniversaries(days = 31) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const horizon = new Date(today);
+    horizon.setDate(horizon.getDate() + days);
+
+    const donors = await this.prisma.donor.findMany({
+      where: { isActive: true, anniversary: { not: null } },
+      select: { id: true, name: true, mobile: true, whatsapp: true, anniversary: true },
+    });
+
+    const result: {
+      id: string; name: string; type: 'Donor';
+      mobile: string; date: string; years: number;
+    }[] = [];
+
+    for (const d of donors) {
+      if (!d.anniversary) continue;
+      const ann = new Date(d.anniversary);
+      const next = this.nextOccurrence(ann.getMonth(), ann.getDate(), today);
+      if (next < horizon) {
+        result.push({
+          id: d.id, name: d.name, type: 'Donor',
+          mobile: d.whatsapp || d.mobile || '',
+          date: next.toISOString(), years: next.getFullYear() - ann.getFullYear(),
+        });
+      }
+    }
+    result.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return result;
+  }
+
   async markDone(id: string) {
     return this.prisma.reminder.update({ where: { id }, data: { isDone: true } });
   }
