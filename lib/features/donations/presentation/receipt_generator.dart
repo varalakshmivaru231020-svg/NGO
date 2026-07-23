@@ -309,10 +309,13 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
           pw.Text('• Trust PAN: $orgPan | • 12AA Registration: $org12A | • 80G Certification: $org80G',
               style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: dark)),
           pw.SizedBox(height: 5),
-          pw.Text(
-            'This is an electronically generated receipt confirmation. No physical signature is required.'
-            '${orgEmail.isNotEmpty ? ' For verification or support, write to $orgEmail.' : ''}',
-            style: pw.TextStyle(fontSize: 7.5, color: grey)),
+          pw.Text('This is an electronically generated receipt confirmation. No physical signature is required.',
+              style: pw.TextStyle(fontSize: 7.5, color: grey)),
+          if (orgEmail.isNotEmpty) ...[
+            pw.SizedBox(height: 2),
+            pw.Text('For verification or support, write to $orgEmail.',
+                style: pw.TextStyle(fontSize: 7.5, color: grey)),
+          ],
         ]),
       ),
     ])],
@@ -556,10 +559,13 @@ Future<Uint8List> buildDonationStatementPdf({
           pw.Text('Trust PAN: $orgPan | 12AA Registration: $org12A | 80G Certification: $org80G',
               style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: dark)),
           pw.SizedBox(height: 5),
-          pw.Text(
-            'This is an electronically generated statement. No physical signature is required.'
-            '${orgEmail.isNotEmpty ? ' For verification or support, write to $orgEmail.' : ''}',
-            style: pw.TextStyle(fontSize: 7.5, color: grey)),
+          pw.Text('This is an electronically generated statement. No physical signature is required.',
+              style: pw.TextStyle(fontSize: 7.5, color: grey)),
+          if (orgEmail.isNotEmpty) ...[
+            pw.SizedBox(height: 2),
+            pw.Text('For verification or support, write to $orgEmail.',
+                style: pw.TextStyle(fontSize: 7.5, color: grey)),
+          ],
         ]),
       ),
     ])],
@@ -799,10 +805,13 @@ class _ReceiptSheet extends StatelessWidget {
                       '• Trust PAN: $orgPan | • 12AA Registration: $org12A | • 80G Certification: $org80G',
                       style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: _dark, height: 1.4)),
                   const SizedBox(height: 6),
-                  Text(
-                      'This is an electronically generated receipt confirmation. No physical signature is required.'
-                      '${orgEmail.isNotEmpty ? ' For verification or support, write to $orgEmail.' : ''}',
+                  Text('This is an electronically generated receipt confirmation. No physical signature is required.',
                       style: const TextStyle(fontSize: 8.5, color: _grey, height: 1.4)),
+                  if (orgEmail.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text('For verification or support, write to $orgEmail.',
+                        style: const TextStyle(fontSize: 8.5, color: _grey, height: 1.4)),
+                  ],
                 ]),
               ),
               const SizedBox(height: 24),
@@ -821,13 +830,36 @@ class _ReceiptSheet extends StatelessWidget {
                 onPressed: () async {
                   try {
                     await Printing.layoutPdf(onLayout: (_) => buildReceiptPdf(receipt, org: org));
-                  } catch (_) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text('Could not open print dialog'),
-                        backgroundColor: Color(0xFFF2685E),
-                        behavior: SnackBarBehavior.floating,
-                      ));
+                  } catch (e) {
+                    // Web browsers commonly block the print preview tab as a
+                    // popup — layoutPdf opens it after an async gap (PDF
+                    // generation), which loses the "direct user gesture"
+                    // status most browsers require to allow it, especially
+                    // in Incognito. Fall back to a direct download instead
+                    // of just showing an error, so the user still gets the
+                    // receipt either way.
+                    debugPrint('Print failed, falling back to download: $e');
+                    try {
+                      final bytes = await buildReceiptPdf(receipt, org: org);
+                      final filename = 'Receipt_${receipt.receiptNo.replaceAll('/', '-')}.pdf';
+                      final ok = await NativeFileSaver.saveBytes(filename, bytes, 'application/pdf');
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(ok
+                            ? "Couldn't open print preview — downloaded the PDF instead"
+                            : 'Could not open print dialog'),
+                          backgroundColor: ok ? _orange : const Color(0xFFF2685E),
+                          behavior: SnackBarBehavior.floating,
+                        ));
+                      }
+                    } catch (_) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('Could not open print dialog'),
+                          backgroundColor: Color(0xFFF2685E),
+                          behavior: SnackBarBehavior.floating,
+                        ));
+                      }
                     }
                   }
                 },
