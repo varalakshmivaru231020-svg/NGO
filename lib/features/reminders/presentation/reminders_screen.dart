@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/network/api_client.dart';
 
 const _brand600 = Color(0xFFFF9933);
 const _brand100 = Color(0xFFFFE8CC);
@@ -11,51 +12,65 @@ const _coral500 = Color(0xFFF2685E);
 const _violet500 = Color(0xFF7C6CF0);
 const _violet100 = Color(0xFFE7E3FD);
 const _sky500 = Color(0xFF2D9CDB);
-const _sky100 = Color(0xFFDCEFFB);
 const _onSurface2 = Color(0xFF5A6B67);
 const _onSurface3 = Color(0xFF93A29F);
 const _border = Color(0xFFE5EBE9);
 const _surface2 = Color(0xFFF4F7F6);
 
+const _months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+String _fmtDayMonthYear(DateTime d) => '${d.day.toString().padLeft(2, '0')} ${_months[d.month - 1]} ${d.year}';
+
 // ── data ──────────────────────────────────────────────────────────────
+// Backed by GET /reminders/upcoming-birthdays and /reminders/upcoming-anniversaries
+// — real donor + student dob/anniversary fields projected onto their next
+// occurrence, not hardcoded sample data.
 class _Reminder {
   const _Reminder({required this.id, required this.name, required this.type, required this.date,
-    required this.count, required this.mobile, required this.isBday});
+    required this.count, required this.mobile, required this.isBday, required this.daysUntil});
   final String id, name, type, date, mobile;
   final int count;
   final bool isBday;
+  final int daysUntil;
+
+  factory _Reminder.fromBirthdayJson(Map<String, dynamic> j) {
+    final dt = DateTime.tryParse(j['date'] as String? ?? '') ?? DateTime.now();
+    final today = DateTime.now();
+    final todayMid = DateTime(today.year, today.month, today.day);
+    return _Reminder(
+      id: j['id'] as String? ?? '',
+      name: j['name'] as String? ?? '',
+      type: j['type'] as String? ?? 'Donor',
+      date: _fmtDayMonthYear(dt),
+      count: j['turningAge'] as int? ?? 0,
+      mobile: j['mobile'] as String? ?? '',
+      isBday: true,
+      daysUntil: dt.difference(todayMid).inDays,
+    );
+  }
+
+  factory _Reminder.fromAnniversaryJson(Map<String, dynamic> j) {
+    final dt = DateTime.tryParse(j['date'] as String? ?? '') ?? DateTime.now();
+    final today = DateTime.now();
+    final todayMid = DateTime(today.year, today.month, today.day);
+    return _Reminder(
+      id: j['id'] as String? ?? '',
+      name: j['name'] as String? ?? '',
+      type: j['type'] as String? ?? 'Donor',
+      date: _fmtDayMonthYear(dt),
+      count: j['years'] as int? ?? 0,
+      mobile: j['mobile'] as String? ?? '',
+      isBday: false,
+      daysUntil: dt.difference(todayMid).inDays,
+    );
+  }
 }
-
-const _birthdays = [
-  _Reminder(id:'b1', name:'Anita Desai', type:'Donor',   date:'23 Jun', count:58, mobile:'+91 98337 11290', isBday:true),
-  _Reminder(id:'b2', name:'Diya Reddy',  type:'Student', date:'23 Jun', count:11, mobile:'+91 96112 99087', isBday:true),
-  _Reminder(id:'b3', name:'Rohan Patil', type:'Student', date:'26 Jun', count:12, mobile:'+91 90040 12009', isBday:true),
-  _Reminder(id:'b4', name:'Arjun Mehta', type:'Donor',   date:'29 Jun', count:36, mobile:'+91 90040 88876', isBday:true),
-  _Reminder(id:'b5', name:'Kavya Reddy', type:'Donor',   date:'30 Jun', count:31, mobile:'+91 91210 66789', isBday:true),
-];
-
-const _anniversaries = [
-  _Reminder(id:'n1', name:'Vikram Singh', type:'Donor', date:'23 Jun', count:20, mobile:'+91 70110 55432', isBday:false),
-  _Reminder(id:'n2', name:'Meera Iyer',   type:'Donor', date:'27 Jun', count:4,  mobile:'+91 96112 33447', isBday:false),
-  _Reminder(id:'n3', name:'Priya Sharma', type:'Donor', date:'14 Jul', count:14, mobile:'+91 99303 22118', isBday:false),
-];
 
 const _ranges = ['Today', 'This week', 'This month'];
 
 String _rangeOf(_Reminder r) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final parts = r.date.split(' ');
-  const months = {'Jan':1,'Feb':2,'Mar':3,'Apr':4,'May':5,'Jun':6,'Jul':7,'Aug':8,'Sep':9,'Oct':10,'Nov':11,'Dec':12};
-  final day = int.parse(parts[0]);
-  final month = months[parts[1]] ?? now.month;
-  final year = month >= now.month ? now.year : now.year + 1;
-  final date = DateTime(year, month, day);
-  final diff = date.difference(today).inDays;
-  if (diff == 0) return 'Today';
-  if (diff > 0 && diff <= 7) return 'This week';
-  if (diff > 0 && date.month == today.month && date.year == today.year) return 'This month';
-  if (diff > 0 && diff <= 31) return 'This month';
+  if (r.daysUntil <= 0) return 'Today';
+  if (r.daysUntil <= 7) return 'This week';
+  if (r.daysUntil <= 31) return 'This month';
   return 'Future';
 }
 
@@ -80,15 +95,41 @@ class RemindersScreen extends StatefulWidget {
 class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProviderStateMixin {
   late final TabController _tabs;
   String _range = 'Today';
+  bool _loading = true;
+  bool _error = false;
+  List<_Reminder> _birthdays = [];
+  List<_Reminder> _anniversaries = [];
 
   @override
   void initState() {
     super.initState();
     _tabs = TabController(length: 2, vsync: this);
     _tabs.addListener(() => setState(() {}));
+    _load();
   }
   @override
   void dispose() { _tabs.dispose(); super.dispose(); }
+
+  Future<void> _load() async {
+    if (mounted) setState(() { _loading = true; _error = false; });
+    try {
+      final results = await Future.wait([
+        apiClient.get('/reminders/upcoming-birthdays', params: {'days': '31'}),
+        apiClient.get('/reminders/upcoming-anniversaries', params: {'days': '31'}),
+      ]);
+      final bRaw = results[0]['data'];
+      final bList = bRaw is List ? bRaw : const [];
+      final aRaw = results[1]['data'];
+      final aList = aRaw is List ? aRaw : const [];
+      if (mounted) setState(() {
+        _birthdays = bList.whereType<Map>().map((m) => _Reminder.fromBirthdayJson(m.cast<String, dynamic>())).toList();
+        _anniversaries = aList.whereType<Map>().map((m) => _Reminder.fromAnniversaryJson(m.cast<String, dynamic>())).toList();
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() { _loading = false; _error = true; });
+    }
+  }
 
   List<_Reminder> _filter(List<_Reminder> list) {
     final order = {'Today': 1, 'This week': 2, 'This month': 3};
@@ -96,21 +137,16 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
     return list.where((r) => (order[_rangeOf(r)] ?? 99) <= max).toList();
   }
 
-  void _toast(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
-    backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    duration: const Duration(seconds: 2),
-  ));
-
   static Future<void> _call(String mobile) async {
     final digits = mobile.replaceAll(RegExp(r'[^\d+]'), '');
+    if (digits.isEmpty) return;
     final uri = Uri.parse('tel:$digits');
     if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 
   static Future<void> _whatsapp(String mobile) async {
     final digits = mobile.replaceAll(RegExp(r'[^\d]'), '');
+    if (digits.isEmpty) return;
     final uri = Uri.parse('https://wa.me/$digits');
     if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
@@ -138,6 +174,7 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
                 Text('Reminders', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
                 Text('Birthdays & anniversaries', style: TextStyle(fontSize: 13, color: _onSurface2, fontWeight: FontWeight.w600)),
               ])),
+              IconButton(icon: const Icon(Icons.refresh_rounded, size: 20), onPressed: _loading ? null : _load, padding: EdgeInsets.zero, constraints: const BoxConstraints()),
             ]),
             const SizedBox(height: 12),
             // celebration banner
@@ -217,13 +254,23 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
         ),
 
         // tab views
-        Expanded(child: TabBarView(
-          controller: _tabs,
-          children: [
-            _ReminderList(items: _filter(_birthdays), isBday: true, onCall: _call, onWhatsApp: _whatsapp),
-            _ReminderList(items: _filter(_anniversaries), isBday: false, onCall: _call, onWhatsApp: _whatsapp),
-          ],
-        )),
+        Expanded(child: _loading
+          ? const Center(child: CircularProgressIndicator(color: _brand600))
+          : _error
+            ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.error_outline, color: _coral500, size: 40),
+                const SizedBox(height: 10),
+                Text('Failed to load reminders', style: TextStyle(fontWeight: FontWeight.w700, color: context.textPrimary)),
+                const SizedBox(height: 8),
+                TextButton(onPressed: _load, child: const Text('Retry', style: TextStyle(color: _brand600, fontWeight: FontWeight.w700))),
+              ]))
+            : TabBarView(
+                controller: _tabs,
+                children: [
+                  _ReminderList(items: _filter(_birthdays), isBday: true, onCall: _call, onWhatsApp: _whatsapp),
+                  _ReminderList(items: _filter(_anniversaries), isBday: false, onCall: _call, onWhatsApp: _whatsapp),
+                ],
+              )),
       ]),
     );
   }
@@ -292,7 +339,7 @@ class _ReminderCard extends StatelessWidget {
             ]),
             const SizedBox(height: 4),
             Text(isBday ? 'Turning ${item.count}' : '${item.count} years together', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _onSurface2)),
-            Text('${item.date} ${DateTime.now().year}', style: const TextStyle(fontSize: 12, color: _onSurface3, fontWeight: FontWeight.w500)),
+            Text(item.date, style: const TextStyle(fontSize: 12, color: _onSurface3, fontWeight: FontWeight.w500)),
           ])),
           if (isToday)
             Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),

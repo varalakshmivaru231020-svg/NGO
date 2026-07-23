@@ -307,7 +307,7 @@ class _DonorDetailScreenState extends State<DonorDetailScreen> with SingleTicker
 
         Expanded(child: TabBarView(controller: _tabs, children: [
           _OverviewTab(donor: _donor!),
-          _DonationsTab(donations: _donations, donorId: widget.id),
+          _DonationsTab(donations: _donations, donorId: widget.id, donor: _donor!),
           _SponsoredTab(donor: _donor!, donorId: widget.id),
           _DocumentsTab(donorId: widget.id),
           _ActivitiesTab(donorId: widget.id),
@@ -493,14 +493,16 @@ class _OverviewTab extends StatelessWidget {
 
 // ── donations tab ─────────────────────────────────────────────────────
 class _DonationsTab extends StatefulWidget {
-  const _DonationsTab({required this.donations, required this.donorId});
+  const _DonationsTab({required this.donations, required this.donorId, required this.donor});
   final List<Map<String, dynamic>> donations;
   final String donorId;
+  final Map<String, dynamic> donor;
   @override
   State<_DonationsTab> createState() => _DonationsTabState();
 }
 
 class _DonationsTabState extends State<_DonationsTab> {
+  bool _downloading = false;
 
   Color _typeColor(String t) {
     if (t.contains('Education') || t.contains('School')) return _violet500;
@@ -508,6 +510,40 @@ class _DonationsTabState extends State<_DonationsTab> {
     if (t.contains('Medical') || t.contains('Health')) return _coral500;
     if (t.contains('Food')) return _amber600;
     return _sky500;
+  }
+
+  // Builds one combined "Donation Contribution Statement" PDF covering every
+  // completed donation on record for this donor (Donor Profile → Donations →
+  // Download All), mirroring the standard SKET invoice format used for the
+  // single-donation receipt.
+  Future<void> _downloadAll() async {
+    final completed = widget.donations.where((d) => (d['status'] as String? ?? 'COMPLETED') == 'COMPLETED').toList();
+    if (completed.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('No completed donations to include', style: TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor: _coral500, behavior: SnackBarBehavior.floating));
+      return;
+    }
+    setState(() => _downloading = true);
+    try {
+      final org = await fetchOrgSettings();
+      final bytes = await buildDonationStatementPdf(donor: widget.donor, donations: completed, org: org);
+      final donorName = (widget.donor['name'] as String? ?? 'Donor').replaceAll(RegExp(r'\s+'), '_');
+      final filename = 'Donation_Statement_$donorName.pdf';
+      final ok = await NativeFileSaver.saveBytes(filename, bytes, 'application/pdf');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ok ? 'Statement saved as PDF' : 'Failed to save', style: const TextStyle(fontWeight: FontWeight.w700)),
+          backgroundColor: ok ? _brand600 : _coral500, behavior: SnackBarBehavior.floating));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not generate statement', style: TextStyle(fontWeight: FontWeight.w700)),
+          backgroundColor: _coral500, behavior: SnackBarBehavior.floating));
+      }
+    }
+    if (mounted) setState(() => _downloading = false);
   }
 
   @override
@@ -518,8 +554,23 @@ class _DonationsTabState extends State<_DonationsTab> {
       Padding(
         padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
         child: Row(children: [
-          Text('${allDonations.length} Donation${allDonations.length == 1 ? '' : 's'}',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.textSub)),
+          Expanded(child: Text('${allDonations.length} Donation${allDonations.length == 1 ? '' : 's'}',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.textSub))),
+          if (allDonations.isNotEmpty)
+            GestureDetector(
+              onTap: _downloading ? null : _downloadAll,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8), border: Border.all(color: _brand600.withValues(alpha: 0.25))),
+                child: _downloading
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600))
+                    : const Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.download_rounded, size: 14, color: _brand600),
+                        SizedBox(width: 5),
+                        Text('Download All', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _brand600)),
+                      ]),
+              ),
+            ),
         ]),
       ),
       if (allDonations.isEmpty)
@@ -600,6 +651,7 @@ class _DonationsTabState extends State<_DonationsTab> {
                     date:         date,
                     taxExemption: d['taxExemption'] as bool? ?? false,
                     reference:    d['reference'] as String? ?? '',
+                    notes:        d['notes'] as String? ?? '',
                   )),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

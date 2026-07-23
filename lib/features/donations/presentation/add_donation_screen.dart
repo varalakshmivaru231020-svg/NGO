@@ -63,6 +63,7 @@ class AddDonationScreen extends StatefulWidget {
 
 class _AddDonationScreenState extends State<AddDonationScreen> {
   final _amountCtrl = TextEditingController();
+  final _descriptionCtrl = TextEditingController();
   String? _selectedDonorId;
   String? _selectedDonorName;
   String _donationType = 'Education Fund';
@@ -276,6 +277,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
         'typeId': typeId,
         'amount': int.parse(amountText),
         'paymentMode': _methodModes[_method] ?? 'CASH',
+        if (_descriptionCtrl.text.trim().isNotEmpty) 'notes': _descriptionCtrl.text.trim(),
       });
       // Non-Super-Admins: queued for approval — no receipt, nothing recorded yet.
       if ((resp['meta'] as Map?)?['pendingApproval'] == true) {
@@ -311,6 +313,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       paymentMode:  _method,
       date:         _date,
       taxExemption: true,
+      notes:        _descriptionCtrl.text.trim(),
     );
     // Persist locally so list shows it immediately
     if (!backendOk) {
@@ -323,6 +326,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
         'receiptNo': receiptNo,
         'date': _date,
         'status': 'COMPLETED',
+        'notes': _descriptionCtrl.text.trim(),
       });
     }
     await showReceiptSheet(context, receipt);
@@ -339,7 +343,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
   }
 
   @override
-  void dispose() { _amountCtrl.dispose(); super.dispose(); }
+  void dispose() { _amountCtrl.dispose(); _descriptionCtrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
@@ -470,6 +474,28 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                       child: Text(m, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub))),
                   );
                 }).toList()),
+              ])),
+
+              const SizedBox(height: 12),
+
+              // description
+              _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const _Label('Description'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _descriptionCtrl,
+                  maxLines: 3,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'What is this donation for? (optional)',
+                    hintStyle: TextStyle(fontSize: 14, color: context.textHint, fontWeight: FontWeight.w500),
+                    filled: true, fillColor: context.scaffoldBg,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: context.border, width: 1.5)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: context.border, width: 1.5)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                  ),
+                ),
               ])),
 
               const SizedBox(height: 12),

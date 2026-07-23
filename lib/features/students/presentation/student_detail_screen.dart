@@ -7,6 +7,7 @@ import 'package:fl_chart/fl_chart.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/open_bytes.dart';
+import '../../../core/utils/native_file_saver.dart';
 import '../../../core/widgets/photo_picker_widget.dart';
 import 'students_screen.dart' show findStudentRecord;
 
@@ -1735,6 +1736,7 @@ class _DocumentsTabState extends State<_DocumentsTab> {
   bool _uploadingOther = false;
   String? _uploadingCategory;
   String? _viewingId;
+  String? _downloadingId;
 
   @override
   void initState() { super.initState(); _load(); }
@@ -1814,6 +1816,26 @@ class _DocumentsTabState extends State<_DocumentsTab> {
     if (mounted) setState(() => _viewingId = null);
   }
 
+  Future<void> _download(_StudentDoc d) async {
+    setState(() => _downloadingId = d.id);
+    try {
+      final r = await apiClient.get('/students/documents/${d.id}');
+      final data = (r['data'] as Map).cast<String, dynamic>();
+      final b64 = data['data'] as String? ?? '';
+      if (b64.isNotEmpty) {
+        final ok = await NativeFileSaver.saveBytes(d.fileName, base64Decode(b64), d.mimeType ?? 'application/octet-stream');
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ok ? 'Downloaded ${d.fileName}' : 'Failed to download', style: const TextStyle(fontWeight: FontWeight.w700)),
+          backgroundColor: ok ? _brand600 : _coral500, behavior: SnackBarBehavior.floating));
+      }
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Could not download document', style: TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor: _coral500, behavior: SnackBarBehavior.floating));
+    }
+    if (mounted) setState(() => _downloadingId = null);
+  }
+
   Future<void> _delete(_StudentDoc d) async {
     try { await apiClient.delete('/students/documents/${d.id}'); } catch (_) {}
     await _load();
@@ -1823,6 +1845,7 @@ class _DocumentsTabState extends State<_DocumentsTab> {
     final uploaded = doc != null;
     final uploading = _uploadingCategory == label;
     final viewing = doc != null && _viewingId == doc.id;
+    final downloading = doc != null && _downloadingId == doc.id;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Container(
@@ -1851,6 +1874,17 @@ class _DocumentsTabState extends State<_DocumentsTab> {
           if (uploading)
             const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600))
           else if (uploaded) ...[
+            GestureDetector(
+              onTap: downloading ? null : () => _download(doc),
+              child: Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8), border: Border.all(color: _brand600.withValues(alpha: 0.3))),
+                child: downloading
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600))
+                  : const Icon(Icons.download_rounded, size: 16, color: _brand600),
+              ),
+            ),
+            const SizedBox(width: 6),
             GestureDetector(
               onTap: viewing ? null : () => _view(doc),
               child: Container(

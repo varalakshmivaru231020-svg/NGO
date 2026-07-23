@@ -48,9 +48,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   String? _categoryId;
   bool _loadingData = true;
 
-  // Authorized approvers (active staff) — GET /users/approvers.
+  // Authorized approvers (active staff) — GET /users/approvers. Shown as
+  // quick-pick suggestions only; the field itself is always free text so
+  // approval isn't limited to a fixed/preset list of names.
   List<({String id, String name, String role})> _approvers = [];
-  String? _approvedBy;
+  final _approvedByCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -168,7 +170,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         'amount': int.parse(amountText),
         'paymentMode': _methodModes[_method] ?? 'CASH',
         'preparedBy': _preparedByCtrl.text.trim(),
-        if (_approvedBy != null && _approvedBy!.trim().isNotEmpty) 'approvedBy': _approvedBy,
+        if (_approvedByCtrl.text.trim().isNotEmpty) 'approvedBy': _approvedByCtrl.text.trim(),
         if (_receivedByCtrl.text.trim().isNotEmpty) 'receivedBy': _receivedByCtrl.text.trim(),
         if (_notesCtrl.text.trim().isNotEmpty) 'notes': _notesCtrl.text.trim(),
       });
@@ -198,7 +200,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       paymentMode:   _methodModes[_method] ?? 'CASH',
       date:          _date,
       preparedBy:    _preparedByCtrl.text.trim(),
-      approvedBy:    (_approvedBy != null && _approvedBy!.trim().isNotEmpty) ? _approvedBy! : _currentUserName(),
+      approvedBy:    _approvedByCtrl.text.trim().isNotEmpty ? _approvedByCtrl.text.trim() : _currentUserName(),
       receivedBy:    _receivedByCtrl.text.trim(),
     );
     // Persist locally so list shows it immediately
@@ -234,6 +236,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   void dispose() {
     _amountCtrl.dispose(); _paidToCtrl.dispose(); _purposeCtrl.dispose();
     _receivedByCtrl.dispose(); _notesCtrl.dispose(); _preparedByCtrl.dispose();
+    _approvedByCtrl.dispose();
     super.dispose();
   }
 
@@ -462,11 +465,28 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               const SizedBox(height: 14),
               Text('Approved By', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: context.textHint)),
               const SizedBox(height: 6),
-              if (_approvers.isNotEmpty)
+              TextField(
+                controller: _approvedByCtrl,
+                style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textPrimary),
+                decoration: InputDecoration(
+                  hintText: "Approver's name",
+                  hintStyle: TextStyle(fontSize: 13, color: context.textHint, fontWeight: FontWeight.w500),
+                  filled: true, fillColor: context.scaffoldBg,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.border)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.border)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _orange)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                ),
+              ),
+              // Active staff shown only as quick-fill suggestions — tapping one
+              // fills the text field above, but typing any other name is just
+              // as valid. Approval is never limited to this fixed list.
+              if (_approvers.isNotEmpty) ...[
+                const SizedBox(height: 8),
                 Wrap(spacing: 8, runSpacing: 8, children: _approvers.map((a) {
-                  final active = _approvedBy == a.name;
+                  final active = _approvedByCtrl.text.trim() == a.name;
                   return GestureDetector(
-                    onTap: () => setState(() => _approvedBy = a.name),
+                    onTap: () => setState(() => _approvedByCtrl.text = a.name),
                     child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(color: active ? _orange.withValues(alpha: 0.12) : context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? _orange : context.border)),
                       child: Text.rich(TextSpan(children: [
@@ -475,21 +495,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                       ])),
                     ),
                   );
-                }).toList())
-              else
-                TextField(
-                  onChanged: (v) => _approvedBy = v,
-                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textPrimary),
-                  decoration: InputDecoration(
-                    hintText: "Approver's name",
-                    hintStyle: TextStyle(fontSize: 13, color: context.textHint, fontWeight: FontWeight.w500),
-                    filled: true, fillColor: context.scaffoldBg,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.border)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.border)),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _orange)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                  ),
-                ),
+                }).toList()),
+              ],
             ])),
 
             const SizedBox(height: 12),

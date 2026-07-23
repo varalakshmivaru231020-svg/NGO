@@ -63,6 +63,7 @@ class DonationReceipt {
     this.donorPincode = '',
     this.donorCountry = '',
     this.reference = '',
+    this.notes = '',
   });
 
   final String receiptNo;
@@ -81,6 +82,9 @@ class DonationReceipt {
   final String donorPincode;
   final String donorCountry;
   final String reference;
+  // Free-text description entered when the donation was recorded — shown on
+  // the invoice in place of the generic contribution blurb when present.
+  final String notes;
 
   // Full postal address for display — donorCity/donorState/etc. are separate
   // fields on the donor record, joined here for a single-line render.
@@ -97,7 +101,10 @@ String _amountInWords(int n) {
   String words(int num) {
     if (num == 0) return '';
     if (num < 20) return '${ones[num]} ';
-    if (num < 100) return '${tens[num ~/ 10]} ${words(num % 10)}';
+    if (num < 100) {
+      final onesPart = num % 10 == 0 ? '' : '-${ones[num % 10]}';
+      return '${tens[num ~/ 10]}$onesPart ';
+    }
     if (num < 1000) return '${ones[num ~/ 100]} Hundred ${words(num % 100)}';
     if (num < 100000) return '${words(num ~/ 1000)}Thousand ${words(num % 1000)}';
     if (num < 10000000) return '${words(num ~/ 100000)}Lakh ${words(num % 100000)}';
@@ -245,9 +252,11 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
           pw.TableRow(children: [
             _td(r.donationType, dark, bold: true),
             _td(
-              'Contribution allocated towards trust operational support, community '
-              'educational aid, and welfare programs.'
-              '${r.taxExemption ? ' Clean tax exemption applicable.' : ''}',
+              r.notes.trim().isNotEmpty
+                ? r.notes.trim()
+                : 'Contribution allocated towards trust operational support, community '
+                  'educational aid, and welfare programs.'
+                  '${r.taxExemption ? ' Clean tax exemption applicable.' : ''}',
               grey, size: 8.5,
             ),
             _td('1', dark, align: pw.TextAlign.center),
@@ -308,10 +317,266 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
   return doc.save();
 }
 
+const _fullMonths = ['January','February','March','April','May','June','July',
+  'August','September','October','November','December'];
+String _fmtFullDate(DateTime d) => '${d.day.toString().padLeft(2,'0')} ${_fullMonths[d.month-1]} ${d.year}';
+String _fmtMonthYear(DateTime d) => '${_fullMonths[d.month-1]} ${d.year}';
+String _fmtHyphenDate(DateTime d) {
+  const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return '${d.day.toString().padLeft(2,'0')}-${m[d.month-1]}-${d.year}';
+}
+
+// ── PDF donation contribution statement (multiple donations, one donor) ──
+// Donor Profile → Donations → "Download All": a single statement covering
+// every completed donation on record for this donor, matching SKET's
+// standard "Donation Contribution Statement" format.
+Future<Uint8List> buildDonationStatementPdf({
+  required Map<String, dynamic> donor,
+  required List<Map<String, dynamic>> donations,
+  Map<String, dynamic>? org,
+}) async {
+  final doc = pw.Document();
+  final logoData = await rootBundle.load('assets/images/sket-logo.png');
+  final logo = pw.MemoryImage(logoData.buffer.asUint8List());
+
+  final orange   = PdfColor.fromInt(0xFFF97316);
+  final grey     = PdfColor.fromInt(0xFF6B7280);
+  final dark     = PdfColor.fromInt(0xFF1F2937);
+  final bgLight  = PdfColor.fromInt(0xFFF8FAFC);
+  final bgStripe = PdfColor.fromInt(0xFFF3F4F6);
+  final white    = PdfColor.fromInt(0xFFFFFFFF);
+  final pdfBorder = PdfColor.fromInt(0xFFE5E7EB);
+
+  final orgName    = _org(org, 'name');
+  final orgAddress = _org(org, 'address');
+  final orgPan     = _org(org, 'pan');
+  final org12A     = _org(org, 'reg12A');
+  final org80G     = _org(org, 'cert80G');
+  final orgEmail   = _org(org, 'email');
+
+  DateTime? parseDate(Map<String, dynamic> d) {
+    final raw = d['createdAt'] as String? ?? d['date'] as String?;
+    return raw != null ? DateTime.tryParse(raw) : null;
+  }
+
+  final sorted = [...donations]..sort((a, b) {
+    final da = parseDate(a); final db = parseDate(b);
+    if (da == null || db == null) return 0;
+    return da.compareTo(db);
+  });
+
+  final totalAmount = sorted.fold<int>(0, (sum, d) => sum + ((d['amount'] as num?)?.toInt() ?? 0));
+  final firstDate = sorted.isNotEmpty ? parseDate(sorted.first) : null;
+  final lastDate  = sorted.isNotEmpty ? parseDate(sorted.last)  : null;
+  final now = DateTime.now();
+
+  final donorName   = donor['name'] as String? ?? 'Donor';
+  final donorCode   = donor['donorCode'] as String? ?? '—';
+  final latest      = sorted.isNotEmpty ? sorted.last : const <String, dynamic>{};
+  final receiptRef  = latest['receiptNo'] as String? ?? '—';
+  final paymentMode = (latest['paymentMode'] as String? ?? latest['paymentMethod'] as String? ?? '—').replaceAll('_', ' ');
+  final gatewayRef  = (latest['reference'] as String?)?.trim().isNotEmpty == true ? (latest['reference'] as String).trim() : '—';
+  final statementNo = 'SKET/DCS/${now.year}/${(donorCode.hashCode.abs() % 999999).toString().padLeft(6, '0')}';
+
+  // Label | Value cells sit side by side (not stacked) — label bold+small,
+  // value bold+regular — matching the reference statement's horizontal grid.
+  pw.Widget detailLabel(String label, {required bool shaded}) => pw.Container(
+    color: shaded ? bgStripe : white,
+    padding: const pw.EdgeInsets.fromLTRB(10, 8, 4, 8),
+    child: pw.Text(label, style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: dark)),
+  );
+  pw.Widget detailValue(String value, {required bool shaded}) => pw.Container(
+    color: shaded ? bgStripe : white,
+    padding: const pw.EdgeInsets.fromLTRB(4, 8, 10, 8),
+    child: pw.Text(value, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: dark)),
+  );
+
+  pw.TableRow detailRow(String l1, String v1, String l2, String v2, {required bool shaded}) => pw.TableRow(children: [
+    detailLabel(l1, shaded: shaded),
+    detailValue(v1, shaded: shaded),
+    detailLabel(l2, shaded: shaded),
+    detailValue(v2, shaded: shaded),
+  ]);
+
+  pw.TableRow itemRow(int i, Map<String, dynamic> d) {
+    final typeMap = d['type'] as Map<String, dynamic>?;
+    final purpose = typeMap?['label'] as String? ?? d['donationType'] as String? ?? 'Donation';
+    final receipt = d['receiptNo'] as String? ?? '—';
+    final dt = parseDate(d);
+    return pw.TableRow(
+      decoration: pw.BoxDecoration(color: i.isOdd ? bgLight : white),
+      children: [
+        _td(dt != null ? _fmtHyphenDate(dt) : '—', dark, size: 8.5),
+        _td(receipt, dark, size: 8.5),
+        _td(purpose, dark, size: 8.5),
+        _td(dt != null ? _fullMonths[dt.month - 1] : '—', dark, size: 8.5),
+        _td('1 Month', dark, size: 8.5),
+        _td(_fmt((d['amount'] as num?)?.toInt() ?? 0), dark, bold: true, align: pw.TextAlign.right, size: 8.5),
+      ],
+    );
+  }
+
+  pw.Widget summaryRow(String label, String value, {bool bold = false, PdfColor? valueColor, double size = 9.5}) => pw.Padding(
+    padding: const pw.EdgeInsets.symmetric(vertical: 4),
+    child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+      pw.Text(label, style: pw.TextStyle(fontSize: size, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: dark)),
+      pw.Text(value, style: pw.TextStyle(fontSize: bold ? size + 1 : size, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: valueColor ?? dark)),
+    ]),
+  );
+
+  doc.addPage(pw.MultiPage(
+    pageFormat: PdfPageFormat.a4,
+    margin: const pw.EdgeInsets.fromLTRB(36, 30, 36, 30),
+    build: (ctx) => [pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+      // Header: logo + org name lockup (left) | big title (right)
+      pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+          pw.Image(logo, height: 42),
+          pw.SizedBox(height: 6),
+          pw.Text(orgName, style: pw.TextStyle(fontSize: 10, color: dark)),
+          pw.Text('(Registered Charitable Trust)', style: pw.TextStyle(fontSize: 8.5, color: grey)),
+        ]),
+        pw.Expanded(child: pw.Align(
+          alignment: pw.Alignment.topRight,
+          child: pw.Text('DONATION CONTRIBUTION\nSTATEMENT', textAlign: pw.TextAlign.right,
+              style: pw.TextStyle(fontSize: 19, fontWeight: pw.FontWeight.bold, color: dark, letterSpacing: 0.2)),
+        )),
+      ]),
+      pw.SizedBox(height: 14),
+
+      if (orgAddress.isNotEmpty)
+        pw.Container(
+          width: double.infinity,
+          color: orange,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: pw.Text(orgAddress, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: white)),
+        ),
+      pw.SizedBox(height: 16),
+
+      // ── STATEMENT DETAILS ──────────────────────────────────────────
+      pw.Container(
+        width: double.infinity, color: orange,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        child: pw.Text('STATEMENT DETAILS', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: white, letterSpacing: 0.3)),
+      ),
+      pw.Table(columnWidths: const {
+        0: pw.FlexColumnWidth(1.3),
+        1: pw.FlexColumnWidth(2.0),
+        2: pw.FlexColumnWidth(1.3),
+        3: pw.FlexColumnWidth(2.0),
+      }, children: [
+        detailRow('Statement No.', statementNo, 'Donor ID', donorCode, shaded: false),
+        detailRow('Receipt Reference', receiptRef, 'Donor Name', donorName, shaded: true),
+        detailRow('Statement Duration',
+            firstDate != null && lastDate != null ? '${_fmtFullDate(firstDate)} - ${_fmtFullDate(lastDate)}' : '—',
+            'Generated On', _fmtFullDate(now), shaded: false),
+        detailRow('Payment Mode', paymentMode, 'Gateway Reference', gatewayRef, shaded: true),
+      ]),
+      pw.SizedBox(height: 16),
+
+      // ── DONATION CONTRIBUTION DETAILS ──────────────────────────────
+      pw.Container(
+        width: double.infinity, color: orange,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        child: pw.Text('DONATION CONTRIBUTION DETAILS', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: white, letterSpacing: 0.3)),
+      ),
+      pw.Table(
+        columnWidths: const {
+          0: pw.FlexColumnWidth(1.3),
+          1: pw.FlexColumnWidth(1.6),
+          2: pw.FlexColumnWidth(1.8),
+          3: pw.FlexColumnWidth(1.2),
+          4: pw.FlexColumnWidth(1.0),
+          5: pw.FlexColumnWidth(1.3),
+        },
+        children: [
+          pw.TableRow(decoration: pw.BoxDecoration(color: bgStripe), children: [
+            _thGray('Date', dark),
+            _thGray('Receipt No.', dark),
+            _thGray('Purpose', dark),
+            _thGray('Duration', dark),
+            _thGray('Units', dark),
+            _thGray('Amount (Rs.)', dark, align: pw.TextAlign.right),
+          ]),
+          ...sorted.asMap().entries.map((e) => itemRow(e.key, e.value)),
+        ],
+      ),
+      pw.SizedBox(height: 16),
+
+      // ── CONTRIBUTION SUMMARY ───────────────────────────────────────
+      pw.Container(
+        width: double.infinity, color: orange,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        child: pw.Text('CONTRIBUTION SUMMARY', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: white, letterSpacing: 0.3)),
+      ),
+      pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        child: pw.Column(children: [
+          summaryRow('Statement Duration', firstDate != null && lastDate != null ? '${_fmtMonthYear(firstDate)} – ${_fmtMonthYear(lastDate)}' : '—'),
+          summaryRow('Total Donations', '${sorted.length}'),
+          summaryRow('Total Units', '${sorted.length} Month${sorted.length == 1 ? '' : 's'}'),
+          summaryRow('Subtotal', 'Rs. ${_fmt(totalAmount)}.00'),
+          summaryRow('Tax (0%)', 'Rs. 0.00'),
+          pw.Padding(padding: const pw.EdgeInsets.symmetric(vertical: 4), child: pw.Container(height: 1, color: pdfBorder)),
+          summaryRow('Grand Total', 'Rs. ${_fmt(totalAmount)}.00', bold: true, valueColor: orange),
+        ]),
+      ),
+      pw.SizedBox(height: 6),
+
+      pw.Text('AMOUNT IN WORDS', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: dark, letterSpacing: 0.3)),
+      pw.SizedBox(height: 5),
+      pw.Text(_amountInWords(totalAmount), style: pw.TextStyle(fontSize: 12.5, fontStyle: pw.FontStyle.italic, color: orange)),
+      pw.SizedBox(height: 20),
+
+      pw.Center(child: pw.Text('Thank You Message', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: dark))),
+      pw.SizedBox(height: 6),
+      pw.Center(child: pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 24),
+        child: pw.Text(
+          'Thank you for your generous contribution to $orgName. Your support enables us to provide '
+          'education, shelter, nutrition, healthcare, and holistic development for underprivileged children.',
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(fontSize: 9, color: grey, lineSpacing: 1.4),
+        ),
+      )),
+      pw.SizedBox(height: 20),
+
+      // Statutory footer bar (PAN / 12AA / 80G) + disclaimer
+      pw.Container(
+        width: double.infinity,
+        decoration: pw.BoxDecoration(color: bgLight, border: pw.Border(left: pw.BorderSide(color: orange, width: 3))),
+        padding: const pw.EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+          pw.Text('STATUTORY REGISTRATION DETAILS (TAX BENEFITS)',
+              style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: orange, letterSpacing: 0.3)),
+          pw.SizedBox(height: 5),
+          pw.Text('Trust PAN: $orgPan | 12AA Registration: $org12A | 80G Certification: $org80G',
+              style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: dark)),
+          pw.SizedBox(height: 5),
+          pw.Text(
+            'This is an electronically generated statement. No physical signature is required.'
+            '${orgEmail.isNotEmpty ? ' For verification or support, write to $orgEmail.' : ''}',
+            style: pw.TextStyle(fontSize: 7.5, color: grey)),
+        ]),
+      ),
+    ])],
+  ));
+  return doc.save();
+}
+
 pw.Widget _th(String label, {pw.TextAlign align = pw.TextAlign.left}) => pw.Padding(
       padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: pw.Text(label, textAlign: align,
           style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColor.fromInt(0xFFFFFFFF), letterSpacing: 0.3)),
+    );
+
+// Light-gray column-header cell (as opposed to _th's orange/white) — used by
+// the donation contribution statement's itemized table, whose header row
+// sits below an orange section title bar rather than being orange itself.
+pw.Widget _thGray(String label, PdfColor color, {pw.TextAlign align = pw.TextAlign.left}) => pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: pw.Text(label, textAlign: align,
+          style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: color, letterSpacing: 0.2)),
     );
 
 pw.Widget _td(String text, PdfColor color, {bool bold = false, double size = 9, pw.TextAlign align = pw.TextAlign.left}) => pw.Padding(
@@ -466,8 +731,10 @@ class _ReceiptSheet extends StatelessWidget {
                   Expanded(flex: 3, child: Text(receipt.donationType,
                       style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _dark))),
                   Expanded(flex: 4, child: Text(
-                      'Contribution allocated towards trust operational support, community educational aid, and welfare programs.'
-                      '${receipt.taxExemption ? ' Clean tax exemption applicable.' : ''}',
+                      receipt.notes.trim().isNotEmpty
+                        ? receipt.notes.trim()
+                        : 'Contribution allocated towards trust operational support, community educational aid, and welfare programs.'
+                          '${receipt.taxExemption ? ' Clean tax exemption applicable.' : ''}',
                       style: const TextStyle(fontSize: 10, color: _grey, height: 1.4))),
                   const Expanded(flex: 1, child: Text('1', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: _dark))),
                   Expanded(flex: 2, child: Text(amtStr, textAlign: TextAlign.right,
