@@ -512,10 +512,74 @@ class _DonationsTabState extends State<_DonationsTab> {
     return _sky500;
   }
 
-  // Builds one combined "Donation Contribution Statement" PDF covering every
-  // completed donation on record for this donor (Donor Profile → Donations →
-  // Download All), mirroring the standard SKET invoice format used for the
-  // single-donation receipt.
+  DateTime? _donationDate(Map<String, dynamic> d) {
+    final raw = d['date'] as String? ?? d['createdAt'] as String?;
+    return raw != null ? DateTime.tryParse(raw) : null;
+  }
+
+  // Bottom sheet: quick presets (This Month / Last 3 Months / This Year /
+  // All Time) plus a calendar-based custom range via showDateRangePicker.
+  // Returns null if the user backs out without picking anything.
+  Future<DateTimeRange?> _pickRange(List<Map<String, dynamic>> donations) async {
+    final now = DateTime.now();
+    final dates = donations.map(_donationDate).whereType<DateTime>().toList();
+    final earliest = dates.isEmpty ? now : dates.reduce((a, b) => a.isBefore(b) ? a : b);
+    final allTime = DateTimeRange(start: earliest, end: now);
+
+    return showModalBottomSheet<DateTimeRange>(
+      context: context,
+      backgroundColor: context.cardBg,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => SafeArea(child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(color: ctx.border, borderRadius: BorderRadius.circular(2)))),
+          Text('Select Period', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: ctx.textPrimary)),
+          const SizedBox(height: 4),
+          Text('Choose the date range to include in the statement', style: TextStyle(fontSize: 12.5, color: ctx.textHint, fontWeight: FontWeight.w500)),
+          const SizedBox(height: 16),
+          _rangeOption(ctx, 'All Time', () => Navigator.pop(ctx, allTime)),
+          _rangeOption(ctx, 'This Month', () => Navigator.pop(ctx, DateTimeRange(start: DateTime(now.year, now.month, 1), end: now))),
+          _rangeOption(ctx, 'Last 3 Months', () => Navigator.pop(ctx, DateTimeRange(start: DateTime(now.year, now.month - 3, now.day), end: now))),
+          _rangeOption(ctx, 'This Year', () => Navigator.pop(ctx, DateTimeRange(start: DateTime(now.year, 1, 1), end: now))),
+          _rangeOption(ctx, 'Custom Range…', () async {
+            final picked = await showDateRangePicker(
+              context: ctx,
+              firstDate: DateTime(2020),
+              lastDate: DateTime(2030),
+              initialDateRange: allTime,
+              builder: (dctx, child) => Theme(data: Theme.of(dctx).copyWith(colorScheme: const ColorScheme.light(primary: _brand600)), child: child!),
+            );
+            if (ctx.mounted) Navigator.pop(ctx, picked);
+          }, isLast: true),
+        ]),
+      )),
+    );
+  }
+
+  Widget _rangeOption(BuildContext ctx, String label, VoidCallback onTap, {bool isLast = false}) => Padding(
+    padding: EdgeInsets.only(bottom: isLast ? 0 : 8),
+    child: GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(color: ctx.surface2, borderRadius: BorderRadius.circular(14)),
+        child: Row(children: [
+          Icon(Icons.calendar_today_outlined, size: 16, color: _brand600),
+          const SizedBox(width: 10),
+          Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: ctx.textPrimary)),
+        ]),
+      ),
+    ),
+  );
+
+  // Builds one combined "Donation Contribution Statement" PDF covering the
+  // donor's completed donations in a user-picked date range (Donor Profile →
+  // Donations → Download All), mirroring the standard SKET invoice format
+  // used for the single-donation receipt.
   Future<void> _downloadAll() async {
     final completed = widget.donations.where((d) => (d['status'] as String? ?? 'COMPLETED') == 'COMPLETED').toList();
     if (completed.isEmpty) {
@@ -524,10 +588,23 @@ class _DonationsTabState extends State<_DonationsTab> {
         backgroundColor: _coral500, behavior: SnackBarBehavior.floating));
       return;
     }
+    final range = await _pickRange(completed);
+    if (range == null || !mounted) return;
+    final rangeEnd = DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59);
+    final filtered = completed.where((d) {
+      final dt = _donationDate(d);
+      return dt != null && !dt.isBefore(range.start) && !dt.isAfter(rangeEnd);
+    }).toList();
+    if (filtered.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('No donations found in that date range', style: TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor: _coral500, behavior: SnackBarBehavior.floating));
+      return;
+    }
     setState(() => _downloading = true);
     try {
       final org = await fetchOrgSettings();
-      final bytes = await buildDonationStatementPdf(donor: widget.donor, donations: completed, org: org);
+      final bytes = await buildDonationStatementPdf(donor: widget.donor, donations: filtered, org: org);
       final donorName = (widget.donor['name'] as String? ?? 'Donor').replaceAll(RegExp(r'\s+'), '_');
       final filename = 'Donation_Statement_$donorName.pdf';
       final ok = await NativeFileSaver.saveBytes(filename, bytes, 'application/pdf');
