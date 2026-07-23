@@ -331,7 +331,6 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
 const _fullMonths = ['January','February','March','April','May','June','July',
   'August','September','October','November','December'];
 String _fmtFullDate(DateTime d) => '${d.day.toString().padLeft(2,'0')} ${_fullMonths[d.month-1]} ${d.year}';
-String _fmtMonthYear(DateTime d) => '${_fullMonths[d.month-1]} ${d.year}';
 String _fmtHyphenDate(DateTime d) {
   const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return '${d.day.toString().padLeft(2,'0')}-${m[d.month-1]}-${d.year}';
@@ -350,13 +349,12 @@ Future<Uint8List> buildDonationStatementPdf({
   final logoData = await rootBundle.load('assets/images/sket-logo.png');
   final logo = pw.MemoryImage(logoData.buffer.asUint8List());
 
-  final orange   = PdfColor.fromInt(0xFFFF0000);
+  final orange   = PdfColor.fromInt(0xFFF97316);
   final grey     = PdfColor.fromInt(0xFF6B7280);
   final dark     = PdfColor.fromInt(0xFF1F2937);
   final bgLight  = PdfColor.fromInt(0xFFF8FAFC);
   final bgStripe = PdfColor.fromInt(0xFFF3F4F6);
   final white    = PdfColor.fromInt(0xFFFFFFFF);
-  final pdfBorder = PdfColor.fromInt(0xFFE5E7EB);
 
   final orgName    = _org(org, 'name');
   final orgAddress = _org(org, 'address');
@@ -383,11 +381,11 @@ Future<Uint8List> buildDonationStatementPdf({
 
   final donorName   = donor['name'] as String? ?? 'Donor';
   final donorCode   = donor['donorCode'] as String? ?? '—';
-  final latest      = sorted.isNotEmpty ? sorted.last : const <String, dynamic>{};
-  final receiptRef  = latest['receiptNo'] as String? ?? '—';
-  final paymentMode = (latest['paymentMode'] as String? ?? latest['paymentMethod'] as String? ?? '—').replaceAll('_', ' ');
-  final gatewayRef  = (latest['reference'] as String?)?.trim().isNotEmpty == true ? (latest['reference'] as String).trim() : '—';
   final statementNo = 'SKET/DCS/${now.year}/${(donorCode.hashCode.abs() % 999999).toString().padLeft(6, '0')}';
+  final monthsSpan  = (firstDate != null && lastDate != null)
+      ? (lastDate.year - firstDate.year) * 12 + (lastDate.month - firstDate.month) + 1
+      : 0;
+  final monthsSpanLabel = monthsSpan == 1 ? '1 Month' : '$monthsSpan Months';
 
   // Label | Value cells sit side by side (not stacked) — label bold+small,
   // value bold+regular — matching the reference statement's horizontal grid.
@@ -417,6 +415,7 @@ Future<Uint8List> buildDonationStatementPdf({
     return pw.TableRow(
       decoration: pw.BoxDecoration(color: i.isOdd ? bgLight : white),
       children: [
+        _td('${i + 1}', dark, size: 8.5),
         _td(dt != null ? _fmtHyphenDate(dt) : '—', dark, size: 8.5),
         _td(receipt, dark, size: 8.5),
         _td(purpose, dark, size: 8.5),
@@ -426,14 +425,6 @@ Future<Uint8List> buildDonationStatementPdf({
       ],
     );
   }
-
-  pw.Widget summaryRow(String label, String value, {bool bold = false, PdfColor? valueColor, double size = 9.5}) => pw.Padding(
-    padding: const pw.EdgeInsets.symmetric(vertical: 4),
-    child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-      pw.Text(label, style: pw.TextStyle(fontSize: size, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: dark)),
-      pw.Text(value, style: pw.TextStyle(fontSize: bold ? size + 1 : size, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: valueColor ?? dark)),
-    ]),
-  );
 
   doc.addPage(pw.MultiPage(
     pageFormat: PdfPageFormat.a4,
@@ -449,8 +440,9 @@ Future<Uint8List> buildDonationStatementPdf({
         ]),
         pw.Expanded(child: pw.Align(
           alignment: pw.Alignment.topRight,
-          child: pw.Text('DONATION CONTRIBUTION\nSTATEMENT', textAlign: pw.TextAlign.right,
-              style: pw.TextStyle(fontSize: 19, fontWeight: pw.FontWeight.bold, color: dark, letterSpacing: 0.2)),
+          child: pw.Text('DETAILED STATEMENT',
+              style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: dark, letterSpacing: 0.2,
+                  decoration: pw.TextDecoration.underline, decorationColor: dark, decorationThickness: 1.2)),
         )),
       ]),
       pw.SizedBox(height: 14),
@@ -476,12 +468,11 @@ Future<Uint8List> buildDonationStatementPdf({
         2: pw.FlexColumnWidth(1.3),
         3: pw.FlexColumnWidth(2.0),
       }, children: [
-        detailRow('Statement No.', statementNo, 'Donor ID', donorCode, shaded: false),
-        detailRow('Receipt Reference', receiptRef, 'Donor Name', donorName, shaded: true),
-        detailRow('Statement Duration',
+        detailRow('Donor Name', donorName, 'Donor ID', donorCode, shaded: false),
+        detailRow('Statement No.', statementNo, 'Generated On', _fmtFullDate(now), shaded: true),
+        detailRow('Donation Period',
             firstDate != null && lastDate != null ? '${_fmtFullDate(firstDate)} - ${_fmtFullDate(lastDate)}' : '—',
-            'Generated On', _fmtFullDate(now), shaded: false),
-        detailRow('Payment Mode', paymentMode, 'Gateway Reference', gatewayRef, shaded: true),
+            'Statement Duration', monthsSpanLabel, shaded: false),
       ]),
       pw.SizedBox(height: 16),
 
@@ -493,20 +484,22 @@ Future<Uint8List> buildDonationStatementPdf({
       ),
       pw.Table(
         columnWidths: const {
-          0: pw.FlexColumnWidth(1.3),
-          1: pw.FlexColumnWidth(1.6),
-          2: pw.FlexColumnWidth(1.8),
-          3: pw.FlexColumnWidth(1.2),
-          4: pw.FlexColumnWidth(1.0),
-          5: pw.FlexColumnWidth(1.3),
+          0: pw.FlexColumnWidth(0.6),
+          1: pw.FlexColumnWidth(1.3),
+          2: pw.FlexColumnWidth(1.6),
+          3: pw.FlexColumnWidth(1.8),
+          4: pw.FlexColumnWidth(1.2),
+          5: pw.FlexColumnWidth(1.0),
+          6: pw.FlexColumnWidth(1.3),
         },
         children: [
           pw.TableRow(decoration: pw.BoxDecoration(color: bgStripe), children: [
+            _thGray('Sl.No', dark),
             _thGray('Date', dark),
             _thGray('Receipt No.', dark),
-            _thGray('Purpose', dark),
+            _thGray('Description', dark),
             _thGray('Duration', dark),
-            _thGray('Units', dark),
+            _thGray('Period', dark),
             _thGray('Amount (Rs.)', dark, align: pw.TextAlign.right),
           ]),
           ...sorted.asMap().entries.map((e) => itemRow(e.key, e.value)),
@@ -521,46 +514,56 @@ Future<Uint8List> buildDonationStatementPdf({
         child: pw.Text('CONTRIBUTION SUMMARY', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: white, letterSpacing: 0.3)),
       ),
       pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        child: pw.Column(children: [
-          summaryRow('Statement Duration', firstDate != null && lastDate != null ? '${_fmtMonthYear(firstDate)} – ${_fmtMonthYear(lastDate)}' : '—'),
-          summaryRow('Total Donations', '${sorted.length}'),
-          summaryRow('Total Units', '${sorted.length} Month${sorted.length == 1 ? '' : 's'}'),
-          summaryRow('Subtotal', 'Rs. ${_fmt(totalAmount)}.00'),
-          summaryRow('Tax (0%)', 'Rs. 0.00'),
-          pw.Padding(padding: const pw.EdgeInsets.symmetric(vertical: 4), child: pw.Container(height: 1, color: pdfBorder)),
-          summaryRow('Grand Total', 'Rs. ${_fmt(totalAmount)}.00', bold: true, valueColor: orange),
+        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+        child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+          pw.Text('Grand Total', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: dark)),
+          pw.Text('Rs. ${_fmt(totalAmount)}.00', style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold, color: orange)),
         ]),
       ),
-      pw.SizedBox(height: 6),
-
-      pw.Text('AMOUNT IN WORDS', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: dark, letterSpacing: 0.3)),
-      pw.SizedBox(height: 5),
-      pw.Text(_amountInWords(totalAmount), style: pw.TextStyle(fontSize: 12.5, fontStyle: pw.FontStyle.italic, color: orange)),
+      pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 4),
+        child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+          pw.Text('AMOUNT IN WORDS', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: grey, letterSpacing: 0.3)),
+          pw.SizedBox(height: 3),
+          pw.Text(_amountInWords(totalAmount), style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: orange)),
+        ]),
+      ),
       pw.SizedBox(height: 20),
 
-      pw.Center(child: pw.Text('Thank You Message', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: dark))),
-      pw.SizedBox(height: 6),
-      pw.Center(child: pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(horizontal: 24),
-        child: pw.Text(
-          'Thank you for your generous contribution to $orgName. Your support enables us to provide '
-          'education, shelter, nutrition, healthcare, and holistic development for underprivileged children.',
-          textAlign: pw.TextAlign.center,
-          style: pw.TextStyle(fontSize: 9, color: grey, lineSpacing: 1.4),
-        ),
-      )),
+      pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        pw.Expanded(flex: 3, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+          pw.Text('Thank You Message', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: dark)),
+          pw.SizedBox(height: 6),
+          pw.Text(
+            'Thank you for your generous contribution to $orgName. Your support enables us to provide '
+            'education, shelter, nutrition, healthcare, and holistic development for orphan, semi-orphan, and '
+            'underprivileged children.',
+            style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: dark, lineSpacing: 1.4),
+          ),
+        ])),
+        pw.SizedBox(width: 24),
+        pw.Expanded(flex: 2, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+          pw.SizedBox(height: 34),
+          pw.Container(width: 140, height: 1, color: dark),
+          pw.SizedBox(height: 4),
+          pw.Text('Authorized Signature', style: pw.TextStyle(fontSize: 9, color: dark)),
+        ])),
+      ]),
       pw.SizedBox(height: 20),
 
-      // Statutory footer bar (PAN / 12AA / 80G) + disclaimer
+      // Statutory footer: orange section-title bar (matching the other
+      // section headers above) followed by a plain light-gray details box.
+      pw.Container(
+        width: double.infinity, color: orange,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        child: pw.Text('STATUTORY REGISTRATION DETAILS (TAX BENEFITS)',
+            style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: white, letterSpacing: 0.3)),
+      ),
       pw.Container(
         width: double.infinity,
-        decoration: pw.BoxDecoration(color: bgLight, border: pw.Border(left: pw.BorderSide(color: orange, width: 3))),
+        color: bgStripe,
         padding: const pw.EdgeInsets.fromLTRB(12, 10, 12, 10),
         child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-          pw.Text('STATUTORY REGISTRATION DETAILS (TAX BENEFITS)',
-              style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: orange, letterSpacing: 0.3)),
-          pw.SizedBox(height: 5),
           pw.Text('Trust PAN: $orgPan | 12AA Registration: $org12A | 80G Certification: $org80G',
               style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: dark)),
           if (orgAddress.isNotEmpty) ...[
