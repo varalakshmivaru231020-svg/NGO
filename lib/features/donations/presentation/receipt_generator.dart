@@ -39,7 +39,7 @@ String _org(Map<String, dynamic>? org, String key) {
 }
 
 // Receipt palette (shared by the on-screen sheet + the PDF export).
-const _orange   = Color(0xFFF97316);
+const _orange   = Color(0xFFFF0000);
 const _grey     = Color(0xFF6B7280);
 const _dark     = Color(0xFF1F2937);
 const _border   = Color(0xFFE5E7EB);
@@ -156,7 +156,7 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
   final logoData = await rootBundle.load('assets/images/sket-logo.png');
   final logo = pw.MemoryImage(logoData.buffer.asUint8List());
 
-  final orange   = PdfColor.fromInt(0xFFF97316);
+  final orange   = PdfColor.fromInt(0xFFFF0000);
   final grey     = PdfColor.fromInt(0xFF6B7280);
   final dark     = PdfColor.fromInt(0xFF1F2937);
   final brd      = PdfColor.fromInt(0xFFE5E7EB);
@@ -179,7 +179,7 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
     margin: const pw.EdgeInsets.fromLTRB(36, 30, 36, 30),
     build: (ctx) => [pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
       // Header: logo (wordmark is baked into the asset)
-      pw.Image(logo, height: 46),
+      pw.Image(logo, height: 64),
       pw.SizedBox(height: 16),
 
       // Full-width orange address bar
@@ -308,6 +308,11 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
           pw.SizedBox(height: 5),
           pw.Text('• Trust PAN: $orgPan | • 12AA Registration: $org12A | • 80G Certification: $org80G',
               style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: dark)),
+          if (orgAddress.isNotEmpty) ...[
+            pw.SizedBox(height: 5),
+            pw.Text('Registered Address: $orgAddress',
+                style: pw.TextStyle(fontSize: 7.5, color: grey)),
+          ],
           pw.SizedBox(height: 5),
           pw.Text('This is an electronically generated receipt confirmation. No physical signature is required.',
               style: pw.TextStyle(fontSize: 7.5, color: grey)),
@@ -345,7 +350,7 @@ Future<Uint8List> buildDonationStatementPdf({
   final logoData = await rootBundle.load('assets/images/sket-logo.png');
   final logo = pw.MemoryImage(logoData.buffer.asUint8List());
 
-  final orange   = PdfColor.fromInt(0xFFF97316);
+  final orange   = PdfColor.fromInt(0xFFFF0000);
   final grey     = PdfColor.fromInt(0xFF6B7280);
   final dark     = PdfColor.fromInt(0xFF1F2937);
   final bgLight  = PdfColor.fromInt(0xFFF8FAFC);
@@ -437,7 +442,7 @@ Future<Uint8List> buildDonationStatementPdf({
       // Header: logo + org name lockup (left) | big title (right)
       pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
         pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-          pw.Image(logo, height: 42),
+          pw.Image(logo, height: 58),
           pw.SizedBox(height: 6),
           pw.Text(orgName, style: pw.TextStyle(fontSize: 10, color: dark)),
           pw.Text('(Registered Charitable Trust)', style: pw.TextStyle(fontSize: 8.5, color: grey)),
@@ -558,6 +563,11 @@ Future<Uint8List> buildDonationStatementPdf({
           pw.SizedBox(height: 5),
           pw.Text('Trust PAN: $orgPan | 12AA Registration: $org12A | 80G Certification: $org80G',
               style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: dark)),
+          if (orgAddress.isNotEmpty) ...[
+            pw.SizedBox(height: 5),
+            pw.Text('Registered Address: $orgAddress',
+                style: pw.TextStyle(fontSize: 7.5, color: grey)),
+          ],
           pw.SizedBox(height: 5),
           pw.Text('This is an electronically generated statement. No physical signature is required.',
               style: pw.TextStyle(fontSize: 7.5, color: grey)),
@@ -654,7 +664,7 @@ class _ReceiptSheet extends StatelessWidget {
 
               // ── HEADER: logo (wordmark baked into the asset) ──────────
               Image.asset('assets/images/sket-logo.png',
-                  height: 40, fit: BoxFit.contain, alignment: Alignment.centerLeft),
+                  height: 56, fit: BoxFit.contain, alignment: Alignment.centerLeft),
               const SizedBox(height: 14),
 
               // ── Full-width orange address bar ─────────────────────────
@@ -804,6 +814,11 @@ class _ReceiptSheet extends StatelessWidget {
                   Text(
                       '• Trust PAN: $orgPan | • 12AA Registration: $org12A | • 80G Certification: $org80G',
                       style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: _dark, height: 1.4)),
+                  if (orgAddress.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text('Registered Address: $orgAddress',
+                        style: const TextStyle(fontSize: 8.5, color: _grey, height: 1.4)),
+                  ],
                   const SizedBox(height: 6),
                   Text('This is an electronically generated receipt confirmation. No physical signature is required.',
                       style: const TextStyle(fontSize: 8.5, color: _grey, height: 1.4)),
