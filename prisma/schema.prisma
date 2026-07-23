@@ -63,7 +63,7 @@ model UserDocument {
 
 model RefreshToken {
   id        String   @id @default(cuid())
-  token     String   @unique
+  token     String   @unique @db.VarChar(512) // JWT — exceeds MySQL's default VARCHAR(191)
   userId    String
   expiresAt DateTime
   createdAt DateTime @default(now())
@@ -75,7 +75,7 @@ model RefreshToken {
 
 model DeviceToken {
   id        String   @id @default(cuid())
-  token     String   @unique
+  token     String   @unique @db.VarChar(512) // FCM tokens can exceed MySQL's default VARCHAR(191)
   userId    String
   platform  String   @default("android")
   createdAt DateTime @default(now())
