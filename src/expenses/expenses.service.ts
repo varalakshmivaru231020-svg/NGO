@@ -14,9 +14,16 @@ export class ExpensesService {
   private include = { category: true };
 
   private async nextVoucherNo(): Promise<string> {
-    const count = await this.prisma.expense.count();
     const year = new Date().getFullYear();
-    return `EXP/${year}/${String(count + 1).padStart(6, '0')}`;
+    // voucherNo is unique — a row count collides with existing numbers once
+    // any expense is deleted, so derive the next from the highest existing.
+    const existing = await this.prisma.expense.findMany({ select: { voucherNo: true } });
+    let max = 0;
+    for (const { voucherNo } of existing) {
+      const n = parseInt(voucherNo.split('/').pop() ?? '', 10);
+      if (!isNaN(n) && n > max) max = n;
+    }
+    return `EXP/${year}/${String(max + 1).padStart(6, '0')}`;
   }
 
   async create(dto: CreateExpenseDto, user: SessionUser) {

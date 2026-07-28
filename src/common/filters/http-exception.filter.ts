@@ -1,4 +1,5 @@
 import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { Request, Response } from 'express';
 
 @Catch()
@@ -27,6 +28,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
           message = 'Validation failed';
         }
       }
+    } else if (
+      exception instanceof Prisma.PrismaClientKnownRequestError &&
+      exception.code === 'P2002'
+    ) {
+      // Unique-constraint violation — surface which field collided instead of
+      // a bare 500 (this also flows into approval-replay failure messages).
+      status = HttpStatus.CONFLICT;
+      const target = (exception.meta as any)?.target;
+      const fields = Array.isArray(target) ? target.join(', ') : target;
+      message = `A record with this ${fields || 'value'} already exists`;
     } else {
       this.logger.error('Unhandled exception', exception instanceof Error ? exception.stack : exception);
     }

@@ -26,8 +26,20 @@ export class StudentsService {
   private async nextChildId(centerId: string): Promise<string> {
     const center = await this.prisma.center.findUnique({ where: { id: centerId } });
     const prefix = center?.name?.substring(0, 3).toUpperCase() ?? 'SKT';
-    const count = await this.prisma.student.count({ where: { centerId } });
-    return `${prefix}${String(count + 1).padStart(4, '0')}`;
+    // childId is globally @unique, but a per-centre row count collides after
+    // any deletion (count shrinks, id gets re-minted) and across centres that
+    // share a 3-letter prefix — so derive the next number from the highest
+    // existing id with this prefix instead.
+    const existing = await this.prisma.student.findMany({
+      where: { childId: { startsWith: prefix } },
+      select: { childId: true },
+    });
+    let max = 0;
+    for (const { childId } of existing) {
+      const n = parseInt(childId.slice(prefix.length), 10);
+      if (!isNaN(n) && n > max) max = n;
+    }
+    return `${prefix}${String(max + 1).padStart(4, '0')}`;
   }
 
   async create(dto: CreateStudentDto) {

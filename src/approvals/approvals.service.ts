@@ -295,9 +295,13 @@ export class ApprovalsService {
     );
 
     if (!result.ok) {
-      const msg =
-        (result.json && (result.json.message || result.json.error)) ||
-        `Execution failed (HTTP ${result.status})`;
+      const j = result.json ?? {};
+      let msg =
+        j.message || j.error || `Execution failed (HTTP ${result.status})`;
+      // The global filter tucks validation details into `errors` and flattens
+      // message to 'Validation failed' — include the details here.
+      if (Array.isArray(j.errors) && j.errors.length)
+        msg = `${msg}: ${j.errors.join('; ')}`;
       await this.prisma.approvalRequest.update({
         where: { id },
         data: { error: String(msg).slice(0, 480) },
