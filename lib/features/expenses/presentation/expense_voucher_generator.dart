@@ -78,6 +78,8 @@ const _orgAddress = 'No. 50, 2nd cross, Ripco Shanthinikethan layout, near SJES 
     'Virgo Nagar Post, Bangalore – 560049. Mob: 9986064411, 9620794141. '
     'Email: aakrishnashraya@gmail.com Website: www.krishnashraya.in';
 
+const _statutoryLine = 'Trust PAN: AATTS6672D  |  12AA Registration: AATTS6672D25BL01  |  80G Certification: AATTS6672D25BL02';
+
 // ── PDF voucher — mirrors the physical SKET "Payment Voucher" form: centered
 // title/org header, Voucher No./Date row, inline Paid To, a two-column body
 // (Being paid towards + Rupees on the left, a boxed amount on the right), and
@@ -95,10 +97,12 @@ Future<Uint8List> buildVoucherPdf(ExpenseVoucher v) async {
 
   doc.addPage(pw.Page(
     pageFormat: PdfPageFormat.a5.landscape,
-    margin: const pw.EdgeInsets.all(0),
+    margin: const pw.EdgeInsets.all(16),
     build: (ctx) => pw.Container(
       decoration: pw.BoxDecoration(border: pw.Border.all(color: brd, width: 1.2)),
-      child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+      // min so the outline wraps the content instead of stretching to the
+      // page bottom and printing as a huge empty box.
+      child: pw.Column(mainAxisSize: pw.MainAxisSize.min, crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
         // Header: centered title + org details
         pw.Container(
           width: double.infinity,
@@ -142,46 +146,55 @@ Future<Uint8List> buildVoucherPdf(ExpenseVoucher v) async {
         ),
         pw.Divider(color: brd, thickness: 1.2, height: 1),
 
-        // Being paid towards / Rupees (left) | Amount box (right)
-        pw.Expanded(child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
-          pw.Expanded(flex: 7, child: pw.Container(
-            padding: const pw.EdgeInsets.all(20),
-            decoration: pw.BoxDecoration(border: pw.Border(right: pw.BorderSide(color: brd, width: 1.2))),
-            child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-              pw.RichText(text: pw.TextSpan(children: [
-                pw.TextSpan(text: 'Being paid towards ', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: dark)),
-                pw.TextSpan(text: v.purpose, style: pw.TextStyle(fontSize: 10, color: dark)),
-              ])),
-              pw.SizedBox(height: 22),
-              pw.RichText(text: pw.TextSpan(children: [
-                pw.TextSpan(text: 'Rupees ', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: dark)),
-                pw.TextSpan(text: _amountInWords(v.amount), style: pw.TextStyle(fontSize: 10, color: dark)),
-              ])),
-              if (v.notes.trim().isNotEmpty) ...[
-                pw.SizedBox(height: 14),
-                pw.RichText(text: pw.TextSpan(children: [
-                  pw.TextSpan(text: 'Internal Notes: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: grey)),
-                  pw.TextSpan(text: v.notes.trim(), style: pw.TextStyle(fontSize: 9, color: grey)),
-                ])),
-              ],
-            ]),
-          )),
-          pw.Expanded(flex: 3, child: pw.Container(
-            padding: const pw.EdgeInsets.all(12),
-            alignment: pw.Alignment.center,
-            child: pw.Column(mainAxisAlignment: pw.MainAxisAlignment.center, children: [
-              pw.Text(amtStr, style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold, color: accent)),
-              pw.SizedBox(height: 2),
-              pw.Text('AMOUNT', style: pw.TextStyle(fontSize: 7, color: grey, letterSpacing: 0.5)),
-              pw.SizedBox(height: 10),
-              pw.Text('Payment: $modeLabel', style: pw.TextStyle(fontSize: 8.5, color: grey)),
-              if (v.reference.isNotEmpty) ...[
+        // Being paid towards / Rupees (left) | Amount box (right).
+        // A Table (not Expanded) so the row is only as tall as its content —
+        // Expanded stretched it to the page bottom as a big empty box.
+        pw.Table(
+          columnWidths: const {0: pw.FlexColumnWidth(7), 1: pw.FlexColumnWidth(3)},
+          defaultVerticalAlignment: pw.TableCellVerticalAlignment.full,
+          children: [pw.TableRow(children: [
+            pw.Container(
+              padding: const pw.EdgeInsets.all(20),
+              decoration: pw.BoxDecoration(border: pw.Border(right: pw.BorderSide(color: brd, width: 1.2))),
+              child: pw.ConstrainedBox(
+                constraints: const pw.BoxConstraints(minHeight: 90),
+                child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                  pw.RichText(text: pw.TextSpan(children: [
+                    pw.TextSpan(text: 'Being paid towards ', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: dark)),
+                    pw.TextSpan(text: v.purpose, style: pw.TextStyle(fontSize: 10, color: dark)),
+                  ])),
+                  pw.SizedBox(height: 18),
+                  pw.RichText(text: pw.TextSpan(children: [
+                    pw.TextSpan(text: 'Rupees ', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: dark)),
+                    pw.TextSpan(text: _amountInWords(v.amount).replaceFirst('Rupees ', ''), style: pw.TextStyle(fontSize: 10, color: dark)),
+                  ])),
+                  if (v.notes.trim().isNotEmpty) ...[
+                    pw.SizedBox(height: 14),
+                    pw.RichText(text: pw.TextSpan(children: [
+                      pw.TextSpan(text: 'Internal Notes: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: grey)),
+                      pw.TextSpan(text: v.notes.trim(), style: pw.TextStyle(fontSize: 9, color: grey)),
+                    ])),
+                  ],
+                ]),
+              ),
+            ),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              alignment: pw.Alignment.center,
+              child: pw.Column(mainAxisAlignment: pw.MainAxisAlignment.center, children: [
+                pw.Text(amtStr, style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold, color: accent)),
                 pw.SizedBox(height: 2),
-                pw.Text('Ref: ${v.reference}', style: pw.TextStyle(fontSize: 8.5, color: grey)),
-              ],
-            ]),
-          )),
-        ])),
+                pw.Text('AMOUNT', style: pw.TextStyle(fontSize: 7, color: grey, letterSpacing: 0.5)),
+                pw.SizedBox(height: 10),
+                pw.Text('Payment: $modeLabel', style: pw.TextStyle(fontSize: 8.5, color: grey)),
+                if (v.reference.isNotEmpty) ...[
+                  pw.SizedBox(height: 2),
+                  pw.Text('Ref: ${v.reference}', style: pw.TextStyle(fontSize: 8.5, color: grey)),
+                ],
+              ]),
+            ),
+          ])],
+        ),
         pw.Divider(color: brd, thickness: 1.2, height: 1),
 
         // Prepared / Approved / Received by
@@ -194,9 +207,20 @@ Future<Uint8List> buildVoucherPdf(ExpenseVoucher v) async {
           ]),
         ),
         pw.Padding(
+          padding: const pw.EdgeInsets.fromLTRB(20, 0, 20, 4),
+          child: pw.Container(
+            width: double.infinity,
+            child: pw.Text(_statutoryLine, textAlign: pw.TextAlign.center,
+                style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: dark)),
+          ),
+        ),
+        pw.Padding(
           padding: const pw.EdgeInsets.fromLTRB(20, 0, 20, 10),
-          child: pw.Text('This is an internal payment voucher. Electronically generated — no signature required unless printed.',
-              textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 7, color: grey)),
+          child: pw.Container(
+            width: double.infinity,
+            child: pw.Text('This is an internal payment voucher. Electronically generated — no signature required unless printed.',
+                textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 7, color: grey)),
+          ),
         ),
       ]),
     ),
@@ -310,7 +334,7 @@ class _VoucherSheet extends StatelessWidget {
                       const SizedBox(height: 20),
                       RichText(text: TextSpan(style: const TextStyle(fontSize: 13, color: _dark), children: [
                         const TextSpan(text: 'Rupees ', style: TextStyle(fontWeight: FontWeight.w800)),
-                        TextSpan(text: _amountInWords(voucher.amount)),
+                        TextSpan(text: _amountInWords(voucher.amount).replaceFirst('Rupees ', '')),
                       ])),
                       if (voucher.notes.trim().isNotEmpty) ...[
                         const SizedBox(height: 16),
@@ -347,6 +371,11 @@ class _VoucherSheet extends StatelessWidget {
                     _signatureColumn('Approved by', voucher.approvedBy),
                     _signatureColumn('Received by', voucher.receivedBy),
                   ]),
+                ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 0, 20, 6),
+                  child: Text(_statutoryLine, textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: _dark, height: 1.4)),
                 ),
                 const Padding(
                   padding: EdgeInsets.fromLTRB(20, 0, 20, 16),

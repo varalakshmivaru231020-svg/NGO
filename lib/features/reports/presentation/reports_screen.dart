@@ -52,7 +52,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   DateTimeRange? _dateRange;
   String _reportFilter = 'All';
   bool _exporting = false;
-  static const _filterOptions = ['All', 'Donations', 'Donors', 'Students'];
+  static const _filterOptions = ['All', 'Donations', 'Donors', 'Students', 'Expenses'];
 
   bool _loading = true;
   String? _error;
@@ -67,6 +67,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
   List<Map<String, dynamic>> _donations = [];
   List<Map<String, dynamic>> _students = [];
   List<Map<String, dynamic>> _donors = [];
+  List<Map<String, dynamic>> _expenses = [];
+  Map<String, dynamic> _expSummary = {};
+  Map<String, String> _expCatLabels = {};
 
   @override
   void initState() { super.initState(); _load(); }
@@ -81,6 +84,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
         apiClient.get('/donations', params: {'limit': '100', 'page': '1'}),
         apiClient.get('/students', params: {'limit': '100', 'page': '1'}),
         apiClient.get('/donors', params: {'limit': '100', 'page': '1'}),
+        // Expense endpoints must not take down the whole report if they fail.
+        apiClient.get('/expenses', params: {'limit': '100', 'page': '1'}).catchError((_) => <String, dynamic>{}),
+        apiClient.get('/expenses/summary').catchError((_) => <String, dynamic>{}),
+        apiClient.get('/expenses/categories').catchError((_) => <String, dynamic>{}),
       ]);
 
       final overview = (results[0]['data'] as Map).cast<String, dynamic>();
@@ -141,6 +148,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
           _donations = extractList(results[3]['data']);
           _students = extractList(results[4]['data']);
           _donors = extractList(results[5]['data']);
+          _expenses = extractList(results[6]['data']);
+          _expSummary = (results[7]['data'] as Map?)?.cast<String, dynamic>() ?? {};
+          final cats = (results[8]['data'] as List<dynamic>? ?? const []);
+          _expCatLabels = {
+            for (final c in cats.whereType<Map>()) (c['id'] as String? ?? ''): (c['label'] as String? ?? ''),
+          };
           _loading = false;
         });
       }
@@ -181,6 +194,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
   List<Map<String, dynamic>> get _filteredDonations {
     if (_dateRange == null) return _donations;
     return _donations.where((d) {
+      final dt = DateTime.tryParse(d['date'] as String? ?? '');
+      if (dt == null) return true;
+      return !dt.isBefore(_dateRange!.start) && !dt.isAfter(_dateRange!.end.add(const Duration(days: 1)));
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> get _filteredExpenses {
+    if (_dateRange == null) return _expenses;
+    return _expenses.where((d) {
       final dt = DateTime.tryParse(d['date'] as String? ?? '');
       if (dt == null) return true;
       return !dt.isBefore(_dateRange!.start) && !dt.isAfter(_dateRange!.end.add(const Duration(days: 1)));
@@ -249,6 +271,26 @@ class _ReportsScreenState extends State<ReportsScreen> {
       final sumRow = _donors.length + 2;
       _setRow(sheet, sumRow,     ['SUMMARY', '', '', '', '', '', ''],      style: _summaryStyle());
       _setRow(sheet, sumRow + 1, ['Total Donors', '${_donors.length}', '', '', '', '', ''], style: _summaryStyle());
+    }
+
+    if (_reportFilter == 'All' || _reportFilter == 'Expenses') {
+      final sheet = excel['Expenses'];
+      _setRow(sheet, 0, ['#', 'Voucher No.', 'Date', 'Paid To', 'Category', 'Purpose', 'Payment Mode', 'Amount (₹)'], style: _headerStyle());
+      final rows = _filteredExpenses;
+      int totalAmt = 0;
+      for (int i = 0; i < rows.length; i++) {
+        final r = rows[i];
+        final cat = (r['category'] as Map?)?.cast<String, dynamic>() ?? const {};
+        final amount = (r['amount'] as num?)?.toInt() ?? 0;
+        _setRow(sheet, i + 1, ['${i + 1}', r['voucherNo'] as String? ?? '', (r['date'] as String? ?? '').split('T').first,
+          r['paidTo'] as String? ?? '', cat['label'] as String? ?? '', r['purpose'] as String? ?? '',
+          r['paymentMode'] as String? ?? '', amount.toString()]);
+        totalAmt += amount;
+      }
+      final sumRow = rows.length + 2;
+      _setRow(sheet, sumRow,     ['SUMMARY', '', '', '', '', '', '', ''], style: _summaryStyle());
+      _setRow(sheet, sumRow + 1, ['Total Expenses', '${rows.length}', '', '', '', '', '', ''], style: _summaryStyle());
+      _setRow(sheet, sumRow + 2, ['Total Spent (₹)', totalAmt.toString(), '', '', '', '', '', ''], style: _summaryStyle());
     }
 
     if (excel.sheets.containsKey('Sheet1')) excel.delete('Sheet1');
@@ -430,8 +472,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ],
 
             // Top donors
-            if (_topDonors.isNotEmpty)
+            if (_topDonors.isNotEmpty) ...[
               Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: _TopDonorsCard(topDonors: _topDonors)),
+              const SizedBox(height: 16),
+            ],
+
+            // Expense report
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: _ExpensesCard(summary: _expSummary, catLabels: _expCatLabels)),
 
             const SizedBox(height: 96),
           ]),
@@ -546,6 +594,89 @@ class _AllocationCard extends StatelessWidget {
       ]),
     ]),
   );
+}
+
+class _ExpensesCard extends StatelessWidget {
+  const _ExpensesCard({required this.summary, required this.catLabels});
+  final Map<String, dynamic> summary;
+  final Map<String, String> catLabels;
+
+  @override
+  Widget build(BuildContext context) {
+    final month = ((summary['month'] as Map?)?['amount'] as num?)?.toInt() ?? 0;
+    final year  = ((summary['year']  as Map?)?['amount'] as num?)?.toInt() ?? 0;
+    final monthCount = ((summary['month'] as Map?)?['count'] as num?)?.toInt() ?? 0;
+    final byCategory = (summary['byCategory'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((g) => (
+          label: catLabels[g['categoryId'] as String? ?? ''] ?? 'Other',
+          amount: ((g['_sum'] as Map?)?['amount'] as num?)?.toInt() ?? 0,
+        ))
+        .where((g) => g.amount > 0)
+        .toList()
+      ..sort((a, b) => b.amount.compareTo(a.amount));
+    final catTotal = byCategory.fold<int>(0, (s, g) => s + g.amount);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(22), border: Border.all(color: context.border),
+        boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 8, offset: Offset(0, 2))]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Expense Report', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 2),
+        Text('Where money was spent', style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 14),
+        Row(children: [
+          Expanded(child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: const Color(0xFFFFE3DF), borderRadius: BorderRadius.circular(14)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(_inr(month), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _coral500)),
+              const SizedBox(height: 2),
+              const Text('Spent this month', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _coral500)),
+              Text('$monthCount expense${monthCount == 1 ? '' : 's'}', style: const TextStyle(fontSize: 10.5, color: _onSurface3, fontWeight: FontWeight.w600)),
+            ]),
+          )),
+          const SizedBox(width: 10),
+          Expanded(child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: const Color(0xFFFFF1D6), borderRadius: BorderRadius.circular(14)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(_inr(year), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _amber600)),
+              const SizedBox(height: 2),
+              const Text('Spent this year', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _amber600)),
+              const Text('Jan – today', style: TextStyle(fontSize: 10.5, color: _onSurface3, fontWeight: FontWeight.w600)),
+            ]),
+          )),
+        ]),
+        if (byCategory.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text('BY CATEGORY', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: context.textHint, letterSpacing: 0.6)),
+          const SizedBox(height: 10),
+          ...byCategory.take(6).toList().asMap().entries.map((e) {
+            final g = e.value;
+            final color = _allocationPalette[e.key % _allocationPalette.length];
+            final frac = catTotal > 0 ? g.amount / catTotal : 0.0;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Expanded(child: Text(g.label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub), overflow: TextOverflow.ellipsis)),
+                  Text(_inr(g.amount), style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: color)),
+                ]),
+                const SizedBox(height: 4),
+                ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(
+                  value: frac, minHeight: 6, backgroundColor: context.border, valueColor: AlwaysStoppedAnimation(color))),
+              ]),
+            );
+          }),
+        ] else ...[
+          const SizedBox(height: 14),
+          Center(child: Text('No expenses recorded yet', style: TextStyle(fontSize: 13, color: context.textHint, fontWeight: FontWeight.w600))),
+        ],
+      ]),
+    );
+  }
 }
 
 class _TopDonorsCard extends StatelessWidget {

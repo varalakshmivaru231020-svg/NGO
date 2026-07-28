@@ -64,6 +64,9 @@ class AddDonationScreen extends StatefulWidget {
 class _AddDonationScreenState extends State<AddDonationScreen> {
   final _amountCtrl = TextEditingController();
   final _descriptionCtrl = TextEditingController();
+  // Left blank on purpose when the transaction id isn't known yet — the
+  // invoice prints a fill-in-by-hand blank line in that case.
+  final _txnIdCtrl = TextEditingController();
   String? _selectedDonorId;
   String? _selectedDonorName;
   String _donationType = 'Education Fund';
@@ -283,6 +286,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
         'amount': int.parse(amountText),
         'paymentMode': _methodModes[_method] ?? 'CASH',
         'date': _selectedDate.toIso8601String(),
+        if (_txnIdCtrl.text.trim().isNotEmpty) 'reference': _txnIdCtrl.text.trim(),
         if (_descriptionCtrl.text.trim().isNotEmpty) 'notes': _descriptionCtrl.text.trim(),
       });
       // Non-Super-Admins: queued for approval — no receipt, nothing recorded yet.
@@ -319,6 +323,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       paymentMode:  _method,
       date:         _date,
       taxExemption: true,
+      reference:    _txnIdCtrl.text.trim(),
       notes:        _descriptionCtrl.text.trim(),
     );
     // Persist locally so list shows it immediately
@@ -349,7 +354,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
   }
 
   @override
-  void dispose() { _amountCtrl.dispose(); _descriptionCtrl.dispose(); super.dispose(); }
+  void dispose() { _amountCtrl.dispose(); _descriptionCtrl.dispose(); _txnIdCtrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
@@ -529,6 +534,28 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                       ])),
                   ),
                 ])),
+              ])),
+
+              const SizedBox(height: 12),
+
+              // transaction id — optional; invoice prints a blank line to
+              // fill in by hand when left empty
+              _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const _Label('Transaction ID / Reference No.'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _txnIdCtrl,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'UTR / UPI Ref / Cheque No. — leave blank to fill on printed invoice',
+                    hintStyle: TextStyle(fontSize: 12.5, color: context.textHint, fontWeight: FontWeight.w500),
+                    filled: true, fillColor: context.scaffoldBg,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: context.border, width: 1.5)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: context.border, width: 1.5)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                  ),
+                ),
               ])),
 
               const SizedBox(height: 12),

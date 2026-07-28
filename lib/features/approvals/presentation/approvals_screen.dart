@@ -132,7 +132,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
   void _toast(String msg, {bool error = false}) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
     content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
     backgroundColor: error ? _coral500 : _brand600, behavior: SnackBarBehavior.floating,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), duration: const Duration(seconds: 2),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    // Errors carry the backend's real reason — give people time to read it.
+    duration: Duration(seconds: error ? 6 : 2),
   ));
 
   Future<void> _approve(String id) async {
@@ -144,6 +146,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
       await _load();
     } catch (e) {
       _toast(_errMsg(e), error: true);
+      // A failed execution is saved onto the row (error column) — refresh so
+      // the card's failure banner shows it.
+      await _load();
     }
     if (mounted) setState(() => _actioning.remove(id));
   }
@@ -161,10 +166,15 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
     if (mounted) setState(() => _actioning.remove(id));
   }
 
+  // Bulk endpoints return 200 with per-item results — report the real counts,
+  // not a blanket success.
   Future<void> _bulkApprove(List<String> ids) async {
     try {
-      await apiClient.post('/approvals/bulk-approve', {'ids': ids});
-      _toast('${ids.length} approved');
+      final res = await apiClient.post('/approvals/bulk-approve', {'ids': ids});
+      final d = (res['data'] as Map?)?.cast<String, dynamic>() ?? {};
+      final ok = (d['approved'] as int?) ?? ids.length;
+      final failed = (d['failed'] as int?) ?? 0;
+      _toast(failed == 0 ? '$ok approved' : '$ok approved · $failed failed — see the card for the reason', error: failed > 0);
       setState(() => _selected.clear());
       await _load();
     } catch (e) { _toast(_errMsg(e), error: true); }
@@ -172,14 +182,17 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
 
   Future<void> _bulkReject(List<String> ids, String reason) async {
     try {
-      await apiClient.post('/approvals/bulk-reject', {'ids': ids, 'reason': reason});
-      _toast('${ids.length} rejected');
+      final res = await apiClient.post('/approvals/bulk-reject', {'ids': ids, 'reason': reason});
+      final d = (res['data'] as Map?)?.cast<String, dynamic>() ?? {};
+      final ok = (d['rejected'] as int?) ?? ids.length;
+      final failed = (d['failed'] as int?) ?? 0;
+      _toast(failed == 0 ? '$ok rejected' : '$ok rejected · $failed failed', error: failed > 0);
       setState(() => _selected.clear());
       await _load();
     } catch (e) { _toast(_errMsg(e), error: true); }
   }
 
-  String _errMsg(Object e) => 'Action failed. Only the Super Admin can approve or reject.';
+  String _errMsg(Object e) => ApiClient.errorMessage(e, fallback: 'Action failed. Please try again.');
 
   void _confirmReject({String? id, List<String>? ids}) {
     final ctrl = TextEditingController();
@@ -520,6 +533,12 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
         if (status != 'PENDING' && r['reviewerName'] != null) ...[
           const SizedBox(height: 8),
           Text('${status == 'APPROVED' ? 'Approved' : 'Rejected'} by ${r['reviewerName']}', style: const TextStyle(fontSize: 11.5, color: _onSurface3, fontWeight: FontWeight.w500)),
+        ],
+        if (status == 'PENDING' && (r['error'] != null && '${r['error']}'.isNotEmpty)) ...[
+          const SizedBox(height: 8),
+          Container(width: double.infinity, padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: _coral100, borderRadius: BorderRadius.circular(10)),
+            child: Text('Last approval attempt failed: ${r['error']}', style: const TextStyle(fontSize: 12.5, color: Color(0xFFB23B32), fontWeight: FontWeight.w600))),
         ],
         if (status == 'PENDING') ...[
           const SizedBox(height: 12),

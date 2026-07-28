@@ -100,6 +100,32 @@ class ApiClient {
     return r.data is Map<String, dynamic> ? r.data as Map<String, dynamic> : null;
   }
 
+  // Extract the backend's actual error message from a thrown DioException so
+  // screens can show the real reason instead of a generic (or wrong) one.
+  // Nest error bodies look like {statusCode, message, error} where message is
+  // a string or a list of validation messages.
+  static String errorMessage(Object e, {String fallback = 'Something went wrong. Please try again.'}) {
+    if (e is DioException) {
+      final data = e.response?.data;
+      if (data is Map) {
+        final msg = data['message'] ?? data['error'];
+        final base = msg is List && msg.isNotEmpty
+            ? msg.join('\n')
+            : (msg is String && msg.trim().isNotEmpty ? msg : null);
+        // The backend's exception filter puts validation details in `errors`
+        // and flattens message to just 'Validation failed'.
+        final errs = data['errors'];
+        if (errs is List && errs.isNotEmpty) {
+          return '${base ?? 'Validation failed'}\n${errs.join('\n')}';
+        }
+        if (base != null) return base;
+      }
+      if (e.response == null) return 'Could not reach the server. Check your connection and try again.';
+      return '$fallback (HTTP ${e.response?.statusCode})';
+    }
+    return fallback;
+  }
+
   Future<void> saveTokens(String access, String refresh) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('access_token', access);

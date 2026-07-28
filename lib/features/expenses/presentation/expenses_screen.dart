@@ -230,7 +230,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               child: Column(children: [
                 const Row(children: [
                   Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Paid out this month', style: TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w600)),
+                    Text('Spent this month', style: TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w600)),
                   ]),
                 ]),
                 Align(alignment: Alignment.centerLeft, child: Text(_inr(_monthTotal), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.8))),

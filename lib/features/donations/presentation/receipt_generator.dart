@@ -27,8 +27,8 @@ const _orgFallback = {
   'name': 'Sri Krishnashraya Educational Trust',
   'address': '# 88/1, 84/1, 84/5, Sant Baba Hardas Ram Dam, Thammarasanahalli, Chikka Haralagere, Sulibele, Bangalore - 562129',
   'pan': 'AATTS6672D',
-  'reg12A': 'ITBA/EXM/S/12AA/2018-19/A/10252',
-  'cert80G': 'ATTS6672DF20221',
+  'reg12A': 'AATTS6672D25BL01',
+  'cert80G': 'AATTS6672D25BL02',
   'email': 'krishnashryahome@gmail.com',
 };
 
@@ -139,8 +139,8 @@ Amount     : ₹${_fmt(r.amount)}.00
 ${_amountInWords(r.amount)}
 ──────────────────────────────────────
 Trust PAN: AATTS6672D
-12AB Reg : AATTS6672D25BL01
-80G Approval : AATTS6672D25BL02
+12AA Registration : AATTS6672D25BL01
+80G Certification : AATTS6672D25BL02
 ${r.taxExemption ? '✓ 80G Tax Exemption Applicable\n' : ''}══════════════════════════════════════
 Thanks for your support!
 ''';
@@ -223,12 +223,10 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
               pw.Text('Transaction Date: ${r.date}', style: pw.TextStyle(fontSize: 8.5, color: dark)),
               pw.SizedBox(height: 2),
               pw.Text('Mode: ${r.paymentMode}', style: pw.TextStyle(fontSize: 8.5, color: dark)),
-              if (r.reference.isNotEmpty) ...[
-                pw.SizedBox(height: 2),
-                pw.Text('Transaction ID : ${r.reference}', style: pw.TextStyle(fontSize: 8.5, color: dark)),
-                pw.SizedBox(height: 2),
-                pw.Text('Gateway Ref : ${r.reference}', style: pw.TextStyle(fontSize: 8.5, color: dark)),
-              ],
+              pw.SizedBox(height: 2),
+              // Always printed — an unknown id becomes a blank to fill by hand.
+              pw.Text('Transaction ID : ${r.reference.isNotEmpty ? r.reference : '_______________'}',
+                  style: pw.TextStyle(fontSize: 8.5, color: dark)),
             ]),
           ),
         ])),
@@ -460,7 +458,7 @@ Future<Uint8List> buildDonationStatementPdf({
       pw.Container(
         width: double.infinity, color: orange,
         padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        child: pw.Text('STATEMENT DETAILS', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: white, letterSpacing: 0.3)),
+        child: pw.Text('STATEMENT DETAILS', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: white, letterSpacing: 0.3)),
       ),
       pw.Table(columnWidths: const {
         0: pw.FlexColumnWidth(1.3),
@@ -480,7 +478,7 @@ Future<Uint8List> buildDonationStatementPdf({
       pw.Container(
         width: double.infinity, color: orange,
         padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        child: pw.Text('DONATION CONTRIBUTION DETAILS', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: white, letterSpacing: 0.3)),
+        child: pw.Text('DONATION CONTRIBUTION DETAILS', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: white, letterSpacing: 0.3)),
       ),
       pw.Table(
         columnWidths: const {
@@ -511,7 +509,7 @@ Future<Uint8List> buildDonationStatementPdf({
       pw.Container(
         width: double.infinity, color: orange,
         padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        child: pw.Text('CONTRIBUTION SUMMARY', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: white, letterSpacing: 0.3)),
+        child: pw.Text('CONTRIBUTION SUMMARY', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: white, letterSpacing: 0.3)),
       ),
       pw.Padding(
         padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 10),
@@ -556,7 +554,7 @@ Future<Uint8List> buildDonationStatementPdf({
       pw.Container(
         width: double.infinity, color: orange,
         padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        child: pw.Text('STATUTORY REGISTRATION DETAILS (TAX BENEFITS)',
+        child: pw.Text('STATUTORY REGISTRATION DETAILS (TAX BENEFITS)', textAlign: pw.TextAlign.center,
             style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: white, letterSpacing: 0.3)),
       ),
       pw.Container(
@@ -729,12 +727,9 @@ class _ReceiptSheet extends StatelessWidget {
                       Text('Transaction Date: ${receipt.date}', style: const TextStyle(fontSize: 10.5, color: _dark)),
                       const SizedBox(height: 3),
                       Text('Mode: ${receipt.paymentMode}', style: const TextStyle(fontSize: 10.5, color: _dark)),
-                      if (receipt.reference.isNotEmpty) ...[
-                        const SizedBox(height: 3),
-                        Text('Transaction ID : ${receipt.reference}', style: const TextStyle(fontSize: 10.5, color: _dark)),
-                        const SizedBox(height: 3),
-                        Text('Gateway Ref : ${receipt.reference}', style: const TextStyle(fontSize: 10.5, color: _dark)),
-                      ],
+                      const SizedBox(height: 3),
+                      Text('Transaction ID : ${receipt.reference.isNotEmpty ? receipt.reference : '_______________'}',
+                          style: const TextStyle(fontSize: 10.5, color: _dark)),
                     ]),
                   ),
                 ])),
