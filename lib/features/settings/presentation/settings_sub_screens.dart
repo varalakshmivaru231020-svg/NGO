@@ -1258,19 +1258,29 @@ class _ExportDataState extends State<ExportDataScreen> {
     final now = DateTime.now();
     switch (_range) {
       case 'This Month': return DateTime(now.year, now.month, 1);
-      case 'Last 3 Months': return DateTime(now.year, now.month - 3, now.day);
+      // First of the month two months back (3 calendar months incl. current) —
+      // `now.day` overflows short months (31 May − 3 → "31 Feb" → 3 March).
+      case 'Last 3 Months': return DateTime(now.year, now.month - 2, 1);
       case 'This Year': return DateTime(now.year, 1, 1);
       default: return null;
     }
   }
 
+  // Paged fetch — the backend caps limit at 100 (a limit=500 request is
+  // rejected with a 400, which used to silently produce an empty export).
   Future<List<Map<String, dynamic>>> _fetchList(String path) async {
+    final all = <Map<String, dynamic>>[];
     try {
-      final r = await apiClient.get(path, params: const {'limit': '500', 'page': '1'});
-      final inner = r['data'];
-      final list = inner is Map ? (inner['data'] as List? ?? const []) : (inner is List ? inner : const []);
-      return list.whereType<Map>().map((m) => m.cast<String, dynamic>()).toList();
-    } catch (_) { return const []; }
+      for (int page = 1; page <= 10; page++) {
+        final r = await apiClient.get(path, params: {'limit': '100', 'page': '$page'});
+        final inner = r['data'];
+        final list = inner is Map ? (inner['data'] as List? ?? const []) : (inner is List ? inner : const []);
+        all.addAll(list.whereType<Map>().map((m) => m.cast<String, dynamic>()));
+        final meta = (r['meta'] as Map?) ?? (inner is Map ? inner['meta'] as Map? : null);
+        if (meta?['hasNext'] != true) break;
+      }
+    } catch (_) {}
+    return all;
   }
 
   Future<Map<String, dynamic>> _fetchOverview() async {
@@ -2446,13 +2456,20 @@ class _ServerUrlScreenState extends State<ServerUrlScreen> {
     if (url.isEmpty) return;
     setState(() => _saving = true);
     try {
-      final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 8)));
-      await dio.get('$url/auth/health');
+      // Any HTTP response (even a 404 JSON error) proves the server is
+      // reachable — there is no /auth/health route, so only transport-level
+      // failures should count as "connection failed".
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 8),
+        validateStatus: (_) => true,
+      ));
+      await dio.get('$url/auth/login');
       if (mounted) _snack(context, '✓ Connection successful!');
     } catch (e) {
-      if (mounted) _snack(context, 'Connection failed: ${e.toString().substring(0, 60)}');
+      final msg = e.toString();
+      if (mounted) _snack(context, 'Connection failed: ${msg.length > 60 ? msg.substring(0, 60) : msg}');
     }
-    setState(() => _saving = false);
+    if (mounted) setState(() => _saving = false);
   }
 
   @override

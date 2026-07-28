@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -156,8 +157,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   }
 
   void _save() async {
-    final amountText = _amountCtrl.text.trim();
-    if (amountText.isEmpty) { _snack('Please enter an amount', isError: true); return; }
+    final amount = int.tryParse(_amountCtrl.text.trim());
+    if (amount == null || amount <= 0) { _snack('Please enter a valid amount', isError: true); return; }
     if (_paidToCtrl.text.trim().isEmpty) { _snack('Please enter who this was paid to', isError: true); return; }
     if (_purposeCtrl.text.trim().isEmpty) { _snack('Please describe what this expense was for', isError: true); return; }
     if (_categoryId == null) { _snack('Please select a category', isError: true); return; }
@@ -172,7 +173,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         'categoryId': _categoryId,
         'paidTo': _paidToCtrl.text.trim(),
         'purpose': _purposeCtrl.text.trim(),
-        'amount': int.parse(amountText),
+        'amount': amount,
         'paymentMode': _methodModes[_method] ?? 'CASH',
         'date': _selectedDate.toIso8601String(),
         'preparedBy': _preparedByCtrl.text.trim(),
@@ -192,8 +193,17 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       final data = resp['data'] as Map<String, dynamic>? ?? {};
       voucherNo = data['voucherNo'] as String? ?? voucherNo;
       backendOk = true;
-    } catch (_) {
-      // No backend in demo mode — continue with local voucher
+    } catch (e) {
+      // Server answered and rejected — don't fabricate a voucher for an
+      // expense that was never recorded.
+      if (e is DioException && e.response != null) {
+        if (mounted) {
+          setState(() => _saving = false);
+          _snack(ApiClient.errorMessage(e, fallback: 'Could not save the expense.'), isError: true);
+        }
+        return;
+      }
+      // Backend unreachable — offline/demo fallback below.
     }
 
     if (!mounted) return;
@@ -202,7 +212,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       paidTo:        _paidToCtrl.text.trim(),
       purpose:       _purposeCtrl.text.trim(),
       categoryLabel: categoryLabel,
-      amount:        int.parse(amountText),
+      amount:        amount,
       paymentMode:   _methodModes[_method] ?? 'CASH',
       date:          _date,
       preparedBy:    _preparedByCtrl.text.trim(),
@@ -216,7 +226,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         'id': 'local_${voucherNo.hashCode}',
         'paidTo': _paidToCtrl.text.trim(),
         'purpose': _purposeCtrl.text.trim(),
-        'amount': int.tryParse(amountText) ?? 0,
+        'amount': amount,
         'category': {'label': categoryLabel},
         'paymentMode': _methodModes[_method] ?? 'CASH',
         'voucherNo': voucherNo,

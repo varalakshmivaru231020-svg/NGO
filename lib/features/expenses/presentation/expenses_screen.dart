@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/native_file_saver.dart';
+import 'expense_report_generator.dart';
 import 'expense_voucher_generator.dart';
 
 const _orange   = Color(0xFFF97316);
@@ -90,11 +92,15 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   List<_Expense> _expenses = [];
   bool _loading = true;
   String? _error;
+  // Backend category labels — categories are user-creatable, so the chip row
+  // can't be limited to the hardcoded _categoryInfo keys.
+  List<String> _backendCategories = [];
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadCategories();
   }
 
   Future<void> _load() async {
@@ -126,8 +132,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       return;
     } catch (_) {}
     // Backend unreachable → local-only so the app still works offline.
+    if (!mounted) return;
     setState(() {
       _expenses = demoLocalExpenses.map(_Expense.fromApi).toList();
+      if (_expenses.isEmpty) _error = 'Could not load expenses';
       _loading = false;
     });
   }
@@ -189,7 +197,25 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     }
   }
 
-  List<String> get _categories => ['All', ..._categoryInfo.keys];
+  List<String> get _categories {
+    final merged = <String>{..._categoryInfo.keys, ..._backendCategories,
+      // Categories present on loaded expenses always get a chip too.
+      ..._expenses.map((e) => e.category).where((c) => c.isNotEmpty)};
+    return ['All', ...merged.toList()..sort()];
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final r = await apiClient.get('/expenses/categories');
+      final inner = r['data'];
+      final list = inner is List ? inner : (inner is Map ? (inner['data'] as List? ?? const []) : const []);
+      if (mounted) setState(() {
+        _backendCategories = list.whereType<Map>()
+            .map((c) => c['label'] as String? ?? '')
+            .where((l) => l.isNotEmpty).toList();
+      });
+    } catch (_) {}
+  }
 
   List<_Expense> get _filtered =>
     _filter == 'All' ? _expenses : _expenses.where((e) => e.category == _filter).toList();
@@ -197,6 +223,45 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   // Real (recorded) expenses only — pending-approval submissions are shown in
   // the list but excluded from the paid-out totals.
   List<_Expense> get _real => _expenses.where((e) => e.status != 'Pending Approval').toList();
+
+  bool _downloadingReport = false;
+
+  // Download an Expense Report PDF covering what's currently on screen
+  // (respects the active category filter).
+  Future<void> _downloadReport() async {
+    setState(() => _downloadingReport = true);
+    try {
+      final source = _filtered.where((e) => e.status != 'Pending Approval').toList();
+      final rows = source.map((e) => ExpenseReportRow(
+        date: e.date, voucherNo: e.voucherNo, paidTo: e.paidTo,
+        category: e.category, method: e.method, amount: e.amount,
+      )).toList();
+      final bytes = await buildExpenseReportPdf(
+        rows: rows,
+        periodLabel: 'All recorded expenses',
+        categoryFilter: _filter,
+      );
+      final dateStr = DateTime.now().toIso8601String().split('T').first.replaceAll('-', '');
+      final ok = await NativeFileSaver.saveBytes('SKET_Expense_Report_$dateStr.pdf', bytes, 'application/pdf');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ok ? '✓ Expense report downloaded' : 'Failed to save report',
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+          backgroundColor: ok ? _orange : const Color(0xFFF2685E),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not generate the report', style: TextStyle(fontWeight: FontWeight.w700)),
+          backgroundColor: Color(0xFFF2685E), behavior: SnackBarBehavior.floating,
+        ));
+      }
+    }
+    if (mounted) setState(() => _downloadingReport = false);
+  }
 
   int get _monthTotal => _real.fold(0, (s, e) => s + e.amount);
   int get _avgExpense => _real.isEmpty ? 0 : _monthTotal ~/ _real.length;
@@ -214,6 +279,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 const Text('Expenses', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
                 Text('${_real.length} expenses', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
               ])),
+              GestureDetector(
+                onTap: _downloadingReport ? null : _downloadReport,
+                child: Container(width: 44, height: 44, margin: const EdgeInsets.only(right: 10),
+                  decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: context.border)),
+                  child: _downloadingReport
+                    ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _orange)))
+                    : const Icon(Icons.download_outlined, color: _orange, size: 22))),
               GestureDetector(
                 onTap: () => context.go('/expenses/new'),
                 child: Container(width: 44, height: 44, decoration: BoxDecoration(color: _orange, borderRadius: BorderRadius.circular(14)),

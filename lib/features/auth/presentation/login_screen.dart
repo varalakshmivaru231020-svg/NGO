@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,9 +19,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _loading = false;
   bool _obscure = true;
   String? _error;
-
-  static const _adminEmail    = 'admin@sket.org';
-  static const _adminPassword = 'Sket@2026';
 
   static const _bg      = Color(0xFFE07C1F);
   static const _brand   = Color(0xFFFF9933);
@@ -258,20 +256,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final route = applyBackendUser(me);
       if (mounted) { setState(() => _loading = false); context.go(route); }
       return;
-    } catch (_) {
-      // Not a backend account (or backend unreachable) → fall back to local.
+    } catch (e) {
       await apiClient.clearTokens();
+      // The server ANSWERED and rejected the login (bad password, deactivated
+      // account, …) — show its reason and stop. Falling through to local
+      // accounts here was a login bypass. Only an unreachable server may
+      // continue to the offline fallback below.
+      if (e is DioException && e.response != null) {
+        if (mounted) setState(() {
+          _loading = false;
+          _error = ApiClient.errorMessage(e, fallback: 'Invalid credentials. Please try again.');
+        });
+        return;
+      }
     }
 
-    // 2. Local admin credentials (offline fallback)
-    if (name == _adminEmail && password == _adminPassword) {
-      currentLoggedInRole = null;
-      isLoggedIn = true;
-      if (mounted) { setState(() => _loading = false); context.go('/dashboard'); }
-      return;
-    }
-
-    // 3. Local role accounts (seeded / created offline), by email only.
+    // 2. Local role accounts (created on this device) — offline fallback only.
     final role = appRoles.where(
       (r) => r.email.toLowerCase() == name.toLowerCase() && r.password == password,
     ).firstOrNull;

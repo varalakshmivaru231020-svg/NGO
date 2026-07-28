@@ -109,11 +109,14 @@ class _CategoriesNotifier extends StateNotifier<List<DonorCategory>> {
     state = [...state]; // trigger listeners even if the list itself is unchanged
   }
 
+  // Returns false for a queued (pending-approval) write too — the caller's
+  // "added" toast would otherwise claim success while the list stays unchanged.
   Future<bool> add(DonorCategory cat) async {
     try {
-      await apiClient.post('/categories', {
+      final res = await apiClient.post('/categories', {
         'name': cat.name, 'description': cat.desc, 'icon': cat.iconKey, 'color': cat.colorHex,
       });
+      if ((res['meta'] as Map?)?['pendingApproval'] == true) return false;
       await loadFromBackend();
       return true;
     } catch (_) { return false; }

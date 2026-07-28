@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../core/utils/open_bytes.dart';
 import 'package:flutter/material.dart';
@@ -376,8 +377,22 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       Map<String, dynamic>? res;
       try {
         res = await apiClient.post('/students', body);
-      } catch (_) {
-        // No backend reachable — fall back to a local-only record.
+      } catch (e) {
+        // Server answered and rejected — surface the real reason instead of
+        // silently creating a local-only child that vanishes on reload.
+        if (e is DioException && e.response != null) {
+          if (mounted) {
+            setState(() => _saving = false);
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(ApiClient.errorMessage(e, fallback: 'Could not save the child.'),
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+              backgroundColor: _coral500, behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ));
+          }
+          return;
+        }
+        // Backend unreachable — fall back to a local-only record below.
       }
 
       // Non-Super-Admins: the backend queues this for approval instead of

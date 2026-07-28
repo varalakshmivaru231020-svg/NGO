@@ -174,6 +174,7 @@ class _DonationsScreenState extends State<DonationsScreen> {
       return;
     } catch (_) {}
     // Backend unreachable → demo/mock so the app still works offline.
+    if (!mounted) return;
     setState(() {
       final mockDonations = _mockData.map(_Donation.fromApi).toList();
       final localDonations = demoLocalDonations.map(_Donation.fromApi).toList();
@@ -182,6 +183,9 @@ class _DonationsScreenState extends State<DonationsScreen> {
       final uniqueLocal = localDonations.where((d) => !seenReceipts.contains(d.receipt.toLowerCase().trim())).toList();
 
       _donations = [...uniqueLocal, ...mockDonations];
+      // Surface the failure — the "Could not load" UI existed but was never
+      // reachable because _error was never assigned.
+      if (_donations.isEmpty) _error = 'Could not load donations';
       _loading = false;
     });
   }

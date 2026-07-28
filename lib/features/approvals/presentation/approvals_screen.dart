@@ -129,13 +129,16 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
     return ['All', ...(set.toList()..sort())];
   }
 
-  void _toast(String msg, {bool error = false}) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+  void _toast(String msg, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
     content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
     backgroundColor: error ? _coral500 : _brand600, behavior: SnackBarBehavior.floating,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     // Errors carry the backend's real reason — give people time to read it.
     duration: Duration(seconds: error ? 6 : 2),
   ));
+  }
 
   Future<void> _approve(String id) async {
     if (_actioning.contains(id)) return;

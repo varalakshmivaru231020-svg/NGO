@@ -131,6 +131,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   List<MapEntry<String, double>> _dynamicTrend7M = [];
   List<MapEntry<String, double>> _dynamicTrend1Y = [];
   int _totalDonationsAmount = 0;
+  int? _birthdaysToday;
 
   @override
   void initState() {
@@ -307,21 +308,43 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     };
     }
 
+    // Authoritative all-time total — the client-side sum below only covers the
+    // first 100 donations, so it silently freezes once the 101st is recorded.
+    Future<int?> loadTotalRaised() async {
+      try {
+        final r = await apiClient.get('/reports/overview');
+        return ((r['data'] as Map?)?['donations'] as Map?)?['totalRaised'] as int?;
+      } catch (_) { return null; }
+    }
+
+    Future<int?> loadBirthdaysToday() async {
+      try {
+        final r = await apiClient.get('/reminders/birthdays');
+        final inner = r['data'];
+        return inner is List ? inner.length : null;
+      } catch (_) { return null; }
+    }
+
     final results = await Future.wait<dynamic>([
       count('/students'),
       count('/donors'),
       count('/offices'),
       loadDonationStats(),
+      loadTotalRaised(),
+      loadBirthdaysToday(),
     ]);
     final donationStats = results[3] as Map<String, dynamic>;
+    final overviewRaised = results[4] as int?;
+    final birthdaysToday = results[5] as int?;
 
     if (mounted) {
       setState(() {
         _students = results[0] as int?;
         _donors = results[1] as int?;
         _offices = results[2] as int?;
-        _raised = donationStats['raised'] as int?;
+        _raised = overviewRaised ?? donationStats['raised'] as int?;
         _todayRaised = donationStats['today'] as int?;
+        _birthdaysToday = birthdaysToday;
         _dynamicRecentDonations = donationStats['recent'] as List<_Donation>;
         _dynamicTypeSlices = donationStats['slices'] as List<_TypeSlice>;
         _dynamicTrend7M = donationStats['trend7M'] as List<MapEntry<String, double>>;
@@ -410,8 +433,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         (module: 'donors',    card: _KPICard(label: 'Total Donors',      value: n(_donors),   icon: Icons.people_outlined,                 fg: _brand600,  bg: _brand100,  onTap: () => ctx.go('/donors'),    emphasis: true)),
         (module: 'students',  card: _KPICard(label: 'Total Students',    value: n(_students), icon: Icons.school_outlined,                 fg: _violet500, bg: _violet100, onTap: () => ctx.go('/students'))),
         (module: 'offices',   card: _KPICard(label: 'Total Offices',     value: n(_offices),  icon: Icons.business_outlined,               fg: _sky500,    bg: _sky100,    onTap: () => ctx.go('/offices'))),
-        (module: 'reminders', card: _KPICard(label: 'Birthdays Today',   value: '0',          icon: Icons.cake_outlined,                   fg: _coral500,  bg: _coral100,  onTap: () => ctx.go('/reminders'))),
-        (module: 'reminders', card: _KPICard(label: 'Anniversary Today', value: '0',          icon: Icons.favorite_border,                 fg: _coral500,  bg: _coral100,  onTap: () => ctx.go('/reminders'))),
+        (module: 'reminders', card: _KPICard(label: 'Birthdays Today',   value: n(_birthdaysToday), icon: Icons.cake_outlined,             fg: _coral500,  bg: _coral100,  onTap: () => ctx.go('/reminders'))),
       ];
       final cards = all.where((c) => canAccess(c.module)).map((c) => c.card).toList();
       if (cards.isEmpty) return const SizedBox.shrink();

@@ -307,12 +307,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () {
-              if (newCtrl.text == confirmCtrl.text && newCtrl.text.isNotEmpty) {
-                Navigator.pop(ctx);
-                _toast('Password changed successfully');
-              } else {
+            onPressed: () async {
+              if (newCtrl.text != confirmCtrl.text || newCtrl.text.isEmpty) {
                 _toast('Passwords do not match');
+                return;
+              }
+              if (newCtrl.text.length < 8) {
+                _toast('New password must be at least 8 characters');
+                return;
+              }
+              // Actually change it server-side — this dialog used to toast
+              // success without calling any API at all.
+              try {
+                await apiClient.patch('/users/me/password', {
+                  'currentPassword': currentCtrl.text,
+                  'newPassword': newCtrl.text,
+                });
+                if (ctx.mounted) Navigator.pop(ctx);
+                _toast('Password changed successfully');
+              } catch (e) {
+                _toast(ApiClient.errorMessage(e, fallback: 'Could not change password'));
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),

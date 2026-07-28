@@ -127,11 +127,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
       )).toList()
         ..sort((a, b) => b.total.compareTo(a.total));
 
-      // All-time donation count, for a real Average Gift figure (the overview
-      // only breaks totals down by this-year/this-month).
-      final donationsInner = results[3]['data'];
-      final donationsMeta = donationsInner is Map ? (donationsInner['meta'] as Map?) : null;
-      final totalDonationsCount = (donationsMeta?['total'] as int?) ?? 0;
+      // All-time donation count, for a real Average Gift figure. List
+      // endpoints return a FLAT {success, data:[...], meta:{...}} — meta sits
+      // beside data, not inside it (reading it from inside made this always 0).
+      final donationsMeta = results[3]['meta'] as Map?;
+      final totalDonationsCount = (donationsMeta?['total'] as num?)?.toInt() ?? 0;
 
       List<Map<String, dynamic>> extractList(dynamic inner) {
         final l = inner is Map ? (inner['data'] as List<dynamic>? ?? const []) : (inner is List ? inner : const []);
@@ -196,7 +196,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return _donations.where((d) {
       final dt = DateTime.tryParse(d['date'] as String? ?? '');
       if (dt == null) return true;
-      return !dt.isBefore(_dateRange!.start) && !dt.isAfter(_dateRange!.end.add(const Duration(days: 1)));
+      // end is midnight of the last selected day — strict isBefore(end+1d)
+      // keeps the whole end day without leaking into the day after.
+      return !dt.isBefore(_dateRange!.start) && dt.isBefore(_dateRange!.end.add(const Duration(days: 1)));
     }).toList();
   }
 
@@ -205,7 +207,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return _expenses.where((d) {
       final dt = DateTime.tryParse(d['date'] as String? ?? '');
       if (dt == null) return true;
-      return !dt.isBefore(_dateRange!.start) && !dt.isAfter(_dateRange!.end.add(const Duration(days: 1)));
+      return !dt.isBefore(_dateRange!.start) && dt.isBefore(_dateRange!.end.add(const Duration(days: 1)));
     }).toList();
   }
 
@@ -296,7 +298,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     if (excel.sheets.containsKey('Sheet1')) excel.delete('Sheet1');
 
     final bytes = excel.encode();
-    if (bytes == null) { setState(() => _exporting = false); return; }
+    if (bytes == null) { if (mounted) setState(() => _exporting = false); return; }
 
     final filename = 'SKET_${_reportFilter}_Report_$dateStr.xlsx';
     final ok = await NativeFileSaver.saveBytes(filename, Uint8List.fromList(bytes),

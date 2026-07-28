@@ -131,16 +131,16 @@ class _MoreScreenState extends State<MoreScreen> {
           const SizedBox(height: 20),
           // ── Management ────────────────────────────────────────────
           _GroupSection(title: 'Management', items: [
-            _MenuItem(icon: Icons.business_outlined,     iconBg: _brand100,  iconFg: _brand600,  label: 'Office Management', sub: '4 active locations',  route: '/offices'),
+            _MenuItem(icon: Icons.business_outlined,     iconBg: _brand100,  iconFg: _brand600,  label: 'Office Management', sub: 'Locations & teams',  route: '/offices'),
             _MenuItem(icon: Icons.link_rounded,           iconBg: const Color(0xFFE7E3FD), iconFg: _violet500, label: 'Payment Links',     sub: 'Generate & track links', route: '/payment-links'),
-            _MenuItem(icon: Icons.cake_outlined,          iconBg: _amber100,  iconFg: _amber600,  label: 'Reminders',         sub: '3 celebrations today',   route: '/reminders'),
+            _MenuItem(icon: Icons.cake_outlined,          iconBg: _amber100,  iconFg: _amber600,  label: 'Reminders',         sub: 'Birthdays & follow-ups', route: '/reminders'),
           ]),
           const SizedBox(height: 14),
           // ── Insights ──────────────────────────────────────────────
           _GroupSection(title: 'Insights', items: [
             _MenuItem(icon: Icons.track_changes_outlined, iconBg: _brand100,  iconFg: _brand600,  label: 'Donation Tracker',  sub: 'Track & follow up',      route: '/donation-tracker'),
             _MenuItem(icon: Icons.bar_chart_rounded,      iconBg: const Color(0xFFDCEFFB), iconFg: _sky500,    label: 'Reports & Analytics', sub: 'Impact overview',        route: '/reports'),
-            _MenuItem(icon: Icons.emoji_events_outlined,  iconBg: _amber100,  iconFg: _amber600,  label: 'Student Achievements', sub: '312 milestones',       route: '/achievements'),
+            _MenuItem(icon: Icons.emoji_events_outlined,  iconBg: _amber100,  iconFg: _amber600,  label: 'Student Achievements', sub: 'Milestones & awards',  route: '/achievements'),
           ]),
           const SizedBox(height: 14),
           // ── Account ───────────────────────────────────────────────

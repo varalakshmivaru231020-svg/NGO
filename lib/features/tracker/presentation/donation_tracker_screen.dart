@@ -42,9 +42,13 @@ String _initials(String name) {
 class _DItem {
   const _DItem({required this.id, required this.donor, required this.phone,
     required this.category, required this.donationType, required this.amount,
-    required this.method, required this.receipt, required this.date, required this.daysBefore});
+    required this.method, required this.receipt, required this.date, required this.daysBefore,
+    this.when});
   final String id, donor, phone, category, donationType, method, receipt, date;
   final int amount, daysBefore;
+  // Parsed local timestamp — calendar filtering needs the real date, not a
+  // rolling day-count.
+  final DateTime? when;
 }
 
 const _typeColors = {
@@ -106,6 +110,7 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
           receipt:      e['receiptNo'] as String? ?? '',
           date:         dt != null ? '${dt.day.toString().padLeft(2,'0')} ${m[dt.month-1]} ${dt.year}' : rawDate,
           daysBefore:   dt != null ? now.difference(dt).inDays : 0,
+          when:         dt,
         ));
       }
       if (mounted) setState(() { _all = items; _loading = false; });
@@ -115,10 +120,30 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
   }
 
   List<_DItem> get _filtered {
-    const maxDays = {'All': 9999, 'Today': 0, 'This Week': 7, 'This Month': 30, 'Last Month': 60};
-    final max = maxDays[_range] ?? 9999;
-    final min = _range == 'Last Month' ? 31 : 0;
-    var list = _all.where((d) => d.daysBefore >= min && d.daysBefore <= max).toList();
+    // Calendar periods, not rolling windows — "This Month" used to mean "last
+    // 30 days", and backend dates stored at UTC midnight made today's
+    // donations vanish before ~05:30 IST (negative day-diff).
+    final now = DateTime.now();
+    bool inRange(_DItem d) {
+      final dt = d.when;
+      if (dt == null) return _range == 'All';
+      switch (_range) {
+        case 'Today':
+          return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+        case 'This Week':
+          final startOfWeek = DateTime(now.year, now.month, now.day)
+              .subtract(Duration(days: now.weekday - 1));
+          return !dt.isBefore(startOfWeek);
+        case 'This Month':
+          return dt.year == now.year && dt.month == now.month;
+        case 'Last Month':
+          final lastMonth = DateTime(now.year, now.month - 1, 1);
+          return dt.year == lastMonth.year && dt.month == lastMonth.month;
+        default:
+          return true;
+      }
+    }
+    var list = _all.where(inRange).toList();
     if (_typeFilter != 'All') list = list.where((d) => d.category == _typeFilter).toList();
     return list;
   }

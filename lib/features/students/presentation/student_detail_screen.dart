@@ -2253,7 +2253,9 @@ class _ProgressTabState extends State<_ProgressTab> {
       final r = await apiClient.get('/students/${widget.studentId}/progress', params: {'page': '1', 'limit': '10'});
       final inner = r['data'];
       final list = inner is Map ? (inner['data'] as List<dynamic>? ?? const []) : (inner is List ? inner : const []);
-      final meta = inner is Map ? (inner['meta'] as Map?) : null;
+      // meta sits BESIDE data in the response, not inside it — reading it from
+      // inside made totalPages always 1, so "Load more" never appeared.
+      final meta = (r['meta'] as Map?) ?? (inner is Map ? inner['meta'] as Map? : null);
       final totalPages = (meta?['totalPages'] as num?)?.toInt() ?? 1;
       final records = list.whereType<Map>().map((m) => _ProgressRecordItem.fromJson(m.cast<String, dynamic>())).toList();
       if (mounted) setState(() {
@@ -2274,7 +2276,7 @@ class _ProgressTabState extends State<_ProgressTab> {
       final r = await apiClient.get('/students/${widget.studentId}/progress', params: {'page': '$nextPage', 'limit': '10'});
       final inner = r['data'];
       final list = inner is Map ? (inner['data'] as List<dynamic>? ?? const []) : (inner is List ? inner : const []);
-      final meta = inner is Map ? (inner['meta'] as Map?) : null;
+      final meta = (r['meta'] as Map?) ?? (inner is Map ? inner['meta'] as Map? : null);
       final totalPages = (meta?['totalPages'] as num?)?.toInt() ?? 1;
       final records = list.whereType<Map>().map((m) => _ProgressRecordItem.fromJson(m.cast<String, dynamic>())).toList();
       if (mounted) setState(() {

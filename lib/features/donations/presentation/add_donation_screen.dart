@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -170,7 +171,8 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     }
   }
 
-  String get _receipt => 'SF/26-27/${DateTime.now().millisecondsSinceEpoch % 10000 + 400}';
+  // late final — a getter regenerated a different number on every rebuild.
+  late final String _receipt = 'SF/26-27/${DateTime.now().millisecondsSinceEpoch % 10000 + 400}';
 
   void _pickAmount(int amount) {
     _amountCtrl.text = amount.toString();
@@ -267,9 +269,11 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
   }
 
   void _save() async {
-    final amountText = _amountCtrl.text.trim();
-    if (amountText.isEmpty) {
-      _snack('Please enter an amount', isError: true); return;
+    // Parse ONCE and reuse — a later bare int.parse threw uncaught on
+    // over-long input.
+    final amount = int.tryParse(_amountCtrl.text.trim());
+    if (amount == null || amount <= 0) {
+      _snack('Please enter a valid amount', isError: true); return;
     }
     if (_selectedDonorId == null) {
       _snack('Please select a donor', isError: true); return;
@@ -283,7 +287,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       final resp = await apiClient.post('/donations', {
         'donorId': _selectedDonorId,
         'typeId': typeId,
-        'amount': int.parse(amountText),
+        'amount': amount,
         'paymentMode': _methodModes[_method] ?? 'CASH',
         'date': _selectedDate.toIso8601String(),
         if (_txnIdCtrl.text.trim().isNotEmpty) 'reference': _txnIdCtrl.text.trim(),
@@ -301,8 +305,17 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       final data = resp['data'] as Map<String, dynamic>? ?? {};
       receiptNo = data['receiptNo'] as String? ?? receiptNo;
       backendOk = true;
-    } catch (_) {
-      // No backend in demo mode — continue with local receipt
+    } catch (e) {
+      // The server answered and REJECTED the save — showing a receipt here
+      // would fabricate a success for a donation that was never recorded.
+      if (e is DioException && e.response != null) {
+        if (mounted) {
+          setState(() => _saving = false);
+          _snack(ApiClient.errorMessage(e, fallback: 'Could not save the donation.'), isError: true);
+        }
+        return;
+      }
+      // Backend unreachable — offline/demo fallback below.
     }
 
     if (!mounted) return;
@@ -319,7 +332,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       donorPincode: selectedDonor?.pincode ?? '',
       donorCountry: selectedDonor?.country ?? '',
       donationType: _donationType,
-      amount:       int.parse(amountText),
+      amount:       amount,
       paymentMode:  _method,
       date:         _date,
       taxExemption: true,
@@ -331,7 +344,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       demoLocalDonations.insert(0, {
         'id': 'local_${receiptNo.hashCode}',
         'donor': {'id': _selectedDonorId ?? '', 'name': _selectedDonorName ?? 'Donor'},
-        'amount': int.tryParse(amountText) ?? 0,
+        'amount': amount,
         'type': {'label': _donationType},
         'paymentMode': _methodModes[_method] ?? 'CASH',
         'receiptNo': receiptNo,

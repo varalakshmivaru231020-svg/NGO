@@ -8,7 +8,16 @@ import '../../core/network/api_client.dart';
 // without needing a full shell remount.
 final pendingApprovalsCount = ValueNotifier<int>(0);
 
-Future<void> refreshPendingApprovalsCount() async {
+DateTime? _lastRefresh;
+
+Future<void> refreshPendingApprovalsCount({bool force = false}) async {
+  // Called from the sidebar's build() — throttle so rebuilds don't turn into
+  // a request storm against /approvals/stats.
+  final now = DateTime.now();
+  if (!force && _lastRefresh != null && now.difference(_lastRefresh!) < const Duration(seconds: 30)) {
+    return;
+  }
+  _lastRefresh = now;
   try {
     final r = await apiClient.get('/approvals/stats');
     final d = (r['data'] as Map?)?.cast<String, dynamic>();
