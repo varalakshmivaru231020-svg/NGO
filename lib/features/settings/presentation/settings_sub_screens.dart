@@ -1248,6 +1248,7 @@ class _ExportDataState extends State<ExportDataScreen> {
   String _range   = 'This Month';
   bool _donors    = true;
   bool _donations = true;
+  bool _expenses  = true;
   bool _students  = false;
   bool _reports   = false;
   bool _exporting = false;
@@ -1298,8 +1299,10 @@ class _ExportDataState extends State<ExportDataScreen> {
     }).toList(),
   );
 
+  // "Rs." not "₹" — the PDF export's default font (Helvetica) can't render
+  // the rupee glyph, and the same row builders feed all three formats.
   ({List<String> headers, List<List<String>> rows}) _donationRows(List<Map<String, dynamic>> donations) => (
-    headers: const ['#', 'Receipt No.', 'Donor', 'Date', 'Type', 'Payment Mode', 'Amount (₹)'],
+    headers: const ['#', 'Receipt No.', 'Donor', 'Date', 'Type', 'Payment Mode', 'Amount (Rs.)'],
     rows: donations.asMap().entries.map((e) {
       final i = e.key, r = e.value;
       final donor = (r['donor'] as Map?)?.cast<String, dynamic>() ?? const {};
@@ -1307,6 +1310,18 @@ class _ExportDataState extends State<ExportDataScreen> {
       final amount = (r['amount'] as num?)?.toInt() ?? 0;
       return ['${i + 1}', r['receiptNo'] as String? ?? '', donor['name'] as String? ?? '',
         (r['date'] as String? ?? '').split('T').first, type['label'] as String? ?? '',
+        r['paymentMode'] as String? ?? '', amount.toString()];
+    }).toList(),
+  );
+
+  ({List<String> headers, List<List<String>> rows}) _expenseRows(List<Map<String, dynamic>> expenses) => (
+    headers: const ['#', 'Voucher No.', 'Date', 'Paid To', 'Category', 'Payment Mode', 'Amount (Rs.)'],
+    rows: expenses.asMap().entries.map((e) {
+      final i = e.key, r = e.value;
+      final cat = (r['category'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final amount = (r['amount'] as num?)?.toInt() ?? 0;
+      return ['${i + 1}', r['voucherNo'] as String? ?? '', (r['date'] as String? ?? '').split('T').first,
+        r['paidTo'] as String? ?? '', cat['label'] as String? ?? '',
         r['paymentMode'] as String? ?? '', amount.toString()];
     }).toList(),
   );
@@ -1324,7 +1339,7 @@ class _ExportDataState extends State<ExportDataScreen> {
   ({List<String> headers, List<List<String>> rows}) _summaryRows(Map<String, dynamic> overview) => (
     headers: const ['Metric', 'Value'],
     rows: [
-      ['Total Raised (₹)', '${((overview['donations'] as Map?)?['totalRaised'] as num?)?.toInt() ?? 0}'],
+      ['Total Raised (Rs.)', '${((overview['donations'] as Map?)?['totalRaised'] as num?)?.toInt() ?? 0}'],
       ['Total Donors', '${((overview['donors'] as Map?)?['total'] as num?)?.toInt() ?? 0}'],
       ['Active Students', '${((overview['students'] as Map?)?['active'] as num?)?.toInt() ?? 0}'],
     ],
@@ -1336,6 +1351,7 @@ class _ExportDataState extends State<ExportDataScreen> {
   String _buildCsv({
     required List<Map<String, dynamic>> donors,
     required List<Map<String, dynamic>> donations,
+    required List<Map<String, dynamic>> expenses,
     required List<Map<String, dynamic>> students,
     Map<String, dynamic>? overview,
   }) {
@@ -1350,6 +1366,7 @@ class _ExportDataState extends State<ExportDataScreen> {
     }
     if (_donors) section('DONORS', _donorRows(donors));
     if (_donations) section('DONATIONS', _donationRows(donations));
+    if (_expenses) section('EXPENSES', _expenseRows(expenses));
     if (_students) section('STUDENTS', _studentRows(students));
     if (_reports && overview != null) section('SUMMARY', _summaryRows(overview));
     return out.toString();
@@ -1378,12 +1395,14 @@ class _ExportDataState extends State<ExportDataScreen> {
   Uint8List? _buildExcel({
     required List<Map<String, dynamic>> donors,
     required List<Map<String, dynamic>> donations,
+    required List<Map<String, dynamic>> expenses,
     required List<Map<String, dynamic>> students,
     Map<String, dynamic>? overview,
   }) {
     final excel = xl.Excel.createExcel();
     if (_donors) _xlWriteSheet(excel, 'Donors', _donorRows(donors));
     if (_donations) _xlWriteSheet(excel, 'Donations', _donationRows(donations));
+    if (_expenses) _xlWriteSheet(excel, 'Expenses', _expenseRows(expenses));
     if (_students) _xlWriteSheet(excel, 'Students', _studentRows(students));
     if (_reports && overview != null) _xlWriteSheet(excel, 'Summary', _summaryRows(overview));
     if (excel.sheets.containsKey('Sheet1')) excel.delete('Sheet1');
@@ -1394,6 +1413,7 @@ class _ExportDataState extends State<ExportDataScreen> {
   Future<Uint8List> _buildPdf({
     required List<Map<String, dynamic>> donors,
     required List<Map<String, dynamic>> donations,
+    required List<Map<String, dynamic>> expenses,
     required List<Map<String, dynamic>> students,
     Map<String, dynamic>? overview,
   }) async {
@@ -1431,6 +1451,7 @@ class _ExportDataState extends State<ExportDataScreen> {
             style: pw.TextStyle(fontSize: 9, color: grey)),
         if (_donors) section('Donors', _donorRows(donors)),
         if (_donations) section('Donations', _donationRows(donations)),
+        if (_expenses) section('Expenses', _expenseRows(expenses)),
         if (_students) section('Students', _studentRows(students)),
         if (_reports && overview != null) section('Summary', _summaryRows(overview)),
       ],
@@ -1443,6 +1464,7 @@ class _ExportDataState extends State<ExportDataScreen> {
     try {
       final donors = _donors ? await _fetchList('/donors') : <Map<String, dynamic>>[];
       final donations = _donations ? _filterByDate(await _fetchList('/donations'), 'date') : <Map<String, dynamic>>[];
+      final expenses = _expenses ? _filterByDate(await _fetchList('/expenses'), 'date') : <Map<String, dynamic>>[];
       final students = _students ? await _fetchList('/students') : <Map<String, dynamic>>[];
       final overview = _reports ? await _fetchOverview() : null;
 
@@ -1452,15 +1474,15 @@ class _ExportDataState extends State<ExportDataScreen> {
 
       if (_format == 'CSV') {
         filename = 'SKET_Export_$dateStr.csv';
-        ok = await NativeFileSaver.saveCsv(filename, _buildCsv(donors: donors, donations: donations, students: students, overview: overview));
+        ok = await NativeFileSaver.saveCsv(filename, _buildCsv(donors: donors, donations: donations, expenses: expenses, students: students, overview: overview));
       } else if (_format == 'Excel') {
         filename = 'SKET_Export_$dateStr.xlsx';
-        final bytes = _buildExcel(donors: donors, donations: donations, students: students, overview: overview);
+        final bytes = _buildExcel(donors: donors, donations: donations, expenses: expenses, students: students, overview: overview);
         ok = bytes != null && await NativeFileSaver.saveBytes(filename, bytes,
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       } else {
         filename = 'SKET_Export_$dateStr.pdf';
-        final bytes = await _buildPdf(donors: donors, donations: donations, students: students, overview: overview);
+        final bytes = await _buildPdf(donors: donors, donations: donations, expenses: expenses, students: students, overview: overview);
         ok = await NativeFileSaver.saveBytes(filename, bytes, 'application/pdf');
       }
 
@@ -1516,6 +1538,7 @@ class _ExportDataState extends State<ExportDataScreen> {
           _buildCard(context, child: Column(children: [
             _toggle(context, 'Donors',    _donors,    (v) => setState(() => _donors = v),    Icons.people_outlined,                  _brand600),
             _toggle(context, 'Donations', _donations, (v) => setState(() => _donations = v), Icons.account_balance_wallet_outlined,  _brand600),
+            _toggle(context, 'Expenses',  _expenses,  (v) => setState(() => _expenses = v),  Icons.receipt_long_outlined,            _coral500),
             _toggle(context, 'Students',  _students,  (v) => setState(() => _students = v),  Icons.school_outlined,                  _violet500),
             _toggle(context, 'Reports',   _reports,   (v) => setState(() => _reports = v),   Icons.bar_chart_rounded,                _sky500, last: true),
           ])),
