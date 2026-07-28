@@ -104,8 +104,9 @@ export class ExpensesService {
       this.prisma.expense.aggregate({ where: { date: { gte: today }, status: 'COMPLETED' }, _sum: { amount: true }, _count: true }),
       this.prisma.expense.aggregate({ where: { date: { gte: startOfMonth }, status: 'COMPLETED' }, _sum: { amount: true }, _count: true }),
       this.prisma.expense.aggregate({ where: { date: { gte: startOfYear }, status: 'COMPLETED' }, _sum: { amount: true }, _count: true }),
-      this.prisma.expense.groupBy({ by: ['categoryId'], _sum: { amount: true }, _count: true }),
-      this.prisma.expense.groupBy({ by: ['paymentMode'], _sum: { amount: true }, _count: true }),
+      // Same COMPLETED filter as the headline totals above.
+      this.prisma.expense.groupBy({ by: ['categoryId'], where: { status: 'COMPLETED' }, _sum: { amount: true }, _count: true }),
+      this.prisma.expense.groupBy({ by: ['paymentMode'], where: { status: 'COMPLETED' }, _sum: { amount: true }, _count: true }),
       this.prisma.expense.findMany({ where: { status: 'COMPLETED' }, include: this.include, orderBy: { date: 'desc' }, take: 10 }),
     ]);
 

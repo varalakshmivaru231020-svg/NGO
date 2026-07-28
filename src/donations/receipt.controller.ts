@@ -75,7 +75,7 @@ export class ReceiptController {
     const body = `
       <div class="rc">
         <div class="hdr">
-          ${logo ? `<img class="logo" src="${logo}" alt="${this.esc(orgName)} logo" />` : `<div class="org-name">${this.esc(orgName)}</div>`}
+          ${logo ? `<img class="logo" src="${this.esc(logo)}" alt="${this.esc(orgName)} logo" />` : `<div class="org-name">${this.esc(orgName)}</div>`}
         </div>
         ${orgAddressLines ? `<div class="addr-bar">${this.esc(orgAddressLines)}</div>` : ''}
 

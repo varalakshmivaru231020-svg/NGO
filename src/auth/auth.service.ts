@@ -33,8 +33,10 @@ export class AuthService {
     return this.generateTokens(userId, email, role);
   }
 
-  async logout(refreshToken: string) {
-    await this.prisma.refreshToken.deleteMany({ where: { token: refreshToken } });
+  async logout(userId: string, refreshToken: string) {
+    // Scoped to the caller — otherwise any authenticated user could revoke
+    // arbitrary refresh tokens they've obtained.
+    await this.prisma.refreshToken.deleteMany({ where: { token: refreshToken, userId } });
     return { message: 'Logged out successfully' };
   }
 

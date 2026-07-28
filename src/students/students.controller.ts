@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Patch, Body, Param, Query, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Body, Param, Query, Delete, UseGuards, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { StudentsService } from './students.service';
 import { CreateStudentDto } from './dto/create-student.dto';
@@ -9,11 +9,14 @@ import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { CreateGrowthRecordDto } from './dto/create-growth-record.dto';
 import { CreateStudentDocumentDto } from './dto/create-student-document.dto';
 import { CreateProgressRecordDto } from './dto/create-progress-record.dto';
+import { CreateCenterDto, UpdateCenterDto } from './dto/center.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 
 @ApiTags('students')
 @ApiBearerAuth('JWT')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('students')
 export class StudentsController {
   constructor(private svc: StudentsService) {}
@@ -25,13 +28,13 @@ export class StudentsController {
   centers() { return this.svc.findCenters(); }
 
   @Post('centers') @ApiOperation({ summary: 'Create a center' })
-  createCenter(@Body() body: { name: string; city?: string; address?: string }) {
-    return this.svc.createCenter(body.name, body.city, body.address);
+  createCenter(@Body() dto: CreateCenterDto) {
+    return this.svc.createCenter(dto.name, dto.city, dto.address);
   }
 
   @Patch('centers/:id') @ApiOperation({ summary: 'Update a center' })
-  updateCenter(@Param('id') id: string, @Body() body: { name?: string; city?: string; address?: string }) {
-    return this.svc.updateCenter(id, body);
+  updateCenter(@Param('id') id: string, @Body() dto: UpdateCenterDto) {
+    return this.svc.updateCenter(id, { name: dto.name, city: dto.city, address: dto.address });
   }
 
   @Delete('centers/:id') @ApiOperation({ summary: 'Delete (deactivate) a center' })
@@ -65,6 +68,8 @@ export class StudentsController {
   @Get(':id/attendance') @ApiOperation({ summary: 'Get attendance for a month' })
   @ApiQuery({ name: 'month', example: '2026-06', description: 'YYYY-MM' })
   getAttendance(@Param('id') id: string, @Query('month') month: string) {
+    if (!/^\d{4}-\d{2}$/.test(month ?? ''))
+      throw new BadRequestException('month must be in YYYY-MM format');
     return this.svc.getAttendance(id, month);
   }
 
@@ -98,7 +103,10 @@ export class StudentsController {
     return this.svc.getDocument(docId);
   }
 
-  @Delete('documents/:docId') @ApiOperation({ summary: 'Remove a document' })
+  // Deleting a child's document (Aadhaar/birth-certificate scans) is
+  // destructive and — being approval-exempt — would otherwise leave no trail;
+  // restrict it to admins. Uploads/reads stay open for day-to-day staff work.
+  @Delete('documents/:docId') @Roles('ADMIN') @ApiOperation({ summary: 'Remove a document (admin only)' })
   removeDocument(@Param('docId') docId: string) {
     return this.svc.removeDocument(docId);
   }
@@ -111,7 +119,11 @@ export class StudentsController {
   @Get(':id/progress') @ApiOperation({ summary: 'Get progress/performance history (paginated, newest first)' })
   @ApiQuery({ name: 'page', required: false }) @ApiQuery({ name: 'limit', required: false })
   getProgressRecords(@Param('id') id: string, @Query('page') page?: string, @Query('limit') limit?: string) {
-    return this.svc.getProgressRecords(id, page ? Number(page) : 1, limit ? Number(limit) : 10);
+    // Clamp — raw Number() lets ?page=0 / ?page=abc reach Prisma as a
+    // negative/NaN skip (500), and an unbounded limit dumps the whole table.
+    const p = Math.max(1, Number(page) || 1);
+    const l = Math.min(100, Math.max(1, Number(limit) || 10));
+    return this.svc.getProgressRecords(id, p, l);
   }
 
   @Delete('progress/:recordId') @ApiOperation({ summary: 'Remove a progress record' })

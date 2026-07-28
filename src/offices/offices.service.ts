@@ -23,7 +23,9 @@ export class OfficesService {
     const office = await this.prisma.office.findUnique({
       where: { id },
       include: {
-        users: { select: { id: true, name: true, role: true, email: true } },
+        // No email — this endpoint is open to all authenticated users, while
+        // the full roster (GET /users) is deliberately ADMIN-only.
+        users: { select: { id: true, name: true, role: true } },
         _count: { select: { users: true } },
       },
     });

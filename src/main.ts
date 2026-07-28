@@ -19,6 +19,11 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
 
+  // Behind nginx (CloudPanel/docker) — without this every request carries the
+  // proxy's IP, so the global rate limiter throttles the whole internet as
+  // one client and per-IP login protection does nothing.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   // CSP is disabled: this same server now also serves the Flutter web build
   // (see the static-file section below), which loads external resources
   // (Google Fonts, CanvasKit WASM) that helmet's default strict CSP would

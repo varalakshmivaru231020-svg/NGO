@@ -30,6 +30,13 @@ const EXEMPT_PATH_PATTERNS: RegExp[] = [
   /^users\/[^/]+\/documents$/i,
   /^users\/documents\/[^/]+$/i,
   /^expenses\/categories$/i,
+  // Donor media uploads (base64, up to ~27MB once encoded) — queueing them
+  // copies the whole blob into ApprovalRequest.payload, which can exceed
+  // MySQL's max_allowed_packet and kill the upload with an opaque 500.
+  /^donors\/[^/]+\/activity-videos$/i,
+  /^donors\/[^/]+\/activity-images$/i,
+  // Changing your own password must apply immediately, never queue.
+  /^users\/me\/password$/i,
 ];
 
 export interface SessionUser {

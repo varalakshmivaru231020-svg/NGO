@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -65,8 +65,24 @@ export class UsersService {
     return this.prisma.user.update({ where: { id }, data: dto, select: this.select });
   }
 
+  // Disabling the only active SUPER_ADMIN would deadlock the whole system:
+  // their mutations apply instantly, everyone else's queue for an approval
+  // that no one could ever grant again.
+  private async assertNotLastSuperAdmin(id: string) {
+    const target = await this.prisma.user.findUnique({
+      where: { id }, select: { role: true, isActive: true },
+    });
+    if (target?.role !== 'SUPER_ADMIN' || !target.isActive) return;
+    const others = await this.prisma.user.count({
+      where: { role: 'SUPER_ADMIN', isActive: true, id: { not: id } },
+    });
+    if (others === 0)
+      throw new BadRequestException('Cannot deactivate the only active Super Admin');
+  }
+
   async toggleActive(id: string) {
     const user = await this.findOne(id);
+    if (user.isActive) await this.assertNotLastSuperAdmin(id);
     return this.prisma.user.update({
       where: { id },
       data: { isActive: !user.isActive },
@@ -74,9 +90,15 @@ export class UsersService {
     });
   }
 
-  async changePassword(id: string, newPassword: string) {
+  async changeOwnPassword(id: string, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({ where: { id }, select: { passwordHash: true } });
+    if (!user) throw new NotFoundException('User not found');
+    const ok = await argon2.verify(user.passwordHash, currentPassword).catch(() => false);
+    if (!ok) throw new BadRequestException('Current password is incorrect');
     const passwordHash = await argon2.hash(newPassword);
     await this.prisma.user.update({ where: { id }, data: { passwordHash } });
+    // Revoke refresh tokens so any stolen session dies with the old password.
+    await this.prisma.refreshToken.deleteMany({ where: { userId: id } });
     return { message: 'Password updated' };
   }
 
@@ -86,6 +108,7 @@ export class UsersService {
   // in again.
   async remove(id: string) {
     await this.findOne(id);
+    await this.assertNotLastSuperAdmin(id);
     await this.prisma.refreshToken.deleteMany({ where: { userId: id } });
     const user = await this.prisma.user.update({
       where: { id },

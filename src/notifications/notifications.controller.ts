@@ -1,13 +1,15 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('notifications')
 @ApiBearerAuth('JWT')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('notifications')
 export class NotificationsController {
   constructor(private svc: NotificationsService) {}
@@ -28,9 +30,13 @@ export class NotificationsController {
 
   @Post('device-token') @ApiOperation({ summary: 'Register FCM device token' })
   registerToken(@CurrentUser('id') uid: string, @Body() body: { token: string; platform?: string }) {
+    if (!body?.token || typeof body.token !== 'string')
+      throw new BadRequestException('token is required');
     return this.svc.registerDeviceToken(uid, body.token, body.platform);
   }
 
-  @Post('send') @ApiOperation({ summary: 'Create in-app notification (admin)' })
+  // Targets an arbitrary userId — without a role gate any authenticated user
+  // could inject fake "Approval needed" entries into the Super Admin's feed.
+  @Post('send') @Roles('ADMIN') @ApiOperation({ summary: 'Create in-app notification (admin)' })
   create(@Body() dto: CreateNotificationDto) { return this.svc.create(dto); }
 }

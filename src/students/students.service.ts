@@ -160,10 +160,14 @@ export class StudentsService {
   }
 
   async getAttendance(studentId: string, month: string) {
-    const start = new Date(`${month}-01`);
-    const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+    // Explicit numeric construction — new Date('YYYY-MM-01') parses as UTC
+    // while the old end-of-month used local getters, silently dropping the
+    // last day of every month (or the whole month in UTC-behind timezones).
+    const [y, m] = month.split('-').map(Number);
+    const start = new Date(y, m - 1, 1);
+    const end = new Date(y, m, 1); // first day of next month, exclusive
     return this.prisma.attendance.findMany({
-      where: { studentId, date: { gte: start, lte: end } },
+      where: { studentId, date: { gte: start, lt: end } },
       orderBy: { date: 'asc' },
     });
   }

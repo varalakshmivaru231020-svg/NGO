@@ -153,20 +153,39 @@ export class PublicDonationsService implements OnModuleInit {
 
     const paymentMode = (method && RAZORPAY_METHOD_TO_PAYMENT_MODE[method]) || 'PAYMENT_LINK';
 
-    const donation = await this.donationsService.create({
-      donorId: link.donorId,
-      typeId: link.typeId,
-      amount: link.amount,
-      paymentMode,
-      reference: paymentId,
-      notes: 'Public website donation via Razorpay Payment Link',
+    // Atomic claim: Razorpay retries aggressively, and two concurrent
+    // deliveries both pass the donationId check above — updateMany with the
+    // null condition lets exactly one proceed, so the donation can't book twice.
+    const claimed = await this.prisma.paymentLink.updateMany({
+      where: { id: link.id, donationId: null, status: { not: 'PAID' } },
+      data: { status: 'PAID' },
     });
+    if (claimed.count === 0) {
+      return { received: true };
+    }
 
-    await this.prisma.paymentLink.update({
-      where: { id: link.id },
-      data: { status: 'PAID', donationId: donation.id },
-    });
+    try {
+      const donation = await this.donationsService.create({
+        donorId: link.donorId,
+        typeId: link.typeId,
+        amount: link.amount,
+        paymentMode,
+        reference: paymentId,
+        notes: 'Public website donation via Razorpay Payment Link',
+      });
 
-    return { received: true, donationId: donation.id };
+      await this.prisma.paymentLink.update({
+        where: { id: link.id },
+        data: { donationId: donation.id },
+      });
+
+      return { received: true, donationId: donation.id };
+    } catch (e) {
+      // Release the claim so Razorpay's next retry can complete the booking.
+      await this.prisma.paymentLink
+        .updateMany({ where: { id: link.id, donationId: null }, data: { status: link.status } })
+        .catch(() => undefined);
+      throw e;
+    }
   }
 }

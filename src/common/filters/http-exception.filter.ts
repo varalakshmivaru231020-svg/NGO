@@ -30,6 +30,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }
     } else if (
       exception instanceof Prisma.PrismaClientKnownRequestError &&
+      exception.code === 'P2025'
+    ) {
+      // Update/delete of a row that no longer exists (double-click delete,
+      // stale UI) — a 404, not an internal error.
+      status = HttpStatus.NOT_FOUND;
+      message = 'Record not found — it may have already been deleted';
+    } else if (
+      exception instanceof Prisma.PrismaClientKnownRequestError &&
       exception.code === 'P2002'
     ) {
       // Unique-constraint violation — surface which field collided instead of

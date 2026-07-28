@@ -29,8 +29,8 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT')
   @ApiOperation({ summary: 'Logout (invalidate refresh token)' })
-  logout(@Body() dto: RefreshTokenDto) {
-    return this.authService.logout(dto.refreshToken);
+  logout(@CurrentUser('id') userId: string, @Body() dto: RefreshTokenDto) {
+    return this.authService.logout(userId, dto.refreshToken);
   }
 
   @Get('me')

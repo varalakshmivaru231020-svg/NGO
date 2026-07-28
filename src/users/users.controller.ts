@@ -4,6 +4,7 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDocumentDto } from './dto/create-user-document.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -37,6 +38,13 @@ export class UsersController {
   @Get('approvers')
   @ApiOperation({ summary: 'List active staff eligible to be picked as an approver' })
   findApprovers() { return this.usersService.findApprovers(); }
+
+  // Declared before ':id' routes so 'me' can't be captured as an id.
+  @Patch('me/password')
+  @ApiOperation({ summary: 'Change my own password (verifies the current one)' })
+  changeMyPassword(@CurrentUser('id') id: string, @Body() dto: ChangePasswordDto) {
+    return this.usersService.changeOwnPassword(id, dto.currentPassword, dto.newPassword);
+  }
 
   @Get(':id')
   @Roles('ADMIN')

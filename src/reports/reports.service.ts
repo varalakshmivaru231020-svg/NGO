@@ -34,20 +34,27 @@ export class ReportsService {
       this.prisma.donation.aggregate({ where: { status: 'COMPLETED' }, _sum: { amount: true } }),
       this.prisma.donor.groupBy({ by: ['tier'], _count: true }),
       this.prisma.donorCategory.findMany({ include: { _count: { select: { donors: true } } } }),
-      this.prisma.donor.findMany({
-        where: { isActive: true },
-        select: { id: true, name: true, donorCode: true, tier: true, donations: { where: { status: 'COMPLETED' }, select: { amount: true } } },
-        orderBy: { donations: { _count: 'desc' } },
+      // Rank by COMPLETED amount — ranking by donation _count included
+      // failed/pending rows, so a donor with 40 failed attempts topped the
+      // board with a displayed total of 0.
+      this.prisma.donation.groupBy({
+        by: ['donorId'],
+        where: { status: 'COMPLETED' },
+        _sum: { amount: true },
+        orderBy: { _sum: { amount: 'desc' } },
         take: 10,
       }),
       this.prisma.donation.groupBy({ by: ['typeId'], _sum: { amount: true }, _count: true, where: { status: 'COMPLETED' } }),
     ]);
 
-    const topDonorsWithTotal = topDonors.map((d) => ({
-      ...d,
-      total: d.donations.reduce((s, x) => s + x.amount, 0),
-      donations: undefined,
-    }));
+    const donorRows = await this.prisma.donor.findMany({
+      where: { id: { in: topDonors.map((g) => g.donorId) }, isActive: true },
+      select: { id: true, name: true, donorCode: true, tier: true },
+    });
+    const donorById = new Map(donorRows.map((d) => [d.id, d]));
+    const topDonorsWithTotal = topDonors
+      .filter((g) => donorById.has(g.donorId))
+      .map((g) => ({ ...donorById.get(g.donorId)!, total: g._sum.amount ?? 0 }));
 
     return {
       donors: { total: totalDonors, active: activeDonors, newThisMonth: newDonorsThisMonth, byTier },
@@ -66,18 +73,23 @@ export class ReportsService {
   }
 
   async monthlyTrend(months = 12) {
+    // Clamp — the query param arrives unvalidated, and each month is one
+    // sequential aggregate query.
+    const n = Math.min(24, Math.max(1, Math.floor(months) || 12));
     const results: Array<{ month: string; label: string; amount: number; count: number }> = [];
     const now = new Date();
-    for (let i = months - 1; i >= 0; i--) {
+    for (let i = n - 1; i >= 0; i--) {
       const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+      const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1); // exclusive
       const agg = await this.prisma.donation.aggregate({
-        where: { date: { gte: start, lte: end }, status: 'COMPLETED' },
+        where: { date: { gte: start, lt: end }, status: 'COMPLETED' },
         _sum: { amount: true },
         _count: true,
       });
       results.push({
-        month: start.toISOString().substring(0, 7),
+        // Local date parts — toISOString() shifts local midnight into the
+        // previous month for any UTC-ahead timezone (IST labels were off by one).
+        month: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`,
         label: start.toLocaleString('en-IN', { month: 'short' }),
         amount: agg._sum.amount ?? 0,
         count: agg._count,

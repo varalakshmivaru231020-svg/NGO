@@ -22,10 +22,12 @@ export class RemindersService {
     });
   }
 
-  async findAll(query: { upcoming?: boolean; type?: string }) {
+  async findAll(query: { upcoming?: boolean | string; type?: string }) {
     const where: any = {};
-    if (query.upcoming) where.dueDate = { gte: new Date() };
-    if (query.type) where.type = query.type;
+    // Query params arrive as strings — 'false' is truthy, and qs can turn
+    // ?type[contains]=x into an object that would inject a Prisma operator.
+    if (query.upcoming === true || query.upcoming === 'true') where.dueDate = { gte: new Date() };
+    if (typeof query.type === 'string' && query.type) where.type = query.type;
     return this.prisma.reminder.findMany({ where, include: this.include, orderBy: { dueDate: 'asc' } });
   }
 

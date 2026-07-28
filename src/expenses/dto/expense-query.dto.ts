@@ -1,4 +1,4 @@
-import { IsOptional, IsIn, IsString } from 'class-validator';
+import { IsOptional, IsIn, IsString, IsDateString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 
@@ -9,6 +9,6 @@ export class ExpenseQueryDto extends PaginationDto {
   @ApiPropertyOptional({ enum: EXPENSE_STATUSES }) @IsOptional() @IsIn(EXPENSE_STATUSES) status?: string;
   @ApiPropertyOptional({ enum: PAYMENT_MODES }) @IsOptional() @IsIn(PAYMENT_MODES) paymentMode?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() categoryId?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
 }

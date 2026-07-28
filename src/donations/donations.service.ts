@@ -65,7 +65,9 @@ export class DonationsService {
       // 2) Receipt with a tappable download link (needs a public base URL).
       const base = (this.config.get<string>('PUBLIC_BASE_URL') || '').replace(/\/+$/, '');
       if (base) {
-        const receiptUrl = `${base}/receipts/${donation.id}`;
+        // Global prefix applies to ReceiptController too — without /api/v1 the
+        // SPA fallback swallows the link and donors land on the login screen.
+        const receiptUrl = `${base}/api/v1/receipts/${donation.id}`;
         this.whatsapp
           .sendReceiptGenerated(mobile, name, donation.amount, receiptUrl)
           .catch(() => undefined);
@@ -125,8 +127,10 @@ export class DonationsService {
       this.prisma.donation.aggregate({ where: { date: { gte: today }, status: 'COMPLETED' }, _sum: { amount: true }, _count: true }),
       this.prisma.donation.aggregate({ where: { date: { gte: startOfMonth }, status: 'COMPLETED' }, _sum: { amount: true }, _count: true }),
       this.prisma.donation.aggregate({ where: { date: { gte: startOfYear }, status: 'COMPLETED' }, _sum: { amount: true }, _count: true }),
-      this.prisma.donation.groupBy({ by: ['typeId'], _sum: { amount: true }, _count: true }),
-      this.prisma.donation.groupBy({ by: ['paymentMode'], _sum: { amount: true }, _count: true }),
+      // Same COMPLETED filter as the headline totals — else failed/refunded
+      // donations appear in the breakdown but not the totals.
+      this.prisma.donation.groupBy({ by: ['typeId'], where: { status: 'COMPLETED' }, _sum: { amount: true }, _count: true }),
+      this.prisma.donation.groupBy({ by: ['paymentMode'], where: { status: 'COMPLETED' }, _sum: { amount: true }, _count: true }),
       this.prisma.donation.findMany({ where: { status: 'COMPLETED' }, include: this.include, orderBy: { date: 'desc' }, take: 10 }),
     ]);
 
