@@ -61,7 +61,9 @@ export class ExpensesService {
     }
 
     const [data, total] = await Promise.all([
-      this.prisma.expense.findMany({ where, include: this.include, ...paginate(page, limit), orderBy: { date: 'desc' } }),
+      // Newest entry first — same reasoning as donations (backdated vouchers
+      // must still surface at the top right after being added).
+      this.prisma.expense.findMany({ where, include: this.include, ...paginate(page, limit), orderBy: { createdAt: 'desc' } }),
       this.prisma.expense.count({ where }),
     ]);
     return paginatedResponse(data, total, page, limit);

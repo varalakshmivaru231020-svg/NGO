@@ -96,7 +96,9 @@ export class DonationsService {
       if (to) where.date.lte = new Date(to);
     }
     const [data, total] = await Promise.all([
-      this.prisma.donation.findMany({ where, include: this.include, ...paginate(page, limit), orderBy: { date: 'desc' } }),
+      // Newest ENTRY first (not donation date) — a backdated donation sorted
+      // by its date got buried pages down and looked like it was never saved.
+      this.prisma.donation.findMany({ where, include: this.include, ...paginate(page, limit), orderBy: { createdAt: 'desc' } }),
       this.prisma.donation.count({ where }),
     ]);
     return paginatedResponse(data, total, page, limit);
