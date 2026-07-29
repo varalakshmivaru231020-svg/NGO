@@ -278,6 +278,11 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     if (_selectedDonorId == null) {
       _snack('Please select a donor', isError: true); return;
     }
+    // Every non-cash payment has a reference (UTR/UPI ref/cheque no.) — require
+    // it at entry so invoices carry it. Cash stays optional (fill-in blank).
+    if (_method != 'Cash' && _txnIdCtrl.text.trim().isEmpty) {
+      _snack('Please enter the Transaction ID / Reference No. for $_method', isError: true); return;
+    }
     final typeId = _typeLabelToId[_donationType] ?? _donationType;
     setState(() => _saving = true);
 
@@ -551,16 +556,20 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
 
               const SizedBox(height: 12),
 
-              // transaction id — optional; invoice prints a blank line to
-              // fill in by hand when left empty
+              // transaction id — required for non-cash methods; for Cash it's
+              // optional and the invoice prints a blank line to fill by hand
               _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const _Label('Transaction ID / Reference No.'),
+                _Label(_method == 'Cash'
+                    ? 'Transaction ID / Reference No. (optional for Cash)'
+                    : 'Transaction ID / Reference No. — required *'),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _txnIdCtrl,
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.textPrimary),
                   decoration: InputDecoration(
-                    hintText: 'UTR / UPI Ref / Cheque No. — leave blank to fill on printed invoice',
+                    hintText: _method == 'Cash'
+                        ? 'Leave blank to fill on printed invoice'
+                        : 'Enter UTR / UPI Ref / Cheque No. for $_method',
                     hintStyle: TextStyle(fontSize: 12.5, color: context.textHint, fontWeight: FontWeight.w500),
                     filled: true, fillColor: context.scaffoldBg,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: context.border, width: 1.5)),
