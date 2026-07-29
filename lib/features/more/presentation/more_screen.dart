@@ -131,8 +131,14 @@ class _MoreScreenState extends State<MoreScreen> {
 
           const SizedBox(height: 20),
           // ── Management (role-filtered like the sidebar) ────────────
-          if ([canAccess('offices'), canAccess('payments'), canAccess('reminders')].any((v) => v))
+          // Expenses & Approvals lived only in the desktop sidebar — on
+          // phones (the APK) this menu is the ONLY way to reach them.
+          if ([canAccess('offices'), canAccess('payments'), canAccess('reminders'), canAccess('expenses'), canAccess('approvals')].any((v) => v))
             _GroupSection(title: 'Management', items: [
+              if (canAccess('expenses'))
+                _MenuItem(icon: Icons.payments_outlined,      iconBg: const Color(0xFFFFE3DF), iconFg: _coral500, label: 'Expenses',          sub: 'Vouchers & spending',    route: '/expenses'),
+              if (canAccess('approvals'))
+                _MenuItem(icon: Icons.fact_check_outlined,    iconBg: _amber100,  iconFg: _amber600,  label: 'Approvals',         sub: 'Review pending requests', route: '/approvals'),
               if (canAccess('offices'))
                 _MenuItem(icon: Icons.business_outlined,     iconBg: _brand100,  iconFg: _brand600,  label: 'Office Management', sub: 'Locations & teams',  route: '/offices'),
               if (canAccess('payments'))
