@@ -45,17 +45,23 @@ final demoLocalExpenses = <Map<String, dynamic>>[];
 class _Expense {
   _Expense({required this.id, required this.paidTo, required this.purpose, required this.amount,
     required this.category, required this.method, required this.voucherNo, required this.date,
-    required this.status, this.preparedBy = '', this.approvedBy = '', this.receivedBy = '', this.reference = '', this.notes = ''});
+    required this.status, this.preparedBy = '', this.approvedBy = '', this.receivedBy = '', this.reference = '', this.notes = '',
+    this.when});
   final String id, paidTo, purpose, category, method, voucherNo, date, status;
   final int amount;
   final String preparedBy, approvedBy, receivedBy, reference, notes;
+  // Parsed local timestamp — the report's calendar-period filters need the
+  // real date, not the display string.
+  final DateTime? when;
 
   factory _Expense.fromApi(Map<String, dynamic> j) {
     final category = j['category'] as Map<String, dynamic>?;
     final rawDate = j['date'] as String? ?? '';
     String formattedDate = rawDate;
+    DateTime? when;
     try {
       final dt = DateTime.parse(rawDate).toLocal();
+      when = dt;
       const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       formattedDate = '${dt.day.toString().padLeft(2,'0')} ${m[dt.month-1]} ${dt.year}';
     } catch (_) {}
@@ -76,6 +82,7 @@ class _Expense {
       receivedBy: j['receivedBy'] as String? ?? '',
       reference:  j['reference'] as String? ?? '',
       notes:      j['notes'] as String? ?? '',
+      when:       when,
     );
   }
 }
@@ -226,19 +233,94 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
 
   bool _downloadingReport = false;
 
-  // Download an Expense Report PDF covering what's currently on screen
-  // (respects the active category filter).
+  // Period chooser → calendar-based Expense Report PDF (also respects the
+  // active category filter).
   Future<void> _downloadReport() async {
+    final period = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(color: ctx.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Center(child: Container(width: 40, height: 4,
+            decoration: BoxDecoration(color: ctx.border, borderRadius: BorderRadius.circular(2)))),
+          const SizedBox(height: 16),
+          const Text('Expense Report — choose period', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 12),
+          for (final p in const ['This Month', 'Last 3 Months', 'This Year', 'All Time'])
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.calendar_month_outlined, color: _orange, size: 22),
+              title: Text(p, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+              trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+              onTap: () => Navigator.pop(ctx, p),
+            ),
+        ]),
+      ),
+    );
+    if (period == null || !mounted) return;
+
     setState(() => _downloadingReport = true);
     try {
-      final source = _filtered.where((e) => e.status != 'Pending Approval').toList();
+      final now = DateTime.now();
+      // Calendar boundaries, not rolling windows.
+      bool inPeriod(DateTime? dt) {
+        if (dt == null) return period == 'All Time';
+        switch (period) {
+          case 'This Month':
+            return dt.year == now.year && dt.month == now.month;
+          case 'Last 3 Months':
+            return !dt.isBefore(DateTime(now.year, now.month - 2, 1));
+          case 'This Year':
+            return dt.year == now.year;
+          default:
+            return true;
+        }
+      }
+
+      const monthNames = ['January','February','March','April','May','June','July',
+        'August','September','October','November','December'];
+      String periodLabel;
+      switch (period) {
+        case 'This Month':
+          periodLabel = '${monthNames[now.month - 1]} ${now.year}';
+        case 'Last 3 Months':
+          final start = DateTime(now.year, now.month - 2, 1);
+          periodLabel = '${monthNames[start.month - 1]} ${start.year} – ${monthNames[now.month - 1]} ${now.year}';
+        case 'This Year':
+          periodLabel = 'Year ${now.year}';
+        default:
+          periodLabel = 'All recorded expenses';
+      }
+
+      // Fetch the full history (the screen only holds the newest 50) — fall
+      // back to the on-screen list if the fetch fails.
+      var all = _real;
+      try {
+        final fetched = <_Expense>[];
+        for (int page = 1; page <= 10; page++) {
+          final r = await apiClient.get('/expenses', params: {'limit': '100', 'page': '$page'});
+          final inner = r['data'];
+          final list = inner is Map ? (inner['data'] as List? ?? const []) : (inner is List ? inner : const []);
+          fetched.addAll(list.whereType<Map>().map((m) => _Expense.fromApi(m.cast<String, dynamic>())));
+          final meta = (r['meta'] as Map?) ?? (inner is Map ? inner['meta'] as Map? : null);
+          if (meta?['hasNext'] != true) break;
+        }
+        if (fetched.isNotEmpty) all = fetched;
+      } catch (_) {}
+
+      final source = all
+          .where((e) => e.status != 'Pending Approval' && inPeriod(e.when))
+          .where((e) => _filter == 'All' || e.category == _filter)
+          .toList();
       final rows = source.map((e) => ExpenseReportRow(
         date: e.date, voucherNo: e.voucherNo, paidTo: e.paidTo,
         category: e.category, method: e.method, amount: e.amount,
       )).toList();
       final bytes = await buildExpenseReportPdf(
         rows: rows,
-        periodLabel: 'All recorded expenses',
+        periodLabel: periodLabel,
         categoryFilter: _filter,
       );
       final dateStr = DateTime.now().toIso8601String().split('T').first.replaceAll('-', '');
