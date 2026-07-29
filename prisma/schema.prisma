@@ -65,6 +65,7 @@ model RefreshToken {
   id        String   @id @default(cuid())
   token     String   @unique @db.VarChar(512) // JWT — exceeds MySQL's default VARCHAR(191)
   userId    String
+  userAgent String?  @db.VarChar(255) // browser/device of the login, for Login History
   expiresAt DateTime
   createdAt DateTime @default(now())
 

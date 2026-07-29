@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Req, Headers } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -14,15 +14,23 @@ export class AuthController {
 
   @Post('login')
   @ApiOperation({ summary: 'Login with email & password' })
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  login(@Body() dto: LoginDto, @Headers('user-agent') userAgent?: string) {
+    return this.authService.login(dto, userAgent);
   }
 
   @Post('refresh')
   @UseGuards(JwtRefreshGuard)
   @ApiOperation({ summary: 'Refresh access token' })
-  refresh(@CurrentUser() user: any, @Body() dto: RefreshTokenDto) {
-    return this.authService.refresh(user.id, user.email, user.role, dto.refreshToken);
+  refresh(@CurrentUser() user: any, @Body() dto: RefreshTokenDto, @Headers('user-agent') userAgent?: string) {
+    return this.authService.refresh(user.id, user.email, user.role, dto.refreshToken, userAgent);
+  }
+
+  @Get('sessions')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'My login/session history (for the Security screen)' })
+  sessions(@CurrentUser('id') userId: string) {
+    return this.authService.sessions(userId);
   }
 
   @Post('logout')
