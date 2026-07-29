@@ -141,7 +141,7 @@ class _PhotoPickerCircleState extends State<PhotoPickerCircle> {
                 ? Center(child: SizedBox(width: 24, height: 24,
                     child: CircularProgressIndicator(color: _brand600, strokeWidth: 2.5)))
                 : _bytes != null
-                    ? Image.memory(_bytes!, fit: BoxFit.cover, width: widget.size, height: widget.size)
+                    ? Image.memory(_bytes!, fit: BoxFit.contain, width: widget.size, height: widget.size)
                     : widget.placeholderAsset != null
                         ? Container(color: Colors.white, child: Image.asset(widget.placeholderAsset!, fit: BoxFit.cover, alignment: Alignment.centerLeft, width: widget.size, height: widget.size))
                         : Center(

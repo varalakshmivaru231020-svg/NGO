@@ -122,7 +122,7 @@ class _MoreScreenState extends State<MoreScreen> {
                       clipBehavior: Clip.hardEdge,
                       decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
                       child: photo != null
-                        ? Image.memory(photo, fit: BoxFit.cover, width: 52, height: 52)
+                        ? Image.memory(photo, fit: BoxFit.contain, width: 52, height: 52)
                         : member != null
                           ? Center(child: Text(
                               cardName.isNotEmpty ? cardName.trim().split(RegExp(r'\s+')).map((w) => w[0]).take(2).join().toUpperCase() : '?',

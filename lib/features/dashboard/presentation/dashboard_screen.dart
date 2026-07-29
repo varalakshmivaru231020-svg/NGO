@@ -733,7 +733,7 @@ class _Avatar extends StatelessWidget {
         boxShadow: ring ? [const BoxShadow(color: Colors.white, blurRadius: 0, spreadRadius: 2), BoxShadow(color: color, blurRadius: 0, spreadRadius: 4)] : [],
       ),
       child: image != null
-          ? Image.memory(image!, fit: BoxFit.cover, width: size, height: size)
+          ? Image.memory(image!, fit: BoxFit.contain, width: size, height: size)
           : logoFallback
               ? Container(color: Colors.white, child: Image.asset(brandLogoAsset, fit: BoxFit.cover, alignment: Alignment.centerLeft, width: size, height: size))
               : Center(
