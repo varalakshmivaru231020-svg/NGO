@@ -132,6 +132,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   List<MapEntry<String, double>> _dynamicTrend1Y = [];
   int _totalDonationsAmount = 0;
   int? _birthdaysToday;
+  int? _pendingApprovals;
 
   @override
   void initState() {
@@ -325,6 +326,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       } catch (_) { return null; }
     }
 
+    Future<int?> loadPendingApprovals() async {
+      try {
+        final r = await apiClient.get('/approvals/stats');
+        return ((r['data'] as Map?)?['pending'] as num?)?.toInt();
+      } catch (_) { return null; }
+    }
+
     final results = await Future.wait<dynamic>([
       count('/students'),
       count('/donors'),
@@ -332,10 +340,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       loadDonationStats(),
       loadTotalRaised(),
       loadBirthdaysToday(),
+      loadPendingApprovals(),
     ]);
     final donationStats = results[3] as Map<String, dynamic>;
     final overviewRaised = results[4] as int?;
     final birthdaysToday = results[5] as int?;
+    final pendingApprovals = results[6] as int?;
 
     if (mounted) {
       setState(() {
@@ -345,6 +355,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         _raised = overviewRaised ?? donationStats['raised'] as int?;
         _todayRaised = donationStats['today'] as int?;
         _birthdaysToday = birthdaysToday;
+        _pendingApprovals = pendingApprovals;
         _dynamicRecentDonations = donationStats['recent'] as List<_Donation>;
         _dynamicTypeSlices = donationStats['slices'] as List<_TypeSlice>;
         _dynamicTrend7M = donationStats['trend7M'] as List<MapEntry<String, double>>;
@@ -434,6 +445,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         (module: 'students',  card: _KPICard(label: 'Total Students',    value: n(_students), icon: Icons.school_outlined,                 fg: _violet500, bg: _violet100, onTap: () => ctx.go('/students'))),
         (module: 'offices',   card: _KPICard(label: 'Total Offices',     value: n(_offices),  icon: Icons.business_outlined,               fg: _sky500,    bg: _sky100,    onTap: () => ctx.go('/offices'))),
         (module: 'reminders', card: _KPICard(label: 'Birthdays Today',   value: n(_birthdaysToday), icon: Icons.cake_outlined,             fg: _coral500,  bg: _coral100,  onTap: () => ctx.go('/reminders'))),
+        // 'approvals' is granted to no role — admins only, like the sidebar item.
+        (module: 'approvals', card: _KPICard(label: 'Pending Approvals', value: n(_pendingApprovals), icon: Icons.fact_check_outlined,     fg: _amber600,  bg: _amber100,  onTap: () => ctx.go('/approvals'), emphasis: (_pendingApprovals ?? 0) > 0)),
       ];
       final cards = all.where((c) => canAccess(c.module)).map((c) => c.card).toList();
       if (cards.isEmpty) return const SizedBox.shrink();

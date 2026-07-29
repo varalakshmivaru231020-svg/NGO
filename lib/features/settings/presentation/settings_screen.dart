@@ -641,13 +641,67 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
           onTap: () => context.go('/settings/linked-devices')),
       ]),
       const SizedBox(height: 16),
-      _settingsSection('Login History', [
-        _loginHistoryItem('Chrome · Windows', 'Today, 4:30 PM', Icons.computer_outlined),
-        _loginHistoryItem('Safari · iPhone', 'Yesterday, 11:00 AM', Icons.phone_iphone_outlined),
-        _loginHistoryItem('Chrome · Android', '20 Jun, 9:15 AM', Icons.phone_android_outlined),
-      ]),
+      // Real login history from the server (was hardcoded sample rows).
+      FutureBuilder<List<({String device, String time, IconData icon})>>(
+        future: _loadLoginHistory(),
+        builder: (context, snap) {
+          final rows = snap.data ?? const [];
+          return _settingsSection('Login History', [
+            if (snap.connectionState != ConnectionState.done)
+              const Padding(padding: EdgeInsets.all(20),
+                child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))))
+            else if (rows.isEmpty)
+              Padding(padding: const EdgeInsets.all(16),
+                child: Text('No login history yet — entries appear from your next sign-in.',
+                    style: TextStyle(fontSize: 13, color: context.textSub)))
+            else
+              ...rows.map((r) => _loginHistoryItem(r.device, r.time, r.icon)),
+          ]);
+        },
+      ),
     ]),
   );
+
+  Future<List<({String device, String time, IconData icon})>> _loadLoginHistory() async {
+    try {
+      final r = await apiClient.get('/auth/sessions');
+      final list = (r['data'] as List?) ?? const [];
+      const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      final now = DateTime.now();
+      return list.whereType<Map>().map((s) {
+        final ua = (s['userAgent'] as String? ?? '').toLowerCase();
+        String device;
+        IconData icon;
+        if (ua.contains('dart') || ua.contains('dio')) {
+          device = 'SKET App · Android'; icon = Icons.phone_android_outlined;
+        } else {
+          final browser = ua.contains('edg') ? 'Edge'
+              : ua.contains('chrome') ? 'Chrome'
+              : ua.contains('firefox') ? 'Firefox'
+              : ua.contains('safari') ? 'Safari' : 'Browser';
+          if (ua.contains('android')) { device = '$browser · Android'; icon = Icons.phone_android_outlined; }
+          else if (ua.contains('iphone') || ua.contains('ipad')) { device = '$browser · iPhone'; icon = Icons.phone_iphone_outlined; }
+          else if (ua.contains('windows')) { device = '$browser · Windows'; icon = Icons.computer_outlined; }
+          else if (ua.contains('mac')) { device = '$browser · Mac'; icon = Icons.computer_outlined; }
+          else { device = ua.isEmpty ? 'Unknown device' : browser; icon = Icons.devices_outlined; }
+        }
+        String time = '';
+        final dt = DateTime.tryParse(s['createdAt'] as String? ?? '')?.toLocal();
+        if (dt != null) {
+          final h12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+          final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+          final hm = '$h12:${dt.minute.toString().padLeft(2, '0')} $ampm';
+          final isToday = dt.year == now.year && dt.month == now.month && dt.day == now.day;
+          final yd = now.subtract(const Duration(days: 1));
+          final isYesterday = dt.year == yd.year && dt.month == yd.month && dt.day == yd.day;
+          time = isToday ? 'Today, $hm' : isYesterday ? 'Yesterday, $hm' : '${dt.day} ${m[dt.month - 1]}, $hm';
+        }
+        return (device: device, time: time, icon: icon);
+      }).toList();
+    } catch (_) {
+      return const [];
+    }
+  }
 
   Widget _loginHistoryItem(String device, String time, IconData icon) => ListTile(
     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
