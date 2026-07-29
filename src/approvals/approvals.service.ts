@@ -126,6 +126,9 @@ export class ApprovalsService {
       // user may be a non-backed local account — leave department null
     }
 
+    const body = req.body ?? {};
+    const subject = (body.name ?? body.paidTo ?? body.donorName ?? body.label ?? null);
+
     const created = await this.prisma.approvalRequest.create({
       data: {
         module,
@@ -133,6 +136,7 @@ export class ApprovalsService {
         method,
         path: originalUrl,
         targetId,
+        subject: typeof subject === 'string' ? subject.slice(0, 120) : null,
         payload: this.toJson(req.body),
         previousData: this.toJson(previousData),
         status: 'PENDING',
@@ -253,10 +257,22 @@ export class ApprovalsService {
         { requesterRole: { contains: term } },
       ];
     }
+    // payload/previousData are EXCLUDED from the list: they can hold multi-MB
+    // base64 blobs, and MySQL sorts whole rows — heavy JSON columns blow the
+    // sort buffer (error 1038) and 500 the endpoint. The diff view fetches a
+    // single request's full record via findOne instead.
     return this.prisma.approvalRequest.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       take: 300,
+      select: {
+        id: true, module: true, action: true, method: true, path: true,
+        targetId: true, subject: true, status: true, reason: true,
+        requesterId: true, requesterName: true, requesterRole: true,
+        department: true, reviewerId: true, reviewerName: true,
+        reviewedAt: true, resultId: true, error: true,
+        createdAt: true, updatedAt: true,
+      },
     });
   }
 

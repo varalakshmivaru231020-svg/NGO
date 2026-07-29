@@ -607,6 +607,7 @@ model ApprovalRequest {
   method        String // POST | PATCH | PUT | DELETE
   path          String // originalUrl incl. /api/v1 prefix + query — used to replay
   targetId      String? // resource id for EDIT/DELETE
+  subject       String? // human label (e.g. the child's/donor's name) for list cards
   payload       Json? // request body (the proposed new data)
   previousData  Json? // snapshot of the record before the change (for the diff view)
   status        String    @default("PENDING") // PENDING | APPROVED | REJECTED
