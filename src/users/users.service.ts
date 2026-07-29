@@ -90,6 +90,19 @@ export class UsersService {
     });
   }
 
+  async updateOwnProfile(id: string, dto: { name?: string; phone?: string; avatar?: string }) {
+    await this.findOne(id);
+    return this.prisma.user.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name } : {}),
+        ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
+        ...(dto.avatar !== undefined ? { avatar: dto.avatar } : {}),
+      },
+      select: this.select,
+    });
+  }
+
   async changeOwnPassword(id: string, currentPassword: string, newPassword: string) {
     const user = await this.prisma.user.findUnique({ where: { id }, select: { passwordHash: true } });
     if (!user) throw new NotFoundException('User not found');

@@ -35,8 +35,9 @@ const EXEMPT_PATH_PATTERNS: RegExp[] = [
   // MySQL's max_allowed_packet and kill the upload with an opaque 500.
   /^donors\/[^/]+\/activity-videos$/i,
   /^donors\/[^/]+\/activity-images$/i,
-  // Changing your own password must apply immediately, never queue.
+  // Changing your own password/profile must apply immediately, never queue.
   /^users\/me\/password$/i,
+  /^users\/me\/profile$/i,
 ];
 
 export interface SessionUser {
