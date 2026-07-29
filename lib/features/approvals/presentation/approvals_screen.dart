@@ -234,10 +234,20 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
     )));
   }
 
-  void _showDiff(Map<String, dynamic> req) {
-    final action = (req['action'] as String?) ?? '';
-    final payload = (req['payload'] as Map?)?.cast<String, dynamic>() ?? {};
-    final prev = (req['previousData'] as Map?)?.cast<String, dynamic>() ?? {};
+  void _showDiff(Map<String, dynamic> req) async {
+    // The list omits payload/previousData (multi-MB blobs broke the query) —
+    // fetch this one request's full record for the diff.
+    var full = req;
+    if (req['payload'] == null && req['previousData'] == null) {
+      try {
+        final r = await apiClient.get('/approvals/${req['id']}');
+        full = (r['data'] as Map?)?.cast<String, dynamic>() ?? req;
+      } catch (_) {}
+      if (!mounted) return;
+    }
+    final action = (full['action'] as String?) ?? '';
+    final payload = (full['payload'] as Map?)?.cast<String, dynamic>() ?? {};
+    final prev = (full['previousData'] as Map?)?.cast<String, dynamic>() ?? {};
     final keys = <String>{...prev.keys, ...payload.keys}
       ..removeWhere((k) => _hiddenKeys.contains(k) || k.startsWith('_'));
     final rows = <Widget>[];
@@ -469,7 +479,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
     final payload = (r['payload'] as Map?)?.cast<String, dynamic>() ?? {};
     final prev = (r['previousData'] as Map?)?.cast<String, dynamic>() ?? {};
     final donorId = (payload['donorId'] ?? prev['donorId'] ?? '').toString();
-    final subject = (payload['name'] ?? prev['name'] ?? payload['donorName']
+    // The list no longer carries payloads (too heavy) — the backend provides
+    // a small `subject` instead; the old payload paths remain as fallback.
+    final subject = (r['subject'] ?? payload['name'] ?? prev['name'] ?? payload['donorName']
         ?? (donorId.isNotEmpty ? _donorNames[donorId] : null) ?? '').toString();
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
