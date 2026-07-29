@@ -68,7 +68,9 @@ export class ApprovalsService {
     if (!MUTATING.has(method)) return false;
     const user = req.user as SessionUser | undefined;
     if (!user) return false; // unauthenticated → auth guard decides
-    if (user.role === 'SUPER_ADMIN') return false; // full authority
+    // ADMIN and SUPER_ADMIN act with full authority — they review approvals,
+    // so their own mutations must not queue (they could self-approve anyway).
+    if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') return false;
     if (req.headers?.['x-approval-replay'] === this.replaySecret) return false; // replay
     const path = req.path || req.originalUrl || '';
     if (EXEMPT_MODULES.has(this.moduleOf(path))) return false;
@@ -191,7 +193,7 @@ export class ApprovalsService {
   private async notifySuperAdmins(reqEntity: any) {
     try {
       const admins = await this.prisma.user.findMany({
-        where: { role: 'SUPER_ADMIN', isActive: true },
+        where: { role: { in: ['SUPER_ADMIN', 'ADMIN'] }, isActive: true },
         select: { id: true },
       });
       await Promise.all(

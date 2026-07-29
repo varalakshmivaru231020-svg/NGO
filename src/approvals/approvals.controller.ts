@@ -31,23 +31,26 @@ export class ApprovalsController {
     return this.svc.mine(user.id);
   }
 
-  // ── Super Admin only below ──────────────────────────────────────────────
-  @Get('stats') @Roles('SUPER_ADMIN') @ApiOperation({ summary: 'Approval counts' })
+  // ── Admin + Super Admin below (RolesGuard always passes SUPER_ADMIN) ────
+  // ADMIN accounts get the full admin UI, so they review approvals too —
+  // previously SUPER_ADMIN-only, which left ADMINs a badge count with an
+  // empty, silently-403ing list.
+  @Get('stats') @Roles('ADMIN') @ApiOperation({ summary: 'Approval counts' })
   stats() {
     return this.svc.stats();
   }
 
-  @Get() @Roles('SUPER_ADMIN') @ApiOperation({ summary: 'List approval requests (filterable)' })
+  @Get() @Roles('ADMIN') @ApiOperation({ summary: 'List approval requests (filterable)' })
   list(@Query() q: ApprovalQueryDto) {
     return this.svc.list(q);
   }
 
-  @Get(':id') @Roles('SUPER_ADMIN') @ApiOperation({ summary: 'Approval request detail (old vs new)' })
+  @Get(':id') @Roles('ADMIN') @ApiOperation({ summary: 'Approval request detail (old vs new)' })
   findOne(@Param('id') id: string) {
     return this.svc.findOne(id);
   }
 
-  @Post('bulk-approve') @Roles('SUPER_ADMIN') @ApiOperation({ summary: 'Approve many' })
+  @Post('bulk-approve') @Roles('ADMIN') @ApiOperation({ summary: 'Approve many' })
   bulkApprove(
     @Body() dto: BulkApproveDto,
     @Headers('authorization') auth: string,
@@ -56,12 +59,12 @@ export class ApprovalsController {
     return this.svc.bulkApprove(dto.ids, auth, user);
   }
 
-  @Post('bulk-reject') @Roles('SUPER_ADMIN') @ApiOperation({ summary: 'Reject many' })
+  @Post('bulk-reject') @Roles('ADMIN') @ApiOperation({ summary: 'Reject many' })
   bulkReject(@Body() dto: BulkRejectDto, @CurrentUser() user: SessionUser) {
     return this.svc.bulkReject(dto.ids, dto.reason, user);
   }
 
-  @Post(':id/approve') @Roles('SUPER_ADMIN') @ApiOperation({ summary: 'Approve & execute' })
+  @Post(':id/approve') @Roles('ADMIN') @ApiOperation({ summary: 'Approve & execute' })
   approve(
     @Param('id') id: string,
     @Headers('authorization') auth: string,
@@ -70,7 +73,7 @@ export class ApprovalsController {
     return this.svc.approve(id, auth, user);
   }
 
-  @Post(':id/reject') @Roles('SUPER_ADMIN') @ApiOperation({ summary: 'Reject with reason' })
+  @Post(':id/reject') @Roles('ADMIN') @ApiOperation({ summary: 'Reject with reason' })
   reject(
     @Param('id') id: string,
     @Body() dto: RejectDto,
