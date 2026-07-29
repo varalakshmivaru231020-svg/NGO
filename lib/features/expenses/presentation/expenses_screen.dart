@@ -46,24 +46,32 @@ class _Expense {
   _Expense({required this.id, required this.paidTo, required this.purpose, required this.amount,
     required this.category, required this.method, required this.voucherNo, required this.date,
     required this.status, this.preparedBy = '', this.approvedBy = '', this.receivedBy = '', this.reference = '', this.notes = '',
-    this.when});
+    this.when, this.entryDate = ''});
   final String id, paidTo, purpose, category, method, voucherNo, date, status;
   final int amount;
   final String preparedBy, approvedBy, receivedBy, reference, notes;
   // Parsed local timestamp — the report's calendar-period filters need the
   // real date, not the display string.
   final DateTime? when;
+  // When the voucher was ENTERED (createdAt) — shown on the list card; `date`
+  // stays the actual expense date and prints on the voucher/report.
+  final String entryDate;
 
   factory _Expense.fromApi(Map<String, dynamic> j) {
     final category = j['category'] as Map<String, dynamic>?;
     final rawDate = j['date'] as String? ?? '';
     String formattedDate = rawDate;
     DateTime? when;
+    const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     try {
       final dt = DateTime.parse(rawDate).toLocal();
       when = dt;
-      const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       formattedDate = '${dt.day.toString().padLeft(2,'0')} ${m[dt.month-1]} ${dt.year}';
+    } catch (_) {}
+    String formattedEntry = '';
+    try {
+      final dt = DateTime.parse(j['createdAt'] as String? ?? '').toLocal();
+      formattedEntry = '${dt.day.toString().padLeft(2,'0')} ${m[dt.month-1]} ${dt.year}';
     } catch (_) {}
     final rawMode = j['paymentMode'] as String? ?? 'CASH';
     final rawStatus = j['status'] as String? ?? 'COMPLETED';
@@ -83,6 +91,7 @@ class _Expense {
       reference:  j['reference'] as String? ?? '',
       notes:      j['notes'] as String? ?? '',
       when:       when,
+      entryDate:  formattedEntry,
     );
   }
 }
@@ -508,7 +517,8 @@ class _ExpenseCard extends StatelessWidget {
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(_inr(e.amount), style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: _orange700)),
             const SizedBox(height: 3),
-            Text(e.date, style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w500)),
+            Text(e.entryDate.isNotEmpty ? e.entryDate : e.date,
+                style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w500)),
           ]),
         ])),
         Padding(padding: const EdgeInsets.fromLTRB(14, 0, 14, 10), child: Column(children: [

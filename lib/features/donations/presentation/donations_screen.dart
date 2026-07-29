@@ -62,22 +62,30 @@ class _Donation {
     required this.status, required this.attach,
     this.donorPhone = '', this.donorCity = '', this.donorPan = '', this.donorEmail = '',
     this.donorAddress = '', this.donorState = '', this.donorPincode = '', this.donorCountry = '',
-    this.reference = ''});
+    this.reference = '', this.entryDate = ''});
   final String id, donorId, name, type, method, receipt, date, status;
   final int amount, attach;
   final String donorPhone, donorCity, donorPan;
   final String donorEmail, donorAddress, donorState, donorPincode, donorCountry;
   final String reference;
+  // When the record was ENTERED into the system (createdAt) — shown on the
+  // list card. `date` stays the actual donation date and prints on the invoice.
+  final String entryDate;
 
   factory _Donation.fromApi(Map<String, dynamic> j) {
     final donor = j['donor'] as Map<String, dynamic>? ?? {};
     final type  = j['type']  as Map<String, dynamic>? ?? {};
     final rawDate = j['date'] as String? ?? '';
+    const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     String formattedDate = rawDate;
     try {
       final dt = DateTime.parse(rawDate).toLocal();
-      const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       formattedDate = '${dt.day.toString().padLeft(2,'0')} ${m[dt.month-1]} ${dt.year}';
+    } catch (_) {}
+    String formattedEntry = '';
+    try {
+      final dt = DateTime.parse(j['createdAt'] as String? ?? '').toLocal();
+      formattedEntry = '${dt.day.toString().padLeft(2,'0')} ${m[dt.month-1]} ${dt.year}';
     } catch (_) {}
     final rawMode = j['paymentMode'] as String? ?? 'CASH';
     final rawStatus = j['status'] as String? ?? 'COMPLETED';
@@ -98,6 +106,7 @@ class _Donation {
       method:   _modeLabels[rawMode] ?? rawMode,
       receipt:  j['receiptNo'] as String? ?? '',
       date:     formattedDate,
+      entryDate: formattedEntry,
       status:   rawStatus == 'COMPLETED' ? 'Received' : rawStatus,
       attach:   0,
       reference: j['reference'] as String? ?? '',
@@ -482,7 +491,10 @@ class _DonationCard extends StatelessWidget {
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(_inr(d.amount), style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: _brand700)),
             const SizedBox(height: 3),
-            Text(d.date, style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w500)),
+            // Entry date (when it was added) — the invoice carries the actual
+            // donation date. Falls back to the donation date for older rows.
+            Text(d.entryDate.isNotEmpty ? d.entryDate : d.date,
+                style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w500)),
           ]),
         ])),
         Padding(padding: const EdgeInsets.fromLTRB(14, 0, 14, 10), child: Column(children: [
