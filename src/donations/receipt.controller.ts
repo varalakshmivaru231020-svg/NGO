@@ -92,7 +92,7 @@ export class ReceiptController {
             <div class="ri-body">
               <div>Transaction Date: ${this.esc(date)}</div>
               <div>Mode: ${mode || '—'}</div>
-              ${d.reference ? `<div>Gateway Ref: ${this.esc(d.reference)}</div>` : ''}
+              <div>Transaction ID: ${d.reference ? this.esc(d.reference) : '____________'}</div>
             </div>
           </div>
         </div>
