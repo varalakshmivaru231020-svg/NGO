@@ -646,11 +646,16 @@ class _DonorCard extends StatelessWidget {
               ],
               Text('${donor.donationCount} donations', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.textSub)),
             ]),
+            // Phones: number moves under the name — beside it there isn't
+            // room for name + chip + number, and the name loses.
+            if (MediaQuery.sizeOf(context).width < 520) ...[
+              const SizedBox(height: 3),
+              Text(donor.mobile, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand700)),
+            ],
           ])),
           const SizedBox(width: 8),
-          // Plain Text, NOT Flexible — as a flex sibling of the name column it
-          // grabbed half the row on phones, squeezing donor names to nothing.
-          Text(donor.mobile, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _brand700)),
+          if (MediaQuery.sizeOf(context).width >= 520)
+            Text(donor.mobile, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _brand700)),
           if (onDelete != null)
             PopupMenuButton<String>(
               icon: Icon(Icons.more_vert, size: 20, color: context.textHint),
