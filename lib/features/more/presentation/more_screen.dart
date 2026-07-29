@@ -102,7 +102,14 @@ class _MoreScreenState extends State<MoreScreen> {
             child: ValueListenableBuilder<ProfileData>(
               valueListenable: adminProfile,
               builder: (context, p, _) {
-                final photo = p.photoBytes;
+                // Role members see THEIR OWN identity here — this card used to
+                // always show the admin/org profile ("Super Admin") to everyone.
+                final member = currentLoggedInRole;
+                final cardName = member?.name ?? p.name;
+                final cardSub = member != null
+                    ? (member.roleName.isNotEmpty ? member.roleName : 'Team Member')
+                    : '${p.role} · ${p.org}';
+                final photo = member == null ? p.photoBytes : null;
                 return Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -113,18 +120,24 @@ class _MoreScreenState extends State<MoreScreen> {
                   child: Row(children: [
                     Container(width: 52, height: 52,
                       clipBehavior: Clip.hardEdge,
-                      decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
                       child: photo != null
                         ? Image.memory(photo, fit: BoxFit.cover, width: 52, height: 52)
-                        : Image.asset(brandLogoAsset, fit: BoxFit.cover, alignment: Alignment.centerLeft, width: 52, height: 52)),
+                        : member != null
+                          ? Center(child: Text(
+                              cardName.isNotEmpty ? cardName.trim().split(RegExp(r'\s+')).map((w) => w[0]).take(2).join().toUpperCase() : '?',
+                              style: const TextStyle(color: _brand600, fontWeight: FontWeight.w800, fontSize: 18)))
+                          : Image.asset(brandLogoAsset, fit: BoxFit.cover, alignment: Alignment.centerLeft, width: 52, height: 52)),
                     const SizedBox(width: 14),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(p.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17)),
+                      Text(cardName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17)),
                       const SizedBox(height: 3),
-                      Text('${p.role} · ${p.org}', style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                      Text(cardSub, style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
                     ])),
                     GestureDetector(
-                      onTap: _openEditProfile,
+                      // Members edit their own profile (My Profile screen);
+                      // only the admin edits the org/admin profile here.
+                      onTap: member == null ? _openEditProfile : () => context.go('/settings'),
                       child: Container(width: 36, height: 36,
                         decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(10)),
                         child: const Icon(Icons.edit_outlined, color: Colors.white, size: 17)),
