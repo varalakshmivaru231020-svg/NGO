@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -116,6 +117,20 @@ class _DonationsScreenState extends State<DonationsScreen> {
   List<_Donation> _donations = [];
   bool _loading = true;
   String? _error;
+  // Server-side search (donor name / receipt no.) with a small debounce so we
+  // don't fire a request per keystroke.
+  final _searchCtrl = TextEditingController();
+  String _search = '';
+  Timer? _searchDebounce;
+
+  void _onSearchChanged(String v) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      setState(() => _search = v.trim());
+      _load();
+    });
+  }
   // Real donation types from the backend — falls back to _typeInfo's keys
   // (below) only until this loads, so newly added categories (Settings >
   // Donation Types) show up as filter chips without a hardcoded list to update.
@@ -141,13 +156,23 @@ class _DonationsScreenState extends State<DonationsScreen> {
     _loadTypes();
   }
 
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   // No demo donations — the list reflects only real backend data.
   static final _mockData = <Map<String, dynamic>>[];
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final r = await apiClient.get('/donations', params: {'limit': '50', 'page': '1'});
+      final r = await apiClient.get('/donations', params: {
+        'limit': '50', 'page': '1',
+        if (_search.isNotEmpty) 'search': _search,
+      });
       final inner = r['data'];
       List<dynamic> list;
       if (inner is Map) {
@@ -325,6 +350,27 @@ class _DonationsScreenState extends State<DonationsScreen> {
               ]),
             ),
             const SizedBox(height: 12),
+            // Search by donor name or receipt number (server-side)
+            Container(
+              decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.border)),
+              child: TextField(
+                controller: _searchCtrl,
+                onChanged: _onSearchChanged,
+                style: const TextStyle(fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Search by donor name or receipt no…',
+                  hintStyle: TextStyle(fontSize: 13, color: context.textHint),
+                  prefixIcon: Icon(Icons.search_rounded, size: 20, color: context.textHint),
+                  suffixIcon: _search.isEmpty ? null : IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    onPressed: () { _searchCtrl.clear(); _onSearchChanged(''); },
+                  ),
+                  border: InputBorder.none, isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
             SizedBox(height: 36, child: ListView(scrollDirection: Axis.horizontal,
               children: _types.map((t) {
                 final active = _filter == t;
