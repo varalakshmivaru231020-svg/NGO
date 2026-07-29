@@ -3093,12 +3093,72 @@ class _PermModule extends StatelessWidget {
 // ADMIN PANEL  (professional redesign)
 // ════════════════════════════════════════════════════════════════
 
-class AdminPanelScreen extends StatelessWidget {
+class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
+  @override
+  State<AdminPanelScreen> createState() => _AdminPanelState();
+}
+
+class _AdminPanelState extends State<AdminPanelScreen> {
+  int? _staff, _donorsTotal, _studentsTotal, _officesTotal;
+  int? _monthAmount;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    Future<int?> total(String path) async {
+      try {
+        final r = await apiClient.get(path, params: {'limit': '1', 'page': '1'});
+        return (r['meta'] as Map?)?['total'] as int?;
+      } catch (_) { return null; }
+    }
+    final results = await Future.wait<dynamic>([
+      total('/users'),
+      total('/donors'),
+      total('/students'),
+      () async {
+        try {
+          final r = await apiClient.get('/offices');
+          final inner = r['data'];
+          return inner is List ? inner.length : null;
+        } catch (_) { return null; }
+      }(),
+      () async {
+        try {
+          final r = await apiClient.get('/donations/summary');
+          return ((r['data'] as Map?)?['month'] as Map?)?['amount'] as int?;
+        } catch (_) { return null; }
+      }(),
+    ]);
+    if (mounted) setState(() {
+      _staff = results[0] as int?;
+      _donorsTotal = results[1] as int?;
+      _studentsTotal = results[2] as int?;
+      _officesTotal = results[3] as int?;
+      _monthAmount = results[4] as int?;
+    });
+  }
+
+  String _n(int? v) => v?.toString() ?? '—';
+
+  String _inrCompact(int n) {
+    if (n >= 10000000) return '₹${(n / 10000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}Cr';
+    if (n >= 100000) return '₹${(n / 100000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}L';
+    if (n >= 1000) return '₹${(n / 1000).round()}K';
+    return '₹$n';
+  }
 
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
+    final profile = adminProfile.value;
+    final displayName = currentLoggedInRole?.name ?? profile.name;
+    final initials = displayName.trim().isEmpty ? '?' :
+        displayName.trim().split(RegExp(r'\s+')).map((w) => w[0]).take(2).join().toUpperCase();
     return Scaffold(
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
@@ -3135,13 +3195,13 @@ class AdminPanelScreen extends StatelessWidget {
                   const Text('Welcome back,',
                       style: TextStyle(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.w500)),
                   const SizedBox(height: 2),
-                  const Text('Farhan Ansari',
-                      style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900,
+                  Text(displayName,
+                      style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900,
                           letterSpacing: -0.6, height: 1.1)),
                   const SizedBox(height: 10),
                   Wrap(spacing: 8, runSpacing: 6, children: [
                     _Chip(label: '🛡️  Administrator'),
-                    _Chip(label: 'Sri Krishnashraya Educational Trust'),
+                    _Chip(label: profile.org.isNotEmpty ? profile.org : 'Sri Krishnashraya Educational Trust'),
                   ]),
                 ])),
                 const SizedBox(width: 14),
@@ -3151,23 +3211,23 @@ class AdminPanelScreen extends StatelessWidget {
                     color: Colors.white.withValues(alpha: 0.18),
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2)),
-                  child: const Center(child: Text('FA',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 20)))),
+                  child: Center(child: Text(initials,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 20)))),
               ]),
             ]),
           ),
 
-          // ── KPI stat cards ──────────────────────────────────────────
+          // ── KPI stat cards (live data) ──────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 20, 18, 0),
-            child: Row(children: const [
-              _Kpi(value: '5',  label: 'Total Staff',   icon: Icons.badge_outlined,             color: _brand600,  bg: _brand100),
-              SizedBox(width: 10),
-              _Kpi(value: '4',  label: 'Active Roles',  icon: Icons.manage_accounts_outlined,   color: _violet500, bg: Color(0xFFEDE9FE)),
-              SizedBox(width: 10),
-              _Kpi(value: '3',  label: 'Online Today',  icon: Icons.sensors_rounded,            color: _sky500,    bg: _sky100),
-              SizedBox(width: 10),
-              _Kpi(value: '12', label: 'Total Donors',  icon: Icons.people_outlined,            color: _amber600,  bg: Color(0xFFFFF1D6)),
+            child: Row(children: [
+              _Kpi(value: _n(_staff),         label: 'Total Staff',    icon: Icons.badge_outlined,           color: _brand600,  bg: _brand100),
+              const SizedBox(width: 10),
+              _Kpi(value: '${roleTemplates.length}', label: 'Active Roles', icon: Icons.manage_accounts_outlined, color: _violet500, bg: const Color(0xFFEDE9FE)),
+              const SizedBox(width: 10),
+              _Kpi(value: _n(_studentsTotal), label: 'Total Students', icon: Icons.school_outlined,          color: _sky500,    bg: _sky100),
+              const SizedBox(width: 10),
+              _Kpi(value: _n(_donorsTotal),   label: 'Total Donors',   icon: Icons.people_outlined,          color: _amber600,  bg: const Color(0xFFFFF1D6)),
             ]),
           ),
 
@@ -3208,29 +3268,11 @@ class AdminPanelScreen extends StatelessWidget {
               _Label(text: 'Module Overview'),
               const SizedBox(height: 10),
               _buildCard(context, child: Column(children: [
-                _ModRow(icon: Icons.people_outlined,                  color: _brand600,  bg: _brand100,            label: 'Donors',        value: '12 total',        route: '/donors'),
-                _ModRow(icon: Icons.account_balance_wallet_outlined,  color: _amber600,  bg: const Color(0xFFFFF1D6), label: 'Donations',  value: '₹4.15L this month', route: '/donations'),
-                _ModRow(icon: Icons.school_outlined,                  color: _violet500, bg: const Color(0xFFEDE9FE), label: 'Students',   value: '10 enrolled',     route: '/students'),
+                _ModRow(icon: Icons.people_outlined,                  color: _brand600,  bg: _brand100,            label: 'Donors',        value: '${_n(_donorsTotal)} total',   route: '/donors'),
+                _ModRow(icon: Icons.account_balance_wallet_outlined,  color: _amber600,  bg: const Color(0xFFFFF1D6), label: 'Donations',  value: _monthAmount != null ? '${_inrCompact(_monthAmount!)} this month' : '—', route: '/donations'),
+                _ModRow(icon: Icons.school_outlined,                  color: _violet500, bg: const Color(0xFFEDE9FE), label: 'Students',   value: '${_n(_studentsTotal)} enrolled', route: '/students'),
                 _ModRow(icon: Icons.bar_chart_rounded,                color: _sky500,    bg: _sky100,              label: 'Reports',       value: 'Analytics',       route: '/reports'),
-                _ModRow(icon: Icons.link_rounded,                     color: _brand600,  bg: _brand100,            label: 'Payment Links', value: '3 active',        route: '/payment-links'),
-                _ModRow(icon: Icons.business_outlined,                color: _brand600,  bg: _brand100,            label: 'Offices',       value: '4 locations',     route: '/offices', last: true),
-              ])),
-            ]),
-          ),
-
-          // ── Recent Activity ─────────────────────────────────────────
-          const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _Label(text: 'Recent Activity'),
-              const SizedBox(height: 10),
-              _buildCard(context, child: const Column(children: [
-                _ActRow(dot: _brand600,  text: 'New donor "Rekha Gupta" added',           time: '1 hr ago'),
-                _ActRow(dot: _violet500, text: 'Role "Data Entry" created by Farhan',     time: '3 hrs ago'),
-                _ActRow(dot: _amber600,  text: 'Donation Type "Medical Aid" added',        time: 'Yesterday'),
-                _ActRow(dot: _sky500,    text: 'Server backup completed successfully',     time: '2 days ago'),
-                _ActRow(dot: _brand600,  text: '10 students enrolled this month',          time: '3 days ago', last: true),
+                _ModRow(icon: Icons.business_outlined,                color: _brand600,  bg: _brand100,            label: 'Offices',       value: '${_n(_officesTotal)} locations', route: '/offices', last: true),
               ])),
             ]),
           ),

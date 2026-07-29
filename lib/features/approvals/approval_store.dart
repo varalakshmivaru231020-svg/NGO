@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/network/api_client.dart';
 
@@ -22,5 +23,11 @@ Future<void> refreshPendingApprovalsCount({bool force = false}) async {
     final r = await apiClient.get('/approvals/stats');
     final d = (r['data'] as Map?)?.cast<String, dynamic>();
     pendingApprovalsCount.value = (d?['pending'] as int?) ?? 0;
-  } catch (_) {}
+  } catch (e) {
+    // Access denied for this account — zero the badge instead of leaving a
+    // stale count from a previous (more privileged) login in this tab.
+    if (e is DioException && e.response?.statusCode == 403) {
+      pendingApprovalsCount.value = 0;
+    }
+  }
 }
