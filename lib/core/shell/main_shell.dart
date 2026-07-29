@@ -50,23 +50,22 @@ const _acct = [
 ];
 
 // ── bottom tab bar (mobile only) ──────────────────────────────────────
+// Module-tagged like the sidebar so restricted roles don't get tabs for
+// screens they can't use (the sidebar filtered; this bar didn't).
 const _tabs = [
   _N(Icons.dashboard_outlined,    Icons.dashboard,         'Home',      '/dashboard'),
-  _N(Icons.people_outlined,       Icons.people,            'Donors',    '/donors'),
-  _N(Icons.receipt_long_outlined, Icons.receipt_long,      'Donations', '/donations'),
-  _N(Icons.school_outlined,       Icons.school,            'Students',  '/students'),
+  _N(Icons.people_outlined,       Icons.people,            'Donors',    '/donors',    module: 'donors'),
+  _N(Icons.receipt_long_outlined, Icons.receipt_long,      'Donations', '/donations', module: 'donations'),
+  _N(Icons.school_outlined,       Icons.school,            'Students',  '/students',  module: 'students'),
   _N(Icons.grid_view_outlined,    Icons.grid_view_rounded, 'More',      '/more'),
 ];
 
-int _tabIdx(String loc) {
-  if (loc.startsWith('/donors'))    return 1;
-  if (loc.startsWith('/donations')) return 2;
-  if (loc.startsWith('/students'))  return 3;
-  if (loc.startsWith('/more') || loc == '/offices' || loc.startsWith('/expenses') || loc == '/payment-links' ||
-      loc == '/reminders' || loc == '/notifications' || loc == '/donation-tracker' ||
-      loc == '/reports' || loc == '/achievements' || loc == '/centres' ||
-      loc == '/settings' || loc == '/help') return 4;
-  return 0;
+int _tabIdxOf(List<_N> tabs, String loc) {
+  for (int i = 1; i < tabs.length - 1; i++) {
+    if (loc.startsWith(tabs[i].route)) return i;
+  }
+  if (loc == '/dashboard' || loc == '/') return 0;
+  return tabs.length - 1; // everything else lives under More
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -90,6 +89,7 @@ class MainShell extends StatelessWidget {
       );
     }
 
+    final tabs = _tabs.where((t) => t.visible()).toList();
     return Scaffold(
       body: child,
       bottomNavigationBar: Container(
@@ -98,15 +98,12 @@ class MainShell extends StatelessWidget {
           border: Border(top: BorderSide(color: context.border)),
         ),
         child: NavigationBar(
-          selectedIndex: _tabIdx(loc),
+          selectedIndex: _tabIdxOf(tabs, loc),
           backgroundColor: context.cardBg,
           elevation: 0,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          onDestinationSelected: (i) {
-            const routes = ['/dashboard','/donors','/donations','/students','/more'];
-            context.go(routes[i]);
-          },
-          destinations: _tabs.map((t) => NavigationDestination(
+          onDestinationSelected: (i) => context.go(tabs[i].route),
+          destinations: tabs.map((t) => NavigationDestination(
             icon: Icon(t.icon), selectedIcon: Icon(t.filled), label: t.label,
           )).toList(),
         ),

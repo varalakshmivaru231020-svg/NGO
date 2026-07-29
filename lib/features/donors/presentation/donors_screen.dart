@@ -614,7 +614,9 @@ class _DonorCard extends StatelessWidget {
           const SizedBox(width: 13),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Flexible(child: Text(donor.name, style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, letterSpacing: -0.2, height: 1, color: context.textPrimary), overflow: TextOverflow.ellipsis)),
+              // Name gets layout priority — the chip keeps its natural size
+              // and the name ellipsizes only when genuinely out of room.
+              Flexible(child: Text(donor.name, maxLines: 1, style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, letterSpacing: -0.2, height: 1, color: context.textPrimary), overflow: TextOverflow.ellipsis)),
               if (donor.isPending) ...[
                 const SizedBox(width: 7),
                 Container(
@@ -646,7 +648,9 @@ class _DonorCard extends StatelessWidget {
             ]),
           ])),
           const SizedBox(width: 8),
-          Flexible(child: Text(donor.mobile, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _brand700), overflow: TextOverflow.ellipsis, textAlign: TextAlign.end)),
+          // Plain Text, NOT Flexible — as a flex sibling of the name column it
+          // grabbed half the row on phones, squeezing donor names to nothing.
+          Text(donor.mobile, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _brand700)),
           if (onDelete != null)
             PopupMenuButton<String>(
               icon: Icon(Icons.more_vert, size: 20, color: context.textHint),

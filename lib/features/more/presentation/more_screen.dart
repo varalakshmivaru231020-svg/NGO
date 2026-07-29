@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/auth/role_auth.dart';
 import '../../../core/auth/session.dart';
 import '../../notifications/notification_store.dart';
 import '../../settings/profile_store.dart';
@@ -129,25 +130,35 @@ class _MoreScreenState extends State<MoreScreen> {
           ),
 
           const SizedBox(height: 20),
-          // ── Management ────────────────────────────────────────────
-          _GroupSection(title: 'Management', items: [
-            _MenuItem(icon: Icons.business_outlined,     iconBg: _brand100,  iconFg: _brand600,  label: 'Office Management', sub: 'Locations & teams',  route: '/offices'),
-            _MenuItem(icon: Icons.link_rounded,           iconBg: const Color(0xFFE7E3FD), iconFg: _violet500, label: 'Payment Links',     sub: 'Generate & track links', route: '/payment-links'),
-            _MenuItem(icon: Icons.cake_outlined,          iconBg: _amber100,  iconFg: _amber600,  label: 'Reminders',         sub: 'Birthdays & follow-ups', route: '/reminders'),
-          ]),
+          // ── Management (role-filtered like the sidebar) ────────────
+          if ([canAccess('offices'), canAccess('payments'), canAccess('reminders')].any((v) => v))
+            _GroupSection(title: 'Management', items: [
+              if (canAccess('offices'))
+                _MenuItem(icon: Icons.business_outlined,     iconBg: _brand100,  iconFg: _brand600,  label: 'Office Management', sub: 'Locations & teams',  route: '/offices'),
+              if (canAccess('payments'))
+                _MenuItem(icon: Icons.link_rounded,           iconBg: const Color(0xFFE7E3FD), iconFg: _violet500, label: 'Payment Links',     sub: 'Generate & track links', route: '/payment-links'),
+              if (canAccess('reminders'))
+                _MenuItem(icon: Icons.cake_outlined,          iconBg: _amber100,  iconFg: _amber600,  label: 'Reminders',         sub: 'Birthdays & follow-ups', route: '/reminders'),
+            ]),
           const SizedBox(height: 14),
           // ── Insights ──────────────────────────────────────────────
-          _GroupSection(title: 'Insights', items: [
-            _MenuItem(icon: Icons.track_changes_outlined, iconBg: _brand100,  iconFg: _brand600,  label: 'Donation Tracker',  sub: 'Track & follow up',      route: '/donation-tracker'),
-            _MenuItem(icon: Icons.bar_chart_rounded,      iconBg: const Color(0xFFDCEFFB), iconFg: _sky500,    label: 'Reports & Analytics', sub: 'Impact overview',        route: '/reports'),
-            _MenuItem(icon: Icons.emoji_events_outlined,  iconBg: _amber100,  iconFg: _amber600,  label: 'Student Achievements', sub: 'Milestones & awards',  route: '/achievements'),
-          ]),
+          if ([canAccess('tracker'), canAccess('reports'), canAccess('achievements')].any((v) => v))
+            _GroupSection(title: 'Insights', items: [
+              if (canAccess('tracker'))
+                _MenuItem(icon: Icons.track_changes_outlined, iconBg: _brand100,  iconFg: _brand600,  label: 'Donation Tracker',  sub: 'Track & follow up',      route: '/donation-tracker'),
+              if (canAccess('reports'))
+                _MenuItem(icon: Icons.bar_chart_rounded,      iconBg: const Color(0xFFDCEFFB), iconFg: _sky500,    label: 'Reports & Analytics', sub: 'Impact overview',        route: '/reports'),
+              if (canAccess('achievements'))
+                _MenuItem(icon: Icons.emoji_events_outlined,  iconBg: _amber100,  iconFg: _amber600,  label: 'Student Achievements', sub: 'Milestones & awards',  route: '/achievements'),
+            ]),
           const SizedBox(height: 14),
           // ── Account ───────────────────────────────────────────────
           _GroupSection(title: 'Account', items: [
             _MenuItem(icon: Icons.notifications_outlined, iconBg: const Color(0xFFFFE3DF), iconFg: _coral500,  label: 'Notifications',     sub: 'Tap to view',            route: '/notifications'),
-            _MenuItem(icon: Icons.location_city_outlined, iconBg: const Color(0xFFE7E3FD), iconFg: _violet500, label: 'Centre',            sub: 'Manage centres',         route: '/centres'),
-            _MenuItem(icon: Icons.settings_outlined,      iconBg: const Color(0xFFE7EDEB), iconFg: const Color(0xFF5A6B67), label: 'Settings',          sub: 'App & account',          route: '/settings'),
+            if (canAccess('settings'))
+              _MenuItem(icon: Icons.location_city_outlined, iconBg: const Color(0xFFE7E3FD), iconFg: _violet500, label: 'Centre',            sub: 'Manage centres',         route: '/centres'),
+            if (canAccess('settings'))
+              _MenuItem(icon: Icons.settings_outlined,      iconBg: const Color(0xFFE7EDEB), iconFg: const Color(0xFF5A6B67), label: 'Settings',          sub: 'App & account',          route: '/settings'),
             _MenuItem(icon: Icons.help_outline_rounded,   iconBg: const Color(0xFFDCEFFB), iconFg: _sky500,    label: 'Help & Support',    sub: 'Guides & contact',       route: '/help'),
           ]),
 
