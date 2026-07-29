@@ -176,6 +176,15 @@ class _EditProfileState extends State<EditProfileScreen> {
     // Only touch the photo field if the user actually changed it.
     if (_photoChanged) updated = updated.copyWith(photoBase64: encodePhoto(_photo));
     updateProfile(updated);
+    // Persist to the backend too — session restore re-reads the server's copy
+    // on every reload, so a local-only edit used to silently revert.
+    try {
+      await apiClient.patch('/users/me/profile', {
+        'name': updated.name,
+        'phone': updated.phone,
+        if (_photoChanged) 'avatar': encodePhoto(_photo) ?? '',
+      });
+    } catch (_) {}
     if (mounted) { setState(() => _saving = false); _snack(context, 'Profile updated successfully'); }
   }
 

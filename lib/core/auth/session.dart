@@ -30,7 +30,14 @@ String applyBackendUser(Map<String, dynamic> me) {
   isLoggedIn = true;
   if (role == 'SUPER_ADMIN' || role == 'ADMIN') {
     currentLoggedInRole = null; // full access
-    updateProfile(adminProfile.value.copyWith(name: mName, email: email));
+    // Backend is the source of truth for name AND photo — profile edits save
+    // there (PATCH /users/me/profile), so restores no longer revert them.
+    final avatar = me['avatar'] as String?;
+    updateProfile(adminProfile.value.copyWith(
+      name: mName,
+      email: email,
+      photoBase64: (avatar != null && avatar.isNotEmpty) ? avatar : adminProfile.value.photoBase64,
+    ));
     return '/dashboard';
   }
   final modules = (csv != null && csv.trim().isNotEmpty)

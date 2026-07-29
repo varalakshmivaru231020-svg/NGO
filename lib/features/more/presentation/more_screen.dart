@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/auth/role_auth.dart';
 import '../../../core/auth/session.dart';
@@ -49,11 +50,16 @@ class _MoreScreenState extends State<MoreScreen> {
             const SizedBox(height: 20),
             SizedBox(width: double.infinity, child: ElevatedButton(
               onPressed: () {
+                final newName = nameCtrl.text.trim();
                 updateProfile(adminProfile.value.copyWith(
-                  name: nameCtrl.text.trim().isEmpty ? null : nameCtrl.text.trim(),
+                  name: newName.isEmpty ? null : newName,
                   role: roleCtrl.text.trim().isEmpty ? null : roleCtrl.text.trim(),
                   org:  orgCtrl.text.trim().isEmpty  ? null : orgCtrl.text.trim(),
                 ));
+                // Persist the name server-side — session restore re-reads it.
+                if (newName.isNotEmpty) {
+                  apiClient.patch('/users/me/profile', {'name': newName}).catchError((_) => <String, dynamic>{});
+                }
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: const Text('Profile updated', style: TextStyle(fontWeight: FontWeight.w700)),

@@ -283,7 +283,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   Future<void> _pickProfilePhoto() async {
     final r = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
     if (r != null && r.files.isNotEmpty && r.files.single.bytes != null && mounted) {
-      updateProfile(adminProfile.value.copyWith(photoBase64: encodePhoto(r.files.single.bytes)));
+      final encoded = encodePhoto(r.files.single.bytes);
+      updateProfile(adminProfile.value.copyWith(photoBase64: encoded));
+      // Sync to the backend so the photo survives reloads and other devices.
+      try { await apiClient.patch('/users/me/profile', {'avatar': encoded ?? ''}); } catch (_) {}
       _toast('Profile photo updated');
     }
   }
