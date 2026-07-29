@@ -596,7 +596,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                   border: Border.all(color: _brand600.withValues(alpha: 0.35), width: 2)),
                 clipBehavior: Clip.hardEdge,
                 child: profile.photoBytes != null
-                    ? Image.memory(profile.photoBytes!, fit: BoxFit.contain)
+                    ? Image.memory(profile.photoBytes!, fit: BoxFit.cover)
                     : Image.asset(brandLogoAsset, fit: BoxFit.cover, alignment: Alignment.centerLeft),
               ),
               Positioned(bottom: 0, right: 0,

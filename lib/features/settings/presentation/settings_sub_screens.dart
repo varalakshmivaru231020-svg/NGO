@@ -558,6 +558,51 @@ class _TeamMembersState extends State<TeamMembersScreen> {
   void initState() {
     super.initState();
     _loadPendingMembers();
+    _syncMembersFromBackend();
+  }
+
+  // The server is the source of truth for accounts. Reconcile the local
+  // mirror (appRoles): drop entries whose email no longer exists server-side
+  // (deleted elsewhere → they showed as ghost members forever) and add ones
+  // created on other devices.
+  Future<void> _syncMembersFromBackend() async {
+    try {
+      final r = await apiClient.get('/users', params: {'limit': '100', 'page': '1'});
+      final inner = r['data'];
+      final list = inner is Map ? (inner['data'] as List? ?? const []) : (inner is List ? inner : const []);
+      final backend = list.whereType<Map>().map((m) => m.cast<String, dynamic>()).toList();
+      final backendEmails = backend.map((u) => (u['email'] as String? ?? '').toLowerCase()).toSet();
+      final adminEmail = adminProfile.value.email.toLowerCase();
+
+      appRoles.removeWhere((role) =>
+          role.email.toLowerCase() != adminEmail &&
+          !backendEmails.contains(role.email.toLowerCase()));
+
+      for (final u in backend) {
+        final email = (u['email'] as String? ?? '');
+        if (email.isEmpty || email.toLowerCase() == adminEmail) continue;
+        final role = (u['role'] as String? ?? 'STAFF');
+        if (role == 'SUPER_ADMIN' || role == 'ADMIN') continue;
+        if (!appRoles.any((r0) => r0.email.toLowerCase() == email.toLowerCase())) {
+          final csv = u['modules'] as String?;
+          final modules = (csv != null && csv.trim().isNotEmpty)
+              ? csv.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toSet()
+              : <String>{};
+          appRoles.add(AppRole(
+            name: u['name'] as String? ?? email,
+            email: email,
+            password: '',
+            roleName: role,
+            modules: modules,
+            backendId: u['id'] as String?,
+          ));
+        }
+      }
+      saveRoles();
+      if (mounted) setState(() {});
+    } catch (_) {
+      // Not an admin / offline — keep the local list as-is.
+    }
   }
 
   // The team = the admin owner (row 0, self) + every persisted login account

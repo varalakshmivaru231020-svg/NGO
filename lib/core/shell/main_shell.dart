@@ -341,8 +341,7 @@ class _Footer extends StatelessWidget {
             Widget avatar(double d) => Container(
               width: d, height: d, decoration: _grad, clipBehavior: Clip.hardEdge,
               child: photo != null
-                // contain, not cover — cover zoom-crops non-square photos.
-                ? Image.memory(photo, fit: BoxFit.contain, width: d, height: d)
+                ? Image.memory(photo, fit: BoxFit.cover, width: d, height: d)
                 : isAdmin
                   ? Container(color: Colors.white, child: Image.asset(brandLogoAsset, fit: BoxFit.cover, alignment: Alignment.centerLeft, width: d, height: d))
                   : Center(child: Text(initials,
