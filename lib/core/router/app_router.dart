@@ -77,6 +77,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/settings/team-members',    builder: (ctx, state) => const TeamMembersScreen()),
           GoRoute(path: '/settings/donation-types',  builder: (ctx, state) => const DonationTypesScreen()),
           GoRoute(path: '/settings/student-categories', builder: (ctx, state) => const StudentCategoriesScreen()),
+          GoRoute(path: '/settings/expense-categories', builder: (ctx, state) => const ExpenseCategoriesScreen()),
           GoRoute(path: '/settings/export-data',     builder: (ctx, state) => const ExportDataScreen()),
           GoRoute(path: '/settings/backup-sync',     builder: (ctx, state) => const BackupSyncScreen()),
           GoRoute(path: '/settings/privacy-policy',  builder: (ctx, state) => const PrivacyPolicyScreen()),

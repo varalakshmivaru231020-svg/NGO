@@ -1569,6 +1569,197 @@ class _StudentCategoriesState extends State<StudentCategoriesScreen> {
 }
 
 // ════════════════════════════════════════════════════════════════
+// 5c. EXPENSE CATEGORIES
+// ════════════════════════════════════════════════════════════════
+class ExpenseCategoriesScreen extends StatefulWidget {
+  const ExpenseCategoriesScreen({super.key});
+  @override
+  State<ExpenseCategoriesScreen> createState() => _ExpenseCategoriesState();
+}
+
+class _ExpenseCategoriesState extends State<ExpenseCategoriesScreen> {
+  // Loaded live from the backend — the same table Add Expense reads, so a
+  // category added or toggled here shows up (or disappears) there immediately.
+  List<Map<String, dynamic>> _cats = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final r = await apiClient.get('/expenses/categories/all');
+      final list = (r['data'] as List? ?? []).cast<Map<String, dynamic>>();
+      if (!mounted) return;
+      setState(() { _cats = list; _loading = false; });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _error = ApiClient.errorMessage(e, fallback: 'Could not load expense categories.'); _loading = false; });
+    }
+  }
+
+  static (IconData, Color) _style(String label) {
+    final l = label.toLowerCase();
+    if (l.contains('food') || l.contains('groc') || l.contains('meal')) return (Icons.restaurant_outlined, _amber600);
+    if (l.contains('rent') || l.contains('build') || l.contains('infra')) return (Icons.business_outlined, _sky500);
+    if (l.contains('salar') || l.contains('staff') || l.contains('wage')) return (Icons.badge_outlined, _violet500);
+    if (l.contains('medic') || l.contains('health')) return (Icons.medical_services_outlined, _coral500);
+    if (l.contains('educat') || l.contains('school') || l.contains('book')) return (Icons.school_outlined, _violet500);
+    if (l.contains('transport') || l.contains('travel') || l.contains('fuel')) return (Icons.directions_bus_outlined, _sky500);
+    if (l.contains('electric') || l.contains('water') || l.contains('util')) return (Icons.bolt_outlined, _amber600);
+    return (Icons.account_balance_wallet_outlined, _brand600);
+  }
+
+  Future<void> _toggle(int i, bool v) async {
+    final c = _cats[i];
+    setState(() => _cats[i]['isActive'] = v);
+    try {
+      await apiClient.put('/expenses/categories/${c['id']}', {'isActive': v});
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _cats[i]['isActive'] = !v);
+      _snack(context, ApiClient.errorMessage(e, fallback: 'Could not update the category.'));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: Column(children: [
+      _buildHeader(context, 'Expense Categories', sub: _loading ? 'Loading…' : '${_cats.length} categories'),
+      Expanded(child: _loading
+        ? const Center(child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600))
+        : _error != null
+          ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.cloud_off_outlined, size: 40, color: context.textHint),
+              const SizedBox(height: 10),
+              Text(_error!, textAlign: TextAlign.center, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textSub)),
+              const SizedBox(height: 14),
+              OutlinedButton(onPressed: _load, child: const Text('Retry', style: TextStyle(fontWeight: FontWeight.w700, color: _brand600))),
+            ])))
+          : RefreshIndicator(
+              onRefresh: _load,
+              color: _brand600,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
+                child: _cats.isEmpty
+                  ? Padding(padding: const EdgeInsets.only(top: 60), child: Center(child: Text('No expense categories yet — add one below.',
+                      style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textHint))))
+                  : _buildCard(context, child: Column(children: _cats.asMap().entries.map((e) {
+          final i = e.key; final t = e.value;
+          final label = t['label'] as String? ?? '';
+          final (icon, c) = _style(label);
+          final active = t['isActive'] as bool? ?? true;
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: i < _cats.length - 1 ? BoxDecoration(border: Border(bottom: BorderSide(color: context.border))) : null,
+            child: Row(children: [
+              Container(width: 40, height: 40,
+                decoration: BoxDecoration(color: c.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(11)),
+                child: Icon(icon, color: c, size: 20)),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+                if ((t['description'] as String? ?? '').isNotEmpty)
+                  Text(t['description'] as String, style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w500)),
+              ])),
+              Switch(
+                value: active,
+                onChanged: (v) => _toggle(i, v),
+                activeColor: _brand600),
+            ]),
+          );
+        }).toList())),
+              ),
+            )),
+    ]),
+    floatingActionButton: FloatingActionButton.extended(
+      onPressed: () => _showAddCategoryDialog(context),
+      backgroundColor: _brand600, foregroundColor: Colors.white,
+      icon: const Icon(Icons.add),
+      label: const Text('Add Category', style: TextStyle(fontWeight: FontWeight.w700)),
+    ),
+  );
+
+  void _showAddCategoryDialog(BuildContext context) {
+    final nameCtrl = TextEditingController();
+    String? nameError;
+    bool saving = false;
+
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+            decoration: BoxDecoration(color: ctx.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: ctx.border, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              const Text('Add Expense Category', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 16),
+              Row(children: [
+                Text('Category Name', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: ctx.textSub)),
+                const Text(' *', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _coral500)),
+              ]),
+              const SizedBox(height: 6),
+              TextField(
+                controller: nameCtrl,
+                onChanged: (_) { if (nameError != null) setSheet(() => nameError = null); },
+                style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
+                decoration: InputDecoration(
+                  hintText: 'e.g. Rent, Salaries, Transport…', hintStyle: TextStyle(color: ctx.textHint),
+                  filled: true, fillColor: ctx.surface2,
+                  errorText: nameError,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
+                  errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _coral500, width: 1.5)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12))),
+              const SizedBox(height: 20),
+              SizedBox(width: double.infinity, child: ElevatedButton(
+                onPressed: saving ? null : () async {
+                  final name = nameCtrl.text.trim();
+                  if (name.isEmpty) {
+                    setSheet(() => nameError = 'Category name is required');
+                    return;
+                  }
+                  setSheet(() => saving = true);
+                  try {
+                    await apiClient.post('/expenses/categories', {'label': name});
+                    // The category exists now — refresh the list even if the
+                    // sheet was dismissed while the request was in flight.
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    if (!mounted) return;
+                    _snack(context, '"$name" added — it now appears in Add Expense');
+                    _load();
+                  } catch (e) {
+                    if (!ctx.mounted) return;
+                    setSheet(() {
+                      saving = false;
+                      nameError = ApiClient.errorMessage(e, fallback: 'Could not save the category.');
+                    });
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  padding: const EdgeInsets.symmetric(vertical: 15)),
+                child: saving
+                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Save Category', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              )),
+            ]),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
 // 6. EXPORT DATA
 // ════════════════════════════════════════════════════════════════
 class ExportDataScreen extends StatefulWidget {
@@ -3570,6 +3761,7 @@ class _AdminPanelState extends State<AdminPanelScreen> {
                   {'icon': Icons.location_city_outlined,   'color': _violet500, 'bg': const Color(0xFFEDE9FE), 'label': 'Manage Centres', 'route': '/settings/centres'},
                   {'icon': Icons.category_outlined,        'color': _amber600,  'bg': const Color(0xFFFFF1D6), 'label': 'Donation Types', 'route': '/settings/donation-types'},
                   {'icon': Icons.face_outlined,            'color': _coral500,  'bg': _coral100,            'label': 'Student Categories', 'route': '/settings/student-categories'},
+                  {'icon': Icons.receipt_long_outlined,    'color': _brand600,  'bg': _brand100,            'label': 'Expense Categories', 'route': '/settings/expense-categories'},
                   {'icon': Icons.download_outlined,        'color': _sky500,    'bg': _sky100,              'label': 'Export Data',      'route': '/settings/export-data'},
                   {'icon': Icons.cloud_sync_outlined,      'color': _sky500,    'bg': _sky100,              'label': 'Backup & Sync',    'route': '/settings/backup-sync'},
                   {'icon': Icons.router_outlined,          'color': const Color(0xFF64748B), 'bg': const Color(0xFFF1F5F9), 'label': 'Server URL', 'route': '/settings/server-url'},
