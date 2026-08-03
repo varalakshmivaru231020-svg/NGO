@@ -103,12 +103,31 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   // loaded from API
   List<({String id, String name})> _centres = [];
   List<({String id, String name, String city, String phone})> _apiDonors = [];
+  // Admin-managed student categories (Settings → Student Categories); the
+  // picker is hidden entirely while this is empty.
+  List<({String id, String label})> _categories = [];
+  String? _categoryId;
   bool _loadingForm = true;
 
   @override
   void initState() {
     super.initState();
     _loadFormData();
+    _loadCategories();
+  }
+
+  // Separate from _loadFormData so a missing/older backend can't take the
+  // whole form down with it — no categories just hides the picker.
+  Future<void> _loadCategories() async {
+    try {
+      final r = await apiClient.get('/students/categories');
+      final list = (r['data'] as List? ?? []);
+      final cats = list.map<({String id, String label})>((c) {
+        final m = c as Map<String, dynamic>;
+        return (id: m['id'] as String? ?? '', label: m['label'] as String? ?? '');
+      }).where((c) => c.id.isNotEmpty && c.label.isNotEmpty).toList();
+      if (mounted) setState(() => _categories = cats);
+    } catch (_) {/* picker stays hidden */}
   }
 
   List<({String id, String name, String city, String phone})> _fallbackDonors() {
@@ -323,6 +342,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         'gender':     _gender == 'Male' ? 'MALE' : 'FEMALE',
         'centerId':   _centreId,
         'status':     statusMap[_status] ?? 'ACTIVE',
+        if (_categoryId != null) 'categoryId': _categoryId,
         if (photoB64 != null) 'photo': photoB64,
         if (_classGrade.text.trim().isNotEmpty) 'class': _classGrade.text.trim(),
         if (_schoolName.text.trim().isNotEmpty) 'school': _schoolName.text.trim(),
@@ -435,6 +455,11 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         'class':       _classGrade.text.trim(),
         'school':      _schoolName.text.trim(),
         'center':      {'name': _centreName},
+        // Same nested shape the backend returns, so the detail screen and
+        // list card show the category before the next server refresh.
+        if (_categoryId != null)
+          'category': created?['category'] ??
+            {'id': _categoryId, 'label': _categories.firstWhere((c) => c.id == _categoryId, orElse: () => (id: '', label: '')).label},
         'aadhaar':     _aadhaar.text.trim(),
         'admDate':     _admDate.isNotEmpty ? _toIso(_admDate) : '',
         'admissionNo': _admissionNo.text.trim(),
@@ -594,6 +619,28 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                   const SizedBox(height: 14),
                   _FieldLabel('Current Status'),
                   _StatusChips(value: _status, onChanged: (v) => setState(() => _status = v)),
+                  if (_categories.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    _FieldLabel('Category (optional)'),
+                    Wrap(spacing: 8, runSpacing: 8, children: _categories.map((c) {
+                      final active = _categoryId == c.id;
+                      return GestureDetector(
+                        // Tapping the selected chip clears it — category stays optional.
+                        onTap: () => setState(() => _categoryId = active ? null : c.id),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: active ? _brand100 : context.scaffoldBg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: active ? _brand600 : context.border),
+                          ),
+                          child: Text(c.label, style: TextStyle(
+                            fontSize: 12.5, fontWeight: FontWeight.w700,
+                            color: active ? _brand600 : context.textSub)),
+                        ),
+                      );
+                    }).toList()),
+                  ],
                 ]),
                 const SizedBox(height: 14),
 

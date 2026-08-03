@@ -34,7 +34,7 @@ class _Student {
   _Student({required this.id, required this.childId, required this.name,
     required this.gender, required this.dobRaw, required this.status,
     required this.classGrade, required this.school,
-    required this.centreName, required this.sponsorName, this.photo});
+    required this.centreName, required this.sponsorName, this.category = '', this.photo});
 
   factory _Student.fromJson(Map<String, dynamic> j) => _Student(
     id:         j['id']      as String,
@@ -47,10 +47,11 @@ class _Student {
     school:     j['school']  as String? ?? '',
     centreName:  _centreFromJson(j),
     sponsorName: _sponsorFromJson(j),
+    category:   ((j['category'] as Map?)?['label'] ?? '').toString(),
     photo:      j['photo']   as String?,
   );
 
-  final String id, childId, name, gender, dobRaw, status, classGrade, school, centreName, sponsorName;
+  final String id, childId, name, gender, dobRaw, status, classGrade, school, centreName, sponsorName, category;
   final String? photo;
 
   Uint8List? get photoBytes {
@@ -590,7 +591,7 @@ class _ChildCard extends StatelessWidget {
                 const SizedBox(width: 3),
                 Flexible(child: Text('${student.centreName} · ', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textSub), overflow: TextOverflow.ellipsis)),
               ],
-              Flexible(child: Text('Age ${student.age}${student.classGrade.isNotEmpty ? " · ${student.classGrade}" : ""}', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textSub), overflow: TextOverflow.ellipsis)),
+              Flexible(child: Text('Age ${student.age}${student.classGrade.isNotEmpty ? " · ${student.classGrade}" : ""}${student.category.isNotEmpty ? " · ${student.category}" : ""}', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textSub), overflow: TextOverflow.ellipsis)),
             ]),
             if (student.isSponsored) ...[
               const SizedBox(height: 3),

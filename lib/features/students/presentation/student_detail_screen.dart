@@ -159,6 +159,9 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
       'childId':          s('childId').isNotEmpty ? s('childId') : id,
       'name':             s('name'),
       'centre':           centre,
+      // Admin-managed student category (Settings → Student Categories).
+      'category':         ((r['category'] as Map?)?['label'] ?? '').toString(),
+      'categoryId':       ((r['category'] as Map?)?['id'] ?? r['categoryId'] ?? '').toString(),
       'age':              age.isNotEmpty ? age : '—',
       'gender':           gender.isNotEmpty ? gender : '—',
       'class':            s('class').isNotEmpty ? s('class') : '—',
@@ -379,6 +382,14 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
     } catch (_) { return const []; }
   }
 
+  Future<List<({String id, String label})>> _fetchCategories() async {
+    try {
+      final r = await apiClient.get('/students/categories');
+      final list = (r['data'] as List<dynamic>? ?? const []);
+      return list.whereType<Map>().map((m) => (id: m['id'] as String, label: m['label'] as String)).toList();
+    } catch (_) { return const []; }
+  }
+
   // Comprehensive edit sheet covering every field collected at enrolment
   // (Personal, Contact, Address, Guardian, Education, Health) — pre-filled
   // from the current record and persisted to the backend via PUT. Identity
@@ -386,6 +397,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
   // (_showIdentityEditSheet, opened from that section's own Edit button).
   void _showEditSheet(BuildContext context, Map<String, String> data) async {
     final centres = await _fetchCentres();
+    final categories = await _fetchCategories();
     if (!context.mounted) return;
 
     final nameCtrl      = TextEditingController(text: data['name']);
@@ -411,6 +423,12 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
     String admDate = data['admDate'] ?? '';
     String joiningDate = data['joiningDate'] ?? '';
     String permanence  = data['permanence']?.isNotEmpty == true ? data['permanence']! : 'Permanent';
+    // Selection is by label ('None' clears); mapped back to the id on save.
+    // The current category may have been deactivated since — keep it as an
+    // extra option and only send categoryId when the selection actually
+    // changes, so opening/saving the sheet never silently clears it.
+    final initialCategoryLabel = (data['category'] ?? '').isNotEmpty ? data['category']! : 'None';
+    String categoryLabel = initialCategoryLabel;
     Uint8List? newPhotoBytes = _photoBytes;
     bool saving = false;
 
@@ -504,6 +522,13 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             chips('Gender', const ['Male', 'Female', 'Other'], gender, (v) => gender = v),
             chips('Status', const ['Active', 'Graduated', 'Relieved', 'Drop out'], status, (v) => status = v),
             if (centres.isNotEmpty) chips('Centre', centres.map((c) => c.name).toList(), centre, (v) => centre = v),
+            if (categories.isNotEmpty)
+              chips('Category', [
+                'None',
+                ...categories.map((c) => c.label),
+                if (initialCategoryLabel != 'None' && !categories.any((c) => c.label == initialCategoryLabel))
+                  initialCategoryLabel,
+              ], categoryLabel, (v) => categoryLabel = v),
 
             sectionLabel('GUARDIAN DETAILS'),
             field("Father's Name", fatherCtrl),
@@ -537,12 +562,22 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
                 setSheet(() => saving = true);
                 final centerId = centres.firstWhere(
                   (c) => c.name == centre, orElse: () => (id: '', name: '')).id;
+                final selectedCategoryId = categoryLabel == 'None'
+                  ? ''
+                  : categories.firstWhere((c) => c.label == categoryLabel, orElse: () => (id: '', label: '')).id;
+                // Only persist a category change the user actually made, and
+                // never map an unknown (deactivated) label to a clear.
+                final sendCategory = categories.isNotEmpty &&
+                  categoryLabel != initialCategoryLabel &&
+                  (categoryLabel == 'None' || selectedCategoryId.isNotEmpty);
                 await _saveIdentityFields({
                   'name': nameCtrl.text.trim(),
                   if (dob.isNotEmpty) 'dob': dob,
                   'gender': _genderBack[gender] ?? 'MALE',
                   'status': _statusBack[status] ?? 'ACTIVE',
                   if (centerId.isNotEmpty) 'centerId': centerId,
+                  // '' clears the category on the backend.
+                  if (sendCategory) 'categoryId': selectedCategoryId,
                   'fatherName': fatherCtrl.text.trim(),
                   'motherName': motherCtrl.text.trim(),
                   'guardianName': guardianCtrl.text.trim(),
@@ -563,7 +598,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
                   'educationRemarks': eduRemarksCtrl.text.trim(),
                   if (!identical(newPhotoBytes, _photoBytes) && newPhotoBytes != null)
                     'photo': base64Encode(newPhotoBytes!),
-                }, centreName: centre.isNotEmpty ? centre : null);
+                }, centreName: centre.isNotEmpty ? centre : null,
+                   categoryLabel: sendCategory ? (categoryLabel == 'None' ? '' : categoryLabel) : null);
                 if (!identical(newPhotoBytes, _photoBytes)) setState(() => _photoBytes = newPhotoBytes);
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (context.mounted) {
@@ -592,7 +628,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
   static const _genderDisplay = {'MALE': 'Male', 'FEMALE': 'Female', 'OTHER': 'Other'};
   static const _statusDisplay = {'ACTIVE': 'Active', 'GRADUATED': 'Graduated', 'INACTIVE': 'Relieved', 'DROPPED': 'Drop out'};
 
-  Future<void> _saveIdentityFields(Map<String, dynamic> body, {String? centreName}) async {
+  Future<void> _saveIdentityFields(Map<String, dynamic> body, {String? centreName, String? categoryLabel}) async {
     try {
       await apiClient.put('/students/${widget.id}', body);
     } catch (_) {
@@ -617,9 +653,15 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
         }
       });
       if (centreName != null) _data['centre'] = centreName;
+      if (categoryLabel != null) _data['category'] = categoryLabel;
     });
     final rec = findStudentRecord(widget.id);
     if (rec != null && centreName != null) rec['center'] = {'name': centreName};
+    // Keep the cached record's nested shape in sync so _dataFromRecord (and
+    // the list card) re-derive the same label after navigation.
+    if (rec != null && categoryLabel != null) {
+      rec['category'] = categoryLabel.isEmpty ? null : {'id': body['categoryId'], 'label': categoryLabel};
+    }
     if (rec != null) body.forEach((k, v) => rec[k] = v);
   }
 
@@ -1069,6 +1111,7 @@ class _ProfileTab extends StatelessWidget {
       _CardSection(title: 'Basic Profile', icon: Icons.person_outline, children: [
         _InfoRow('Child ID',          data['childId'] ?? '—'),
         _InfoRow('Centre',            (data['centre'] ?? '').isNotEmpty ? data['centre']! : '—'),
+        _InfoRow('Category',          (data['category'] ?? '').isNotEmpty ? data['category']! : '—'),
         _InfoRow('Date of Birth',     '${data['dob'] ?? ''} (${data['age'] ?? '—'})'),
         _InfoRow('Gender',            data['gender'] ?? '—'),
         _InfoRow('Aadhaar Number',    (data['aadhaar'] ?? '').isNotEmpty ? data['aadhaar']! : '—'),

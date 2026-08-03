@@ -541,6 +541,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
             '${1 + appRoles.where((r) => r.email.toLowerCase() != adminProfile.value.email.toLowerCase()).length} staff',
             onTap: () => context.go('/settings/team-members')),
         _settingsItem(Icons.category_outlined, 'Donation Types', 'Manage categories', onTap: () => context.go('/settings/donation-types')),
+        _settingsItem(Icons.face_outlined, 'Student Categories', 'Manage children categories', onTap: () => context.go('/settings/student-categories')),
         _settingsItem(Icons.location_city_outlined, 'Manage Centres', 'Add and manage centres', onTap: () => context.go('/settings/centres')),
         _settingsItem(Icons.business_outlined, 'Offices', 'Manage office locations', onTap: () => context.go('/offices')),
         _settingsItem(Icons.chat_outlined, 'WhatsApp Business API', 'Donation & receipt messaging', onTap: () => context.go('/settings/whatsapp')),

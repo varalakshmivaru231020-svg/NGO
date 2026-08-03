@@ -171,6 +171,7 @@ Future<Uint8List> buildStudentReportPdf({
         ('Date of Birth', has('dob') ? _d(v('dob')) : ''),
         ('Age', v('age')),
         ('Gender', v('gender')),
+        ('Category', v('category')),
         ('Class', v('class')),
         ('School / College', has('institution') ? v('institution') : v('school')),
         ('Admission Date', has('admDate') ? _d(v('admDate')) : ''),
