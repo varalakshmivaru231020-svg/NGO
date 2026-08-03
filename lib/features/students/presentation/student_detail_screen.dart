@@ -851,8 +851,34 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
     } catch (_) {
       // Offline or endpoint unavailable — the report still carries the profile.
     }
+    // Latest height/weight from Growth History — the profile map only carries
+    // demo values, real measurements live in growth records.
+    final data = Map<String, String>.from(_data);
     try {
-      final bytes = await buildStudentReportPdf(data: _data, photo: _photoBytes, achievements: achievements);
+      final r = await apiClient.get('/students/${widget.id}/growth');
+      final list = (r['data'] as List? ?? []).whereType<Map>().toList();
+      Map? latest; DateTime? latestDt;
+      for (final g in list) {
+        final dt = DateTime.tryParse(g['date'] as String? ?? '');
+        if (dt != null && (latestDt == null || dt.isAfter(latestDt))) { latestDt = dt; latest = g; }
+      }
+      if (latest != null) {
+        String num_(Object? n) => n is num ? (n % 1 == 0 ? '${n.toInt()}' : '$n') : '$n';
+        final parts = <String>[
+          if (latest['heightCm'] != null) '${num_(latest['heightCm'])} cm',
+          if (latest['weightKg'] != null) '${num_(latest['weightKg'])} kg',
+        ];
+        if (parts.isNotEmpty) {
+          if (latest['heightCm'] != null) data['height'] = '${num_(latest['heightCm'])} cm';
+          if (latest['weightKg'] != null) data['weight'] = '${num_(latest['weightKg'])} kg';
+          final d = latestDt!;
+          data['growthLine'] =
+            '${parts.join(' / ')} recorded ${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+        }
+      }
+    } catch (_) {/* section falls back to profile height/weight */}
+    try {
+      final bytes = await buildStudentReportPdf(data: data, photo: _photoBytes, achievements: achievements);
       final childId = (_data['childId'] ?? widget.id).replaceAll(RegExp(r'[^A-Za-z0-9-]'), '_');
       final dateStr = DateTime.now().toIso8601String().split('T').first.replaceAll('-', '');
       final ok = await NativeFileSaver.saveBytes('SKET_Student_${childId}_$dateStr.pdf', bytes, 'application/pdf');

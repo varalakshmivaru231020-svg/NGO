@@ -149,8 +149,26 @@ class _StudentsScreenState extends State<StudentsScreen> {
 
   List<_Student> _all    = [];
   List<({String id, String name})> _centres = [];
+  // Admin-managed student categories (Settings → Student Categories) — shown
+  // as extra filter chips after the fixed statuses.
+  List<String> _categoryLabels = [];
   bool  _loading = true;
   String? _error;
+
+  // Statuses first, then the dynamic categories; labels already on loaded
+  // students always get a chip too (covers deactivated-but-assigned ones).
+  List<String> get _filterChips {
+    final cats = <String>{
+      ..._categoryLabels,
+      ..._all.map((s) => s.category).where((c) => c.isNotEmpty),
+    }.toList()..sort();
+    // A category named like a status can't be told apart in this row — the
+    // status chip wins, so drop the duplicate label.
+    cats.removeWhere((c) => _statusFilters.contains(c));
+    return [..._statusFilters, ...cats];
+  }
+
+  bool _isStatusChip(String s) => _statusFilters.contains(s);
 
   @override
   void initState() { super.initState(); _load(); }
@@ -165,6 +183,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
+    _loadCategoryLabels();
     try {
       final results = await Future.wait([
         apiClient.get('/students', params: {'limit': '100', 'page': '1'}),
@@ -212,12 +231,27 @@ class _StudentsScreenState extends State<StudentsScreen> {
     });
   }
 
+  // Fire-and-forget — chips fall back to labels found on students if this fails.
+  Future<void> _loadCategoryLabels() async {
+    try {
+      final r = await apiClient.get('/students/categories');
+      final list = (r['data'] as List? ?? []);
+      final labels = list.whereType<Map>()
+          .map((c) => c['label'] as String? ?? '')
+          .where((l) => l.isNotEmpty).toList();
+      if (mounted) setState(() => _categoryLabels = labels);
+    } catch (_) {}
+  }
+
   List<_Student> get _filtered => _all.where((s) {
     final matchSearch = _search.isEmpty ||
       s.name.toLowerCase().contains(_search.toLowerCase()) ||
       s.childId.toLowerCase().contains(_search.toLowerCase());
     final matchCentre = _centre == 'All Centres' || s.centreName == _centre;
-    final matchStatus = _statusFilter == 'All' || s.displayStatus == _statusFilter;
+    // The chip row mixes fixed statuses and dynamic categories — decide which
+    // field to match on by which kind of chip is selected.
+    final matchStatus = _statusFilter == 'All' ||
+      (_isStatusChip(_statusFilter) ? s.displayStatus == _statusFilter : s.category == _statusFilter);
     return matchSearch && matchCentre && matchStatus;
   }).toList();
 
@@ -416,15 +450,16 @@ class _StudentsScreenState extends State<StudentsScreen> {
               SizedBox(height: 42, child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.fromLTRB(18, 0, 18, 0),
-                children: _statusFilters.map((s) {
+                children: _filterChips.map((s) {
                   final centreFiltered = _centre == 'All Centres'
                     ? _all
                     : _all.where((st) => st.centreName == _centre).toList();
+                  final isStatus = _isStatusChip(s);
                   final count = s == 'All'
                     ? centreFiltered.length
-                    : centreFiltered.where((st) => st.displayStatus == s).length;
+                    : centreFiltered.where((st) => isStatus ? st.displayStatus == s : st.category == s).length;
                   final active = _statusFilter == s;
-                  final col = s == 'All' ? _brand600 : _statusColor(s);
+                  final col = s == 'All' ? _brand600 : (isStatus ? _statusColor(s) : _violet500);
                   return Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => setState(() => _statusFilter = s),
