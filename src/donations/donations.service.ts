@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDonationDto } from './dto/create-donation.dto';
 import { UpdateDonationDto } from './dto/update-donation.dto';
@@ -116,6 +116,9 @@ export class DonationsService {
 
   async createType(dto: CreateDonationTypeDto) {
     const label = dto.label.trim();
+    if (!label) throw new BadRequestException('Type name is required');
+    if (await this.prisma.donationType.findFirst({ where: { label } }))
+      throw new ConflictException('A donation type with this name already exists');
     const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'type';
     let key = base;
     for (let i = 2; await this.prisma.donationType.findUnique({ where: { key } }); i++) key = `${base}-${i}`;
@@ -127,6 +130,12 @@ export class DonationsService {
   async updateType(id: string, dto: UpdateDonationTypeDto) {
     const existing = await this.prisma.donationType.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Donation type not found');
+    if (dto.label !== undefined) {
+      const label = dto.label.trim();
+      if (!label) throw new BadRequestException('Type name is required');
+      if (await this.prisma.donationType.findFirst({ where: { label, NOT: { id } } }))
+        throw new ConflictException('A donation type with this name already exists');
+    }
     return this.prisma.donationType.update({
       where: { id },
       data: {

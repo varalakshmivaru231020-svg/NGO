@@ -10,6 +10,7 @@ import { CreateGrowthRecordDto } from './dto/create-growth-record.dto';
 import { CreateStudentDocumentDto } from './dto/create-student-document.dto';
 import { CreateProgressRecordDto } from './dto/create-progress-record.dto';
 import { CreateCenterDto, UpdateCenterDto } from './dto/center.dto';
+import { CreateStudentCategoryDto, UpdateStudentCategoryDto } from './dto/student-category.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -39,6 +40,22 @@ export class StudentsController {
 
   @Delete('centers/:id') @ApiOperation({ summary: 'Delete (deactivate) a center' })
   removeCenter(@Param('id') id: string) { return this.svc.removeCenter(id); }
+
+  // Student categories — reads open to staff (Add Student needs the list),
+  // management is Admin/Super Admin only, matching donation types.
+  @Get('categories') @ApiOperation({ summary: 'List active student categories' })
+  categories() { return this.svc.findCategories(); }
+
+  @Get('categories/all') @Roles('ADMIN') @ApiOperation({ summary: 'List all student categories incl. inactive' })
+  allCategories() { return this.svc.findAllCategories(); }
+
+  @Post('categories') @Roles('ADMIN') @ApiOperation({ summary: 'Create a student category' })
+  createCategory(@Body() dto: CreateStudentCategoryDto) { return this.svc.createCategory(dto); }
+
+  @Put('categories/:id') @Roles('ADMIN') @ApiOperation({ summary: 'Update a student category' })
+  updateCategory(@Param('id') id: string, @Body() dto: UpdateStudentCategoryDto) {
+    return this.svc.updateCategory(id, dto);
+  }
 
   @Post() @ApiOperation({ summary: 'Add a student' })
   create(@Body() dto: CreateStudentDto) { return this.svc.create(dto); }

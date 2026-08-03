@@ -11,6 +11,8 @@ export class CreateStudentDto {
   @ApiPropertyOptional({ enum: GENDERS }) @IsOptional() @IsIn(GENDERS) gender?: string;
   @ApiProperty() @IsDateString() dob: string;
   @ApiProperty() @IsString() centerId: string;
+  @ApiPropertyOptional({ description: 'StudentCategory id (Settings → Student Categories)' })
+  @IsOptional() @IsString() categoryId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() class?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() school?: string;
   @ApiPropertyOptional({ enum: STUDENT_STATUSES }) @IsOptional() @IsIn(STUDENT_STATUSES) status?: string;

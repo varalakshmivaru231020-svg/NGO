@@ -7,6 +7,7 @@ const STUDENT_STATUSES = ['ACTIVE', 'INACTIVE', 'GRADUATED', 'DROPPED'] as const
 export class StudentQueryDto extends PaginationDto {
   @ApiPropertyOptional({ enum: STUDENT_STATUSES }) @IsOptional() @IsIn(STUDENT_STATUSES) status?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() centerId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() categoryId?: string;
   @ApiPropertyOptional({ description: 'Only students with an active sponsorship from this donor' })
   @IsOptional() @IsString() sponsorDonorId?: string;
 }

@@ -331,6 +331,21 @@ model Center {
   @@map("centers")
 }
 
+// Admin-managed buckets for classifying children (e.g. Orphan, Single Parent,
+// Day Scholar) — mirrors DonationType so the Settings screen can add/toggle.
+model StudentCategory {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  label       String
+  description String?  @db.Text
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  students Student[]
+
+  @@map("student_categories")
+}
+
 model Student {
   id               String    @id @default(cuid())
   childId          String    @unique
@@ -338,6 +353,7 @@ model Student {
   gender           String    @default("MALE")
   dob              DateTime
   centerId         String
+  categoryId       String?
   class            String?
   school           String?
   status           String    @default("ACTIVE")
@@ -383,6 +399,7 @@ model Student {
   updatedAt DateTime @updatedAt
 
   center          Center            @relation(fields: [centerId], references: [id])
+  category        StudentCategory?  @relation(fields: [categoryId], references: [id])
   sponsorships    Sponsorship[]
   achievements    Achievement[]
   attendance      Attendance[]
@@ -392,6 +409,7 @@ model Student {
 
   @@index([name])
   @@index([centerId])
+  @@index([categoryId])
   @@map("students")
 }
 

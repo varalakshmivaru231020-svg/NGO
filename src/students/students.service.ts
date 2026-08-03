@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
@@ -8,6 +8,7 @@ import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { CreateGrowthRecordDto } from './dto/create-growth-record.dto';
 import { CreateStudentDocumentDto } from './dto/create-student-document.dto';
 import { CreateProgressRecordDto } from './dto/create-progress-record.dto';
+import { CreateStudentCategoryDto, UpdateStudentCategoryDto } from './dto/student-category.dto';
 import { paginate, paginatedResponse } from '../common/dto/pagination.dto';
 
 @Injectable()
@@ -16,12 +17,21 @@ export class StudentsService {
 
   private include = {
     center: true,
+    category: true,
     sponsorships: {
       where: { isActive: true },
       include: { donor: { select: { id: true, name: true, mobile: true, donorCode: true } } },
     },
     _count: { select: { achievements: true, attendance: true } },
   };
+
+  // A bad categoryId would otherwise surface as an opaque Prisma FK error —
+  // reject it up front. Empty string means "no category" (app convenience).
+  private async assertCategoryExists(categoryId?: string | null) {
+    if (!categoryId) return;
+    const cat = await this.prisma.studentCategory.findUnique({ where: { id: categoryId } });
+    if (!cat) throw new NotFoundException('Student category not found');
+  }
 
   private async nextChildId(centerId: string): Promise<string> {
     const center = await this.prisma.center.findUnique({ where: { id: centerId } });
@@ -44,11 +54,13 @@ export class StudentsService {
 
   async create(dto: CreateStudentDto) {
     const { documents, ...rest } = dto;
+    await this.assertCategoryExists(dto.categoryId);
     const childId = await this.nextChildId(dto.centerId);
     const student = await this.prisma.student.create({
       data: {
         ...rest,
         childId,
+        categoryId: dto.categoryId || null,
         dob: new Date(dto.dob),
         admissionDate: dto.admissionDate ? new Date(dto.admissionDate) : new Date(),
         joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : undefined,
@@ -72,7 +84,7 @@ export class StudentsService {
   }
 
   async findAll(query: StudentQueryDto) {
-    const { page = 1, limit = 20, search, status, centerId, sponsorDonorId } = query;
+    const { page = 1, limit = 20, search, status, centerId, categoryId, sponsorDonorId } = query;
     const where: any = {};
     if (search) {
       where.OR = [
@@ -83,6 +95,7 @@ export class StudentsService {
     }
     if (status) where.status = status;
     if (centerId) where.centerId = centerId;
+    if (categoryId) where.categoryId = categoryId;
     if (sponsorDonorId) where.sponsorships = { some: { donorId: sponsorDonorId, isActive: true } };
 
     const [data, total] = await Promise.all([
@@ -109,16 +122,62 @@ export class StudentsService {
 
   async update(id: string, dto: UpdateStudentDto) {
     await this.findOne(id);
+    await this.assertCategoryExists(dto.categoryId);
     const { documents: _documents, ...rest } = dto;
     return this.prisma.student.update({
       where: { id },
       data: {
         ...rest,
+        // '' clears the category; absent leaves it untouched.
+        categoryId: dto.categoryId === undefined ? undefined : (dto.categoryId || null),
         dob: dto.dob ? new Date(dto.dob) : undefined,
         admissionDate: dto.admissionDate ? new Date(dto.admissionDate) : undefined,
         joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : undefined,
       },
       include: this.include,
+    });
+  }
+
+  // ── Student categories (Settings → Student Categories) ────────────────
+  async findCategories() {
+    return this.prisma.studentCategory.findMany({ where: { isActive: true }, orderBy: { label: 'asc' } });
+  }
+
+  async findAllCategories() {
+    return this.prisma.studentCategory.findMany({ orderBy: { label: 'asc' } });
+  }
+
+  async createCategory(dto: CreateStudentCategoryDto) {
+    const label = dto.label.trim();
+    // @IsNotEmpty passes '   ' — and the app's edit sheet maps selections by
+    // label, so blank or duplicate labels must be rejected here.
+    if (!label) throw new BadRequestException('Category name is required');
+    if (await this.prisma.studentCategory.findFirst({ where: { label } }))
+      throw new ConflictException('A category with this name already exists');
+    const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'category';
+    let key = base;
+    for (let i = 2; await this.prisma.studentCategory.findUnique({ where: { key } }); i++) key = `${base}-${i}`;
+    return this.prisma.studentCategory.create({
+      data: { key, label, description: dto.description?.trim() || null },
+    });
+  }
+
+  async updateCategory(id: string, dto: UpdateStudentCategoryDto) {
+    const existing = await this.prisma.studentCategory.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Student category not found');
+    if (dto.label !== undefined) {
+      const label = dto.label.trim();
+      if (!label) throw new BadRequestException('Category name is required');
+      if (await this.prisma.studentCategory.findFirst({ where: { label, NOT: { id } } }))
+        throw new ConflictException('A category with this name already exists');
+    }
+    return this.prisma.studentCategory.update({
+      where: { id },
+      data: {
+        ...(dto.label !== undefined ? { label: dto.label.trim() } : {}),
+        ...(dto.description !== undefined ? { description: dto.description?.trim() || null } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+      },
     });
   }
 
