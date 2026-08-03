@@ -1160,46 +1160,102 @@ class DonationTypesScreen extends StatefulWidget {
 }
 
 class _DonationTypesState extends State<DonationTypesScreen> {
-  final List<Map<String, dynamic>> _types = [
-    {'name': 'Education',         'desc': 'School fees, books, uniforms',    'icon': Icons.school_outlined,            'color': _violet500, 'active': true},
-    {'name': 'Child Sponsorship', 'desc': 'Monthly child welfare support',   'icon': Icons.favorite_outline,           'color': _brand600,  'active': true},
-    {'name': 'Medical',           'desc': 'Health, medicines, surgeries',    'icon': Icons.medical_services_outlined,  'color': _coral500,  'active': true},
-    {'name': 'General Fund',      'desc': 'Unrestricted operational fund',   'icon': Icons.account_balance_outlined,   'color': _brand600,  'active': true},
-    {'name': 'Food & Nutrition',  'desc': 'Ration kits, mid-day meals',      'icon': Icons.restaurant_outlined,        'color': _amber600,  'active': true},
-    {'name': 'Infrastructure',    'desc': 'Building & facility improvement', 'icon': Icons.business_outlined,          'color': _sky500,    'active': false},
-    {'name': 'Zakat',             'desc': 'Islamic charitable giving',       'icon': Icons.volunteer_activism_outlined,'color': _amber600,  'active': true},
-  ];
+  // Loaded live from the backend — the same table Add Donation reads, so a
+  // type added or toggled here shows up (or disappears) there immediately.
+  List<Map<String, dynamic>> _types = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final r = await apiClient.get('/donations/types/all');
+      final list = (r['data'] as List? ?? []).cast<Map<String, dynamic>>();
+      if (!mounted) return;
+      setState(() { _types = list; _loading = false; });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _error = ApiClient.errorMessage(e, fallback: 'Could not load donation types.'); _loading = false; });
+    }
+  }
+
+  // Visuals are keyed off the label so custom types still get a sensible icon.
+  static (IconData, Color) _style(String label) {
+    final l = label.toLowerCase();
+    if (l.contains('educat') || l.contains('school') || l.contains('scholar')) return (Icons.school_outlined, _violet500);
+    if (l.contains('student') || l.contains('child') || l.contains('sponsor')) return (Icons.favorite_outline, _brand600);
+    if (l.contains('medic') || l.contains('health')) return (Icons.medical_services_outlined, _coral500);
+    if (l.contains('food') || l.contains('nutri') || l.contains('meal')) return (Icons.restaurant_outlined, _amber600);
+    if (l.contains('infra') || l.contains('build')) return (Icons.business_outlined, _sky500);
+    if (l.contains('general') || l.contains('fund')) return (Icons.account_balance_wallet_outlined, _sky500);
+    return (Icons.volunteer_activism_outlined, _brand600);
+  }
+
+  Future<void> _toggle(int i, bool v) async {
+    final t = _types[i];
+    setState(() => _types[i]['isActive'] = v);
+    try {
+      await apiClient.put('/donations/types/${t['id']}', {'isActive': v});
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _types[i]['isActive'] = !v);
+      _snack(context, ApiClient.errorMessage(e, fallback: 'Could not update the donation type.'));
+    }
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
     body: Column(children: [
-      _buildHeader(context, 'Donation Types', sub: '${_types.length} categories'),
-      Expanded(child: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
-        child: _buildCard(context, child: Column(children: _types.asMap().entries.map((e) {
+      _buildHeader(context, 'Donation Types', sub: _loading ? 'Loading…' : '${_types.length} categories'),
+      Expanded(child: _loading
+        ? const Center(child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600))
+        : _error != null
+          ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.cloud_off_outlined, size: 40, color: context.textHint),
+              const SizedBox(height: 10),
+              Text(_error!, textAlign: TextAlign.center, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textSub)),
+              const SizedBox(height: 14),
+              OutlinedButton(onPressed: _load, child: const Text('Retry', style: TextStyle(fontWeight: FontWeight.w700, color: _brand600))),
+            ])))
+          : RefreshIndicator(
+              onRefresh: _load,
+              color: _brand600,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
+                child: _types.isEmpty
+                  ? Padding(padding: const EdgeInsets.only(top: 60), child: Center(child: Text('No donation types yet — add one below.',
+                      style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textHint))))
+                  : _buildCard(context, child: Column(children: _types.asMap().entries.map((e) {
           final i = e.key; final t = e.value;
-          final c = t['color'] as Color;
+          final label = t['label'] as String? ?? '';
+          final (icon, c) = _style(label);
+          final active = t['isActive'] as bool? ?? true;
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: i < _types.length - 1 ? BoxDecoration(border: Border(bottom: BorderSide(color: context.border))) : null,
             child: Row(children: [
               Container(width: 40, height: 40,
                 decoration: BoxDecoration(color: c.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(11)),
-                child: Icon(t['icon'] as IconData, color: c, size: 20)),
+                child: Icon(icon, color: c, size: 20)),
               const SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(t['name'] as String, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
-                Text(t['desc'] as String, style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w500)),
+                Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+                if ((t['description'] as String? ?? '').isNotEmpty)
+                  Text(t['description'] as String, style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w500)),
               ])),
               Switch(
-                value: t['active'] as bool,
-                onChanged: (v) => setState(() => _types[i]['active'] = v),
+                value: active,
+                onChanged: (v) => _toggle(i, v),
                 activeColor: _brand600),
             ]),
           );
         }).toList())),
-      )),
+              ),
+            )),
     ]),
     floatingActionButton: FloatingActionButton.extended(
       onPressed: () => _showAddTypeDialog(context),
@@ -1213,6 +1269,7 @@ class _DonationTypesState extends State<DonationTypesScreen> {
     final nameCtrl = TextEditingController();
     final descCtrl = TextEditingController();
     String? nameError;
+    bool saving = false;
 
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
@@ -1258,27 +1315,36 @@ class _DonationTypesState extends State<DonationTypesScreen> {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12))),
               const SizedBox(height: 20),
               SizedBox(width: double.infinity, child: ElevatedButton(
-                onPressed: () {
+                onPressed: saving ? null : () async {
                   final name = nameCtrl.text.trim();
                   if (name.isEmpty) {
                     setSheet(() => nameError = 'Type name is required');
                     return;
                   }
-                  setState(() => _types.add({
-                    'name': name,
-                    'desc': descCtrl.text.trim().isEmpty ? 'Custom donation type' : descCtrl.text.trim(),
-                    'icon': Icons.volunteer_activism_outlined,
-                    'color': _brand600,
-                    'active': true,
-                  }));
-                  Navigator.pop(ctx);
-                  _snack(context, '"$name" added successfully');
+                  setSheet(() => saving = true);
+                  try {
+                    await apiClient.post('/donations/types', {
+                      'label': name,
+                      if (descCtrl.text.trim().isNotEmpty) 'description': descCtrl.text.trim(),
+                    });
+                    if (!ctx.mounted) return;
+                    Navigator.pop(ctx);
+                    _snack(context, '"$name" added — it now appears in Add Donation');
+                    _load();
+                  } catch (e) {
+                    setSheet(() {
+                      saving = false;
+                      nameError = ApiClient.errorMessage(e, fallback: 'Could not save the donation type.');
+                    });
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   padding: const EdgeInsets.symmetric(vertical: 15)),
-                child: const Text('Save Donation Type', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                child: saving
+                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Save Donation Type', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
               )),
             ]),
           ),

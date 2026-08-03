@@ -62,12 +62,14 @@ class _Donation {
     required this.status, required this.attach,
     this.donorPhone = '', this.donorCity = '', this.donorPan = '', this.donorEmail = '',
     this.donorAddress = '', this.donorState = '', this.donorPincode = '', this.donorCountry = '',
-    this.reference = '', this.entryDate = ''});
+    this.reference = '', this.entryDate = '', this.notes = ''});
   final String id, donorId, name, type, method, receipt, date, status;
   final int amount, attach;
   final String donorPhone, donorCity, donorPan;
   final String donorEmail, donorAddress, donorState, donorPincode, donorCountry;
   final String reference;
+  // Description typed while recording the donation — printed on the invoice.
+  final String notes;
   // When the record was ENTERED into the system (createdAt) — shown on the
   // list card. `date` stays the actual donation date and prints on the invoice.
   final String entryDate;
@@ -110,6 +112,7 @@ class _Donation {
       status:   rawStatus == 'COMPLETED' ? 'Received' : rawStatus,
       attach:   0,
       reference: j['reference'] as String? ?? '',
+      notes:     j['notes'] as String? ?? '',
     );
   }
 }
@@ -526,6 +529,7 @@ class _DonationCard extends StatelessWidget {
                   date:         d.date,
                   taxExemption: true,
                   reference:    d.reference,
+                  notes:        d.notes,
                 )),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),

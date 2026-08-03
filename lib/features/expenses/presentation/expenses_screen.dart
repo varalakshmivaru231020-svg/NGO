@@ -517,7 +517,9 @@ class _ExpenseCard extends StatelessWidget {
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(_inr(e.amount), style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: _orange700)),
             const SizedBox(height: 3),
-            Text(e.entryDate.isNotEmpty ? e.entryDate : e.date,
+            // The expense date entered in the Add Expense form — same date the
+            // voucher prints, so the list and the voucher always agree.
+            Text(e.date.isNotEmpty ? e.date : e.entryDate,
                 style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w500)),
           ]),
         ])),

@@ -10,6 +10,7 @@ import '../../../core/utils/open_bytes.dart';
 import '../../../core/utils/native_file_saver.dart';
 import '../../../core/widgets/photo_picker_widget.dart';
 import 'students_screen.dart' show findStudentRecord;
+import 'student_report_generator.dart';
 
 // ── colours ───────────────────────────────────────────────────────────
 const _brand700 = Color(0xFFE07C1F);
@@ -783,6 +784,92 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
     );
   }
 
+  void _snackMsg(String msg, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
+      backgroundColor: isError ? _coral500 : _brand600, behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ));
+  }
+
+  // Full profile PDF — includes live achievements fetched at download time.
+  Future<void> _downloadReport() async {
+    _snackMsg('Preparing report…');
+    var achievements = <StudentAchievementRow>[];
+    try {
+      final r = await apiClient.get('/achievements', params: {'studentId': widget.id, 'limit': '100'});
+      final list = ((r['data'] is Map ? (r['data'] as Map)['data'] : r['data']) as List? ?? []);
+      const catDisplay = {'ARTS': 'Arts', 'SPORTS': 'Sports', 'ACADEMICS': 'Academics', 'COMMUNITY': 'Community', 'LIFE_SKILLS': 'Leadership', 'OTHER': 'Other'};
+      achievements = list.map((a) => StudentAchievementRow(
+        date:     (a as Map)['date'] as String? ?? '',
+        title:    a['title'] as String? ?? '',
+        category: catDisplay[a['category']] ?? (a['category'] as String? ?? 'Other'),
+      )).toList();
+    } catch (_) {
+      // Offline or endpoint unavailable — the report still carries the profile.
+    }
+    try {
+      final bytes = await buildStudentReportPdf(data: _data, photo: _photoBytes, achievements: achievements);
+      final childId = (_data['childId'] ?? widget.id).replaceAll(RegExp(r'[^A-Za-z0-9-]'), '_');
+      final dateStr = DateTime.now().toIso8601String().split('T').first.replaceAll('-', '');
+      final ok = await NativeFileSaver.saveBytes('SKET_Student_${childId}_$dateStr.pdf', bytes, 'application/pdf');
+      _snackMsg(ok ? '✓ Student report downloaded' : 'Failed to save the report', isError: !ok);
+    } catch (_) {
+      _snackMsg('Failed to generate the report', isError: true);
+    }
+  }
+
+  Future<void> _downloadPhoto() async {
+    final bytes = _photoBytes;
+    if (bytes == null || bytes.isEmpty) {
+      _snackMsg('No profile photo uploaded yet — add one via Edit.', isError: true);
+      return;
+    }
+    // PNG magic bytes → .png, everything else the picker produces is JPEG.
+    final isPng = bytes.length > 4 && bytes[0] == 0x89 && bytes[1] == 0x50;
+    final childId = (_data['childId'] ?? widget.id).replaceAll(RegExp(r'[^A-Za-z0-9-]'), '_');
+    final ok = await NativeFileSaver.saveBytes(
+      'SKET_Student_${childId}_photo.${isPng ? 'png' : 'jpg'}', bytes, isPng ? 'image/png' : 'image/jpeg');
+    _snackMsg(ok ? '✓ Profile photo downloaded' : 'Failed to save the photo', isError: !ok);
+  }
+
+  void _showDownloadSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context, backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        decoration: BoxDecoration(color: ctx.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: ctx.border, borderRadius: BorderRadius.circular(2)))),
+          const SizedBox(height: 16),
+          const Text('Download', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 12),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Container(width: 42, height: 42,
+              decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.picture_as_pdf_outlined, color: _brand600, size: 22)),
+            title: const Text('Student Report (PDF)', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+            subtitle: Text('Full profile with photo, family, education & achievements',
+                style: TextStyle(fontSize: 12, color: ctx.textHint, fontWeight: FontWeight.w500)),
+            onTap: () { Navigator.pop(ctx); _downloadReport(); },
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Container(width: 42, height: 42,
+              decoration: BoxDecoration(color: _sky100, borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.photo_outlined, color: _sky500, size: 22)),
+            title: const Text('Profile Photo', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+            subtitle: Text(_photoBytes != null ? 'Save the photo as an image file' : 'No photo uploaded yet',
+                style: TextStyle(fontSize: 12, color: ctx.textHint, fontWeight: FontWeight.w500)),
+            onTap: () { Navigator.pop(ctx); _downloadPhoto(); },
+          ),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = _data;
@@ -802,6 +889,9 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
               onPressed: () => context.go('/students'),
             ),
             actions: [
+              IconButton(icon: const Icon(Icons.download_rounded, color: Colors.white),
+                tooltip: 'Download report / photo',
+                onPressed: () => _showDownloadSheet(context)),
               IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.white),
                 onPressed: () => _showEditSheet(context, data)),
             ],
