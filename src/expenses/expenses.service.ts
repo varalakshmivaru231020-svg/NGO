@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { UpdateExpenseDto } from './dto/update-expense.dto';
 import { ExpenseQueryDto } from './dto/expense-query.dto';
-import { CreateExpenseCategoryDto } from './dto/create-expense-category.dto';
+import { CreateExpenseCategoryDto, UpdateExpenseCategoryDto } from './dto/create-expense-category.dto';
 import { paginate, paginatedResponse } from '../common/dto/pagination.dto';
 import type { SessionUser } from '../approvals/approvals.service';
 
@@ -75,10 +75,38 @@ export class ExpensesService {
 
   async createCategory(dto: CreateExpenseCategoryDto) {
     const label = dto.label.trim();
+    // Blank or duplicate labels break the app's label-keyed pickers.
+    if (!label) throw new BadRequestException('Category name is required');
+    if (await this.prisma.expenseCategory.findFirst({ where: { label } }))
+      throw new ConflictException('A category with this name already exists');
     const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'category';
     let key = base;
     for (let i = 2; await this.prisma.expenseCategory.findUnique({ where: { key } }); i++) key = `${base}-${i}`;
     return this.prisma.expenseCategory.create({ data: { key, label, icon: dto.icon ?? 'wallet' } });
+  }
+
+  // Settings screen needs inactive ones too so they can be re-enabled.
+  async findAllCategories() {
+    return this.prisma.expenseCategory.findMany({ orderBy: { label: 'asc' } });
+  }
+
+  async updateCategory(id: string, dto: UpdateExpenseCategoryDto) {
+    const existing = await this.prisma.expenseCategory.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Expense category not found');
+    if (dto.label !== undefined) {
+      const label = dto.label.trim();
+      if (!label) throw new BadRequestException('Category name is required');
+      if (await this.prisma.expenseCategory.findFirst({ where: { label, NOT: { id } } }))
+        throw new ConflictException('A category with this name already exists');
+    }
+    return this.prisma.expenseCategory.update({
+      where: { id },
+      data: {
+        ...(dto.label !== undefined ? { label: dto.label.trim() } : {}),
+        ...(dto.description !== undefined ? { description: dto.description?.trim() || null } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+      },
+    });
   }
 
   async findOne(id: string) {

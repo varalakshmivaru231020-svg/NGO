@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { UpdateExpenseCategoryDto } from './dto/create-expense-category.dto';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -35,6 +36,14 @@ export class ExpensesController {
   // Admin/Super Admin only — a role member picks from the existing list.
   @Post('categories') @Roles('ADMIN') @ApiOperation({ summary: 'Create an expense category' })
   createCategory(@Body() dto: CreateExpenseCategoryDto) { return this.svc.createCategory(dto); }
+
+  @Get('categories/all') @Roles('ADMIN') @ApiOperation({ summary: 'List all expense categories incl. inactive' })
+  findAllCategories() { return this.svc.findAllCategories(); }
+
+  @Put('categories/:id') @Roles('ADMIN') @ApiOperation({ summary: 'Update an expense category' })
+  updateCategory(@Param('id') id: string, @Body() dto: UpdateExpenseCategoryDto) {
+    return this.svc.updateCategory(id, dto);
+  }
 
   @Get(':id') @ApiOperation({ summary: 'Get expense by ID' })
   findOne(@Param('id') id: string) { return this.svc.findOne(id); }
