@@ -4,11 +4,14 @@ import { DonationsService } from './donations.service';
 import { CreateDonationDto } from './dto/create-donation.dto';
 import { UpdateDonationDto } from './dto/update-donation.dto';
 import { DonationQueryDto } from './dto/donation-query.dto';
+import { CreateDonationTypeDto, UpdateDonationTypeDto } from './dto/donation-type.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 
 @ApiTags('donations')
 @ApiBearerAuth('JWT')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('donations')
 export class DonationsController {
   constructor(private svc: DonationsService) {}
@@ -28,6 +31,16 @@ export class DonationsController {
 
   @Get('types') @ApiOperation({ summary: 'List donation types' })
   findTypes() { return this.svc.findTypes(); }
+
+  // Admin/Super Admin only — Settings → Donation Types management.
+  @Get('types/all') @Roles('ADMIN') @ApiOperation({ summary: 'List all donation types incl. inactive' })
+  findAllTypes() { return this.svc.findAllTypes(); }
+
+  @Post('types') @Roles('ADMIN') @ApiOperation({ summary: 'Create a donation type' })
+  createType(@Body() dto: CreateDonationTypeDto) { return this.svc.createType(dto); }
+
+  @Put('types/:id') @Roles('ADMIN') @ApiOperation({ summary: 'Update a donation type' })
+  updateType(@Param('id') id: string, @Body() dto: UpdateDonationTypeDto) { return this.svc.updateType(id, dto); }
 
   @Get(':id') @ApiOperation({ summary: 'Get donation by ID' })
   findOne(@Param('id') id: string) { return this.svc.findOne(id); }

@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateDonationDto } from './dto/create-donation.dto';
 import { UpdateDonationDto } from './dto/update-donation.dto';
 import { DonationQueryDto } from './dto/donation-query.dto';
+import { CreateDonationTypeDto, UpdateDonationTypeDto } from './dto/donation-type.dto';
 import { ConfigService } from '@nestjs/config';
 import { paginate, paginatedResponse } from '../common/dto/pagination.dto';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
@@ -106,6 +107,34 @@ export class DonationsService {
 
   async findTypes() {
     return this.prisma.donationType.findMany({ where: { isActive: true }, orderBy: { label: 'asc' } });
+  }
+
+  // Settings screen needs inactive ones too so they can be re-enabled.
+  async findAllTypes() {
+    return this.prisma.donationType.findMany({ orderBy: { label: 'asc' } });
+  }
+
+  async createType(dto: CreateDonationTypeDto) {
+    const label = dto.label.trim();
+    const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'type';
+    let key = base;
+    for (let i = 2; await this.prisma.donationType.findUnique({ where: { key } }); i++) key = `${base}-${i}`;
+    return this.prisma.donationType.create({
+      data: { key, label, description: dto.description?.trim() || null, icon: dto.icon ?? 'gift' },
+    });
+  }
+
+  async updateType(id: string, dto: UpdateDonationTypeDto) {
+    const existing = await this.prisma.donationType.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Donation type not found');
+    return this.prisma.donationType.update({
+      where: { id },
+      data: {
+        ...(dto.label !== undefined ? { label: dto.label.trim() } : {}),
+        ...(dto.description !== undefined ? { description: dto.description?.trim() || null } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+      },
+    });
   }
 
   async findOne(id: string) {
