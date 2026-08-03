@@ -242,6 +242,50 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
 
   bool _downloadingReport = false;
 
+  // Calendar-style month picker: year arrows + tappable month names.
+  Future<DateTime?> _pickMonth(BuildContext context) {
+    final now = DateTime.now();
+    int year = now.year;
+    const monthAbbr = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return showDialog<DateTime>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setD) => AlertDialog(
+        backgroundColor: ctx.cardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titlePadding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+        title: Row(children: [
+          IconButton(icon: const Icon(Icons.chevron_left_rounded, size: 26),
+              onPressed: () => setD(() => year--)),
+          Expanded(child: Center(child: Text('$year',
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)))),
+          IconButton(icon: const Icon(Icons.chevron_right_rounded, size: 26),
+              onPressed: year < now.year + 1 ? () => setD(() => year++) : null),
+        ]),
+        content: SizedBox(
+          width: 280,
+          child: Wrap(spacing: 8, runSpacing: 8, children: [
+            for (int m = 1; m <= 12; m++)
+              GestureDetector(
+                onTap: () => Navigator.pop(ctx, DateTime(year, m)),
+                child: Container(
+                  width: 62,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: (year == now.year && m == now.month) ? _orange.withValues(alpha: 0.12) : ctx.surface2,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: (year == now.year && m == now.month) ? _orange : ctx.border),
+                  ),
+                  child: Center(child: Text(monthAbbr[m - 1],
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+                          color: (year == now.year && m == now.month) ? _orange : ctx.textPrimary))),
+                ),
+              ),
+          ]),
+        ),
+      )),
+    );
+  }
+
   // Period chooser → calendar-based Expense Report PDF (also respects the
   // active category filter).
   Future<void> _downloadReport() async {
@@ -265,16 +309,45 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               trailing: const Icon(Icons.chevron_right_rounded, size: 20),
               onTap: () => Navigator.pop(ctx, p),
             ),
+          // A specific calendar month by name — a backdated expense (entered
+          // today, dated 13 May) belongs to May's report, so any month must
+          // be reachable, not just the rolling presets above.
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.event_outlined, color: _orange, size: 22),
+            title: const Text('Choose Month…', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+            subtitle: Text('Pick any month by name, e.g. May 2026',
+                style: TextStyle(fontSize: 11.5, color: ctx.textHint, fontWeight: FontWeight.w500)),
+            trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+            onTap: () async {
+              final picked = await _pickMonth(ctx);
+              if (picked != null && ctx.mounted) {
+                Navigator.pop(ctx, 'month:${picked.year}-${picked.month}');
+              }
+            },
+          ),
         ]),
       ),
     );
     if (period == null || !mounted) return;
 
+    // 'month:YYYY-M' → that exact calendar month.
+    DateTime? pickedMonth;
+    if (period.startsWith('month:')) {
+      final parts = period.substring(6).split('-');
+      pickedMonth = DateTime(int.parse(parts[0]), int.parse(parts[1]));
+    }
+
     setState(() => _downloadingReport = true);
     try {
       final now = DateTime.now();
-      // Calendar boundaries, not rolling windows.
+      // Calendar boundaries, not rolling windows. Matching is on the EXPENSE
+      // date (the one entered in the form), so backdated entries land in
+      // their own month.
       bool inPeriod(DateTime? dt) {
+        if (pickedMonth != null) {
+          return dt != null && dt.year == pickedMonth.year && dt.month == pickedMonth.month;
+        }
         if (dt == null) return period == 'All Time';
         switch (period) {
           case 'This Month':
@@ -291,6 +364,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       const monthNames = ['January','February','March','April','May','June','July',
         'August','September','October','November','December'];
       String periodLabel;
+      if (pickedMonth != null) {
+        periodLabel = '${monthNames[pickedMonth.month - 1]} ${pickedMonth.year}';
+      } else
       switch (period) {
         case 'This Month':
           periodLabel = '${monthNames[now.month - 1]} ${now.year}';
