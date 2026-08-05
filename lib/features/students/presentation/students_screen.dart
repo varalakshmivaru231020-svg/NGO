@@ -185,22 +185,31 @@ class _StudentsScreenState extends State<StudentsScreen> {
     setState(() { _loading = true; _error = null; });
     _loadCategoryLabels();
     try {
-      final results = await Future.wait([
-        apiClient.get('/students', params: {'limit': '100', 'page': '1'}),
-        apiClient.get('/students/centers'),
-      ]);
+      // Students paged to the end — one page capped the list at 100 children
+      // and made older ones look deleted.
+      Future<List<dynamic>> fetchAllStudents() async {
+        final all = <dynamic>[];
+        for (int page = 1; page <= 50; page++) {
+          final r = await apiClient.get('/students', params: {'limit': '100', 'page': '$page'});
+          final pageList = (r['data'] as List<dynamic>? ?? []);
+          all.addAll(pageList);
+          final meta = r['meta'] as Map?;
+          if (meta?['hasNext'] != true || pageList.isEmpty) break;
+        }
+        return all;
+      }
 
-      final sRes = results[0];
-      final sList = (sRes['data'] as List<dynamic>? ?? []);
+      final studentsFuture = fetchAllStudents();
+      final cRes0 = await apiClient.get('/students/centers');
+      final sList = await studentsFuture;
       // Cache the raw records so the detail screen resolves the right student.
       loadedStudents
         ..clear()
         ..addAll(sList.map((e) => (e as Map).cast<String, dynamic>()));
       final students = sList.map((e) => _Student.fromJson(e as Map<String, dynamic>)).toList();
 
-      final cRes = results[1];
-      final cList = (cRes['data'] as List<dynamic>? ?? (cRes is List ? cRes : []));
-      final centres = (cList as List<dynamic>).map<({String id, String name})>((c) {
+      final cList = (cRes0['data'] as List<dynamic>? ?? []);
+      final centres = cList.map<({String id, String name})>((c) {
         final m = c as Map<String, dynamic>;
         return (id: m['id'] as String, name: m['name'] as String);
       }).toList();

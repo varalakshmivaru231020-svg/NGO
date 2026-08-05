@@ -140,14 +140,26 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
     )).toList();
   }
 
+  // Every donor, paged — a one-page fetch hid donor #101+ from the sponsor
+  // picker (the backend caps limit at 100).
+  static Future<List<dynamic>> _fetchAllDonors() async {
+    final all = <dynamic>[];
+    for (int page = 1; page <= 50; page++) {
+      final r = await apiClient.get('/donors', params: {'limit': '100', 'page': '$page'});
+      final inner = r['data'];
+      final list = inner is List ? inner : <dynamic>[];
+      all.addAll(list);
+      final meta = r['meta'] as Map?;
+      if (meta?['hasNext'] != true || list.isEmpty) break;
+    }
+    return all;
+  }
+
   Future<void> _loadFormData() async {
     try {
-      final results = await Future.wait([
-        apiClient.get('/students/centers'),
-        apiClient.get('/donors', params: {'limit': '100', 'page': '1'}),
-      ]);
+      final donorsFuture = _fetchAllDonors();
+      final cRaw = await apiClient.get('/students/centers');
 
-      final cRaw  = results[0];
       final cData = cRaw['data'];
       final cList = cData is List ? cData as List<dynamic> : <dynamic>[];
       final centres = cList.map<({String id, String name})>((c) {
@@ -155,9 +167,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         return (id: m['id'] as String, name: m['name'] as String);
       }).toList();
 
-      final dRes  = results[1];
-      final dData = dRes['data'];
-      final dList = dData is List ? dData as List<dynamic> : <dynamic>[];
+      final dList = await donorsFuture;
       final donors = dList.map<({String id, String name, String city, String phone})>((d) {
         final m = d as Map<String, dynamic>;
         return (id: m['id'] as String? ?? '', name: m['name'] as String? ?? '', city: m['city'] as String? ?? '',

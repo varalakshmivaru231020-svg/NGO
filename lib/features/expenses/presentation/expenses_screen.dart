@@ -122,15 +122,18 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final r = await apiClient.get('/expenses', params: {'limit': '50', 'page': '1'});
-      final inner = r['data'];
-      List<dynamic> list;
-      if (inner is Map) {
-        list = inner['data'] as List<dynamic>? ?? [];
-      } else if (inner is List) {
-        list = inner;
-      } else {
-        list = [];
+      // Paged to the end — a single page capped the list at 50 and made older
+      // vouchers look deleted.
+      final list = <dynamic>[];
+      for (int page = 1; page <= 50; page++) {
+        final r = await apiClient.get('/expenses', params: {'limit': '100', 'page': '$page'});
+        final pageInner = r['data'];
+        final pageList = pageInner is Map
+            ? (pageInner['data'] as List<dynamic>? ?? [])
+            : (pageInner is List ? pageInner : <dynamic>[]);
+        list.addAll(pageList);
+        final meta = (r['meta'] as Map?) ?? (pageInner is Map ? pageInner['meta'] as Map? : null);
+        if (meta?['hasNext'] != true || pageList.isEmpty) break;
       }
       final apiExpenses = list.map((j) => _Expense.fromApi(j as Map<String, dynamic>)).toList();
       // The logged-in user's own submissions awaiting approval — shown at the

@@ -157,8 +157,17 @@ final donorsProvider = FutureProvider<List<_Donor>>((ref) async {
   ref.watch(donorRefreshProvider); // re-run whenever refresh counter changes
   final pending = await _loadMyPendingDonors();
   try {
-    final res = await apiClient.get('/donors', params: {'limit': '100', 'page': '1'});
-    final list = (res['data'] as List<dynamic>? ?? []);
+    // Page through EVERYTHING — the backend caps limit at 100, and a single
+    // page made donor #101+ vanish from the app (they looked "deleted" even
+    // though the database still had them).
+    final list = <dynamic>[];
+    for (int page = 1; page <= 50; page++) {
+      final res = await apiClient.get('/donors', params: {'limit': '100', 'page': '$page'});
+      final data = (res['data'] as List<dynamic>? ?? []);
+      list.addAll(data);
+      final meta = res['meta'] as Map<String, dynamic>?;
+      if (meta?['hasNext'] != true || data.isEmpty) break;
+    }
     // Backend is the source of truth even when empty (clean DB = empty list).
     return [
       ...pending,

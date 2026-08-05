@@ -116,17 +116,28 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     )).toList();
   }
 
+  // Every donor, paged — the backend caps limit at 100, and a one-page fetch
+  // hid donor #101+ from this picker.
+  static Future<List<dynamic>> _fetchAllDonors() async {
+    final all = <dynamic>[];
+    for (int page = 1; page <= 50; page++) {
+      final r = await apiClient.get('/donors', params: {'limit': '100', 'page': '$page'});
+      final inner = r['data'];
+      final list = inner is Map ? (inner['data'] as List? ?? []) : (inner as List? ?? []);
+      all.addAll(list);
+      final meta = (r['meta'] as Map?) ?? (inner is Map ? inner['meta'] as Map? : null);
+      if (meta?['hasNext'] != true || list.isEmpty) break;
+    }
+    return all;
+  }
+
   Future<void> _loadFormData() async {
     try {
-      final results = await Future.wait([
-        apiClient.get('/donors', params: {'limit': '100'}),
-        apiClient.get('/donations/types'),
-      ]);
+      final donorsFuture = _fetchAllDonors();
+      final tRes = await apiClient.get('/donations/types');
 
       // Parse donors
-      final dRes = results[0];
-      final dInner = dRes['data'];
-      List<dynamic> dList = dInner is Map ? (dInner['data'] as List? ?? []) : (dInner as List? ?? []);
+      final List<dynamic> dList = await donorsFuture;
       var donors = dList.map<({String id, String name, String city, String tier, String mobile, String email, String pan, String address, String state, String pincode, String country})>((d) {
         final m = d as Map<String, dynamic>;
         return (id: m['id'] as String? ?? '', name: m['name'] as String? ?? '', city: m['city'] as String? ?? '', tier: m['tier'] as String? ?? 'SILVER', mobile: m['mobile'] as String? ?? m['phone'] as String? ?? '', email: m['email'] as String? ?? '', pan: m['pan'] as String? ?? '', address: m['address'] as String? ?? '', state: m['state'] as String? ?? '', pincode: m['pincode'] as String? ?? '', country: m['country'] as String? ?? '');
@@ -136,7 +147,6 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       donors = [..._fallbackDonors(), ...donors];
 
       // Parse donation types
-      final tRes = results[1];
       final tInner = tRes['data'];
       List<dynamic> tList = tInner is List ? tInner : (tInner is Map ? (tInner['data'] as List? ?? []) : []);
       final labelToId = <String, String>{};

@@ -181,18 +181,21 @@ class _DonationsScreenState extends State<DonationsScreen> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final r = await apiClient.get('/donations', params: {
-        'limit': '50', 'page': '1',
-        if (_search.isNotEmpty) 'search': _search,
-      });
-      final inner = r['data'];
-      List<dynamic> list;
-      if (inner is Map) {
-        list = inner['data'] as List<dynamic>? ?? [];
-      } else if (inner is List) {
-        list = inner;
-      } else {
-        list = [];
+      // Paged to the end — a single page capped the list and made older
+      // donations look deleted once the count passed the page size.
+      final list = <dynamic>[];
+      for (int page = 1; page <= 50; page++) {
+        final r = await apiClient.get('/donations', params: {
+          'limit': '100', 'page': '$page',
+          if (_search.isNotEmpty) 'search': _search,
+        });
+        final pageInner = r['data'];
+        final pageList = pageInner is Map
+            ? (pageInner['data'] as List<dynamic>? ?? [])
+            : (pageInner is List ? pageInner : <dynamic>[]);
+        list.addAll(pageList);
+        final meta = (r['meta'] as Map?) ?? (pageInner is Map ? pageInner['meta'] as Map? : null);
+        if (meta?['hasNext'] != true || pageList.isEmpty) break;
       }
       // Backend is the source of truth even when empty (clean DB = empty list).
       final apiDonations = list.map((j) => _Donation.fromApi(j as Map<String, dynamic>)).toList();

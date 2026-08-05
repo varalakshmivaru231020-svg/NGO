@@ -229,7 +229,18 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
 
   Future<List<Map<String, dynamic>>> _fetchDonors() async {
     try {
-      final res = await apiClient.get('/donors', params: {'limit': '100'});
+      // Paged — a single page hid donor #101+ from the sponsor picker.
+      final all = <dynamic>[];
+      Map<String, dynamic> res = const {};
+      for (int page = 1; page <= 50; page++) {
+        res = await apiClient.get('/donors', params: {'limit': '100', 'page': '$page'});
+        final inner = res['data'];
+        final pageList = inner is List ? inner : <dynamic>[];
+        all.addAll(pageList);
+        final meta = res['meta'] as Map?;
+        if (meta?['hasNext'] != true || pageList.isEmpty) break;
+      }
+      res = {'data': all};
       final inner = res['data'];
       final list = inner is List ? inner : (inner is Map ? (inner['data'] as List? ?? const []) : const []);
       return list.map((e) => (e as Map).cast<String, dynamic>()).toList();
