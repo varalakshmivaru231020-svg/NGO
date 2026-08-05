@@ -189,7 +189,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
       // and made older ones look deleted.
       Future<List<dynamic>> fetchAllStudents() async {
         final all = <dynamic>[];
-        for (int page = 1; page <= 50; page++) {
+        for (int page = 1; ; page++) {
           final r = await apiClient.get('/students', params: {'limit': '100', 'page': '$page'});
           final pageList = (r['data'] as List<dynamic>? ?? []);
           all.addAll(pageList);

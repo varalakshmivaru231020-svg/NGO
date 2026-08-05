@@ -120,7 +120,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
   // hid donor #101+ from this picker.
   static Future<List<dynamic>> _fetchAllDonors() async {
     final all = <dynamic>[];
-    for (int page = 1; page <= 50; page++) {
+    for (int page = 1; ; page++) {
       final r = await apiClient.get('/donors', params: {'limit': '100', 'page': '$page'});
       final inner = r['data'];
       final list = inner is Map ? (inner['data'] as List? ?? []) : (inner as List? ?? []);

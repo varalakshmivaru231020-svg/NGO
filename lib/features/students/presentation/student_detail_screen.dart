@@ -232,7 +232,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
       // Paged — a single page hid donor #101+ from the sponsor picker.
       final all = <dynamic>[];
       Map<String, dynamic> res = const {};
-      for (int page = 1; page <= 50; page++) {
+      for (int page = 1; ; page++) {
         res = await apiClient.get('/donors', params: {'limit': '100', 'page': '$page'});
         final inner = res['data'];
         final pageList = inner is List ? inner : <dynamic>[];

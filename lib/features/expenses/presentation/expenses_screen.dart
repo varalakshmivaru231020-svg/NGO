@@ -125,7 +125,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       // Paged to the end — a single page capped the list at 50 and made older
       // vouchers look deleted.
       final list = <dynamic>[];
-      for (int page = 1; page <= 50; page++) {
+      for (int page = 1; ; page++) {
         final r = await apiClient.get('/expenses', params: {'limit': '100', 'page': '$page'});
         final pageInner = r['data'];
         final pageList = pageInner is Map
@@ -387,7 +387,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       var all = _real;
       try {
         final fetched = <_Expense>[];
-        for (int page = 1; page <= 10; page++) {
+        for (int page = 1; ; page++) {
           final r = await apiClient.get('/expenses', params: {'limit': '100', 'page': '$page'});
           final inner = r['data'];
           final list = inner is Map ? (inner['data'] as List? ?? const []) : (inner is List ? inner : const []);

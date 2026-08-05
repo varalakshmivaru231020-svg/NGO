@@ -161,7 +161,7 @@ final donorsProvider = FutureProvider<List<_Donor>>((ref) async {
     // page made donor #101+ vanish from the app (they looked "deleted" even
     // though the database still had them).
     final list = <dynamic>[];
-    for (int page = 1; page <= 50; page++) {
+    for (int page = 1; ; page++) {
       final res = await apiClient.get('/donors', params: {'limit': '100', 'page': '$page'});
       final data = (res['data'] as List<dynamic>? ?? []);
       list.addAll(data);

@@ -1796,7 +1796,7 @@ class _ExportDataState extends State<ExportDataScreen> {
   Future<List<Map<String, dynamic>>> _fetchList(String path) async {
     final all = <Map<String, dynamic>>[];
     try {
-      for (int page = 1; page <= 10; page++) {
+      for (int page = 1; ; page++) {
         final r = await apiClient.get(path, params: {'limit': '100', 'page': '$page'});
         final inner = r['data'];
         final list = inner is Map ? (inner['data'] as List? ?? const []) : (inner is List ? inner : const []);

@@ -144,7 +144,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   // picker (the backend caps limit at 100).
   static Future<List<dynamic>> _fetchAllDonors() async {
     final all = <dynamic>[];
-    for (int page = 1; page <= 50; page++) {
+    for (int page = 1; ; page++) {
       final r = await apiClient.get('/donors', params: {'limit': '100', 'page': '$page'});
       final inner = r['data'];
       final list = inner is List ? inner : <dynamic>[];

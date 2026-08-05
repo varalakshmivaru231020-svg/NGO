@@ -184,7 +184,7 @@ class _DonationsScreenState extends State<DonationsScreen> {
       // Paged to the end — a single page capped the list and made older
       // donations look deleted once the count passed the page size.
       final list = <dynamic>[];
-      for (int page = 1; page <= 50; page++) {
+      for (int page = 1; ; page++) {
         final r = await apiClient.get('/donations', params: {
           'limit': '100', 'page': '$page',
           if (_search.isNotEmpty) 'search': _search,
