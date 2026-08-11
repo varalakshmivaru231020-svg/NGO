@@ -15,7 +15,8 @@ const _orgName = 'SRI KRISHNASHRAYA EDUCATIONAL TRUST';
 const _orgCity = 'Bengaluru, Karnataka, India';
 const _orgFooter =
     'Sri Krishnashraya Educational Trust  •  No. 50, 2nd cross, Ripco Shanthinikethan layout, '
-    'Near SJES College, Medahalli, Virgo Nagar Post, Bengaluru – 560049';
+    // ASCII only — Helvetica silently drops an en dash from the PDF.
+    'Near SJES College, Medahalli, Virgo Nagar Post, Bengaluru - 560049';
 
 class StudentAchievementRow {
   const StudentAchievementRow({required this.date, required this.title, required this.category});

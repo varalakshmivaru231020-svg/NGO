@@ -75,7 +75,9 @@ const _modeLabels = {
 };
 
 const _orgAddress = 'No. 50, 2nd cross, Ripco Shanthinikethan layout, near SJES College, Medahalli, '
-    'Virgo Nagar Post, Bangalore – 560049. Mob: 9986064411, 9620794141. '
+    // ASCII only: the built-in Helvetica has no Unicode support, so an en dash
+    // is dropped from the PDF and prints as a gap.
+    'Virgo Nagar Post, Bangalore - 560049. Mob: 9986064411, 9620794141. '
     'Email: aakrishnashraya@gmail.com Website: www.krishnashraya.in';
 
 const _statutoryLine = 'Trust PAN: AATTS6672D  |  12AA Registration: AATTS6672D25BL01  |  80G Certification: AATTS6672D25BL02';
@@ -218,7 +220,7 @@ Future<Uint8List> buildVoucherPdf(ExpenseVoucher v) async {
           padding: const pw.EdgeInsets.fromLTRB(20, 0, 20, 10),
           child: pw.Container(
             width: double.infinity,
-            child: pw.Text('This is an internal payment voucher. Electronically generated — no signature required unless printed.',
+            child: pw.Text('This is an internal payment voucher. Electronically generated - no signature required unless printed.',
                 textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 7, color: grey)),
           ),
         ),
