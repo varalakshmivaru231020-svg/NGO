@@ -108,6 +108,17 @@ async function bootstrap() {
   // __dirname here is dist/src (this file always runs compiled — both
   // `nest start --watch` and production run node against dist/src/main.js),
   // so the project root is two levels up, not one.
+  // ── Downloadable files (the Android APK) ───────────────────────────────
+  // Deliberately public/downloads and NOT public/web: deploys swap the whole
+  // web folder out, so anything parked in there is lost on the next release.
+  // Mounted before the SPA fallback below, which would otherwise answer these
+  // paths with index.html.
+  const downloadsPath = join(__dirname, '..', '..', 'public', 'downloads');
+  if (existsSync(downloadsPath)) {
+    app.use('/download', expressStatic(downloadsPath));
+    console.log(`⬇️  Downloads  → serving from ${downloadsPath}`);
+  }
+
   const webBuildPath = configService.get<string>('WEB_BUILD_PATH')
     ?? join(__dirname, '..', '..', 'public', 'web');
   if (existsSync(join(webBuildPath, 'index.html'))) {
