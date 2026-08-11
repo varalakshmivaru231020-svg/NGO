@@ -12,8 +12,11 @@ import 'package:pdf/widgets.dart' as pw;
 const _statutoryLine =
     'Trust PAN: AATTS6672D  |  12AA Registration: AATTS6672D25BL01  |  80G Certification: AATTS6672D25BL02';
 const _orgName = 'Sri Krishnashraya Educational Trust';
+// ASCII hyphens only: the built-in Helvetica has no Unicode support, so an
+// en/em dash is silently dropped and prints as a gap (same reason the amounts
+// say "Rs." instead of the rupee glyph).
 const _orgAddress = 'No. 50, 2nd cross, Ripco Shanthinikethan layout, near SJES College, Medahalli, '
-    'Virgo Nagar Post, Bangalore – 560049. Mob: 9986064411, 9620794141. '
+    'Virgo Nagar Post, Bangalore - 560049. Mob: 9986064411, 9620794141. '
     'Email: aakrishnashraya@gmail.com Website: www.krishnashraya.in';
 
 class ExpenseReportRow {
@@ -103,65 +106,80 @@ Future<Uint8List> buildExpenseReportPdf({
         style: pw.TextStyle(fontSize: 8.5, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: dark)),
   );
 
+  // Each entry below is a TOP-LEVEL MultiPage child. They must NOT be wrapped
+  // in one outer Column: Column is not a SpanningWidget, so a month with more
+  // vouchers than fit on one A4 page made MultiPage throw ("Widget won't fit
+  // into the page…") and the download failed with "Could not generate the
+  // report". As separate children the voucher Table (which IS spanning) flows
+  // onto as many pages as it needs.
   doc.addPage(pw.MultiPage(
     pageFormat: PdfPageFormat.a4,
     margin: const pw.EdgeInsets.fromLTRB(36, 30, 36, 30),
-    build: (ctx) => [pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-      // Header: logo + org lockup (left) | title (right)
-      pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-        pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-          pw.Image(logo, height: 58),
-          pw.SizedBox(height: 6),
-          pw.Text(_orgName, style: pw.TextStyle(fontSize: 10, color: dark)),
-          pw.Text('(Registered Charitable Trust)', style: pw.TextStyle(fontSize: 8.5, color: grey)),
+    footer: (ctx) => pw.Container(
+      alignment: pw.Alignment.centerRight,
+      margin: const pw.EdgeInsets.only(top: 8),
+      child: pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+          style: pw.TextStyle(fontSize: 7.5, color: grey)),
+    ),
+    build: (ctx) => [
+      // Header: logo + org lockup (left) | title (right), then the address bar.
+      pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+          pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Image(logo, height: 58),
+            pw.SizedBox(height: 6),
+            pw.Text(_orgName, style: pw.TextStyle(fontSize: 10, color: dark)),
+            pw.Text('(Registered Charitable Trust)', style: pw.TextStyle(fontSize: 8.5, color: grey)),
+          ]),
+          pw.Expanded(child: pw.Align(
+            alignment: pw.Alignment.topRight,
+            child: pw.Text('EXPENSE REPORT',
+                style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: dark, letterSpacing: 0.2,
+                    decoration: pw.TextDecoration.underline, decorationColor: dark, decorationThickness: 1.2)),
+          )),
         ]),
-        pw.Expanded(child: pw.Align(
-          alignment: pw.Alignment.topRight,
-          child: pw.Text('EXPENSE REPORT',
-              style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: dark, letterSpacing: 0.2,
-                  decoration: pw.TextDecoration.underline, decorationColor: dark, decorationThickness: 1.2)),
-        )),
+        pw.SizedBox(height: 14),
+        pw.Container(
+          width: double.infinity, color: orange,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: pw.Text(_orgAddress, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: white)),
+        ),
+        pw.SizedBox(height: 16),
+
+        // ── REPORT DETAILS ───────────────────────────────────────────
+        sectionBar('REPORT DETAILS'),
+        pw.Table(columnWidths: const {
+          0: pw.FlexColumnWidth(1.3), 1: pw.FlexColumnWidth(2.0),
+          2: pw.FlexColumnWidth(1.3), 3: pw.FlexColumnWidth(2.0),
+        }, children: [
+          pw.TableRow(children: [
+            pw.Padding(padding: const pw.EdgeInsets.fromLTRB(10, 8, 4, 8),
+                child: pw.Text('Period', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: dark))),
+            pw.Padding(padding: const pw.EdgeInsets.fromLTRB(4, 8, 10, 8),
+                child: pw.Text(periodLabel, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: dark))),
+            pw.Padding(padding: const pw.EdgeInsets.fromLTRB(10, 8, 4, 8),
+                child: pw.Text('Generated On', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: dark))),
+            pw.Padding(padding: const pw.EdgeInsets.fromLTRB(4, 8, 10, 8),
+                child: pw.Text(generatedOn, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: dark))),
+          ]),
+          pw.TableRow(decoration: pw.BoxDecoration(color: bgStripe), children: [
+            pw.Padding(padding: const pw.EdgeInsets.fromLTRB(10, 8, 4, 8),
+                child: pw.Text('Total Expenses', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: dark))),
+            pw.Padding(padding: const pw.EdgeInsets.fromLTRB(4, 8, 10, 8),
+                child: pw.Text('${rows.length}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: dark))),
+            pw.Padding(padding: const pw.EdgeInsets.fromLTRB(10, 8, 4, 8),
+                child: pw.Text('Category', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: dark))),
+            pw.Padding(padding: const pw.EdgeInsets.fromLTRB(4, 8, 10, 8),
+                child: pw.Text(categoryFilter, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: dark))),
+          ]),
+        ]),
+        pw.SizedBox(height: 16),
+        sectionBar('EXPENSE DETAILS'),
       ]),
-      pw.SizedBox(height: 14),
 
-      pw.Container(
-        width: double.infinity, color: orange,
-        padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: pw.Text(_orgAddress, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: white)),
-      ),
-      pw.SizedBox(height: 16),
-
-      // ── REPORT DETAILS ─────────────────────────────────────────────
-      sectionBar('REPORT DETAILS'),
-      pw.Table(columnWidths: const {
-        0: pw.FlexColumnWidth(1.3), 1: pw.FlexColumnWidth(2.0),
-        2: pw.FlexColumnWidth(1.3), 3: pw.FlexColumnWidth(2.0),
-      }, children: [
-        pw.TableRow(children: [
-          pw.Padding(padding: const pw.EdgeInsets.fromLTRB(10, 8, 4, 8),
-              child: pw.Text('Period', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: dark))),
-          pw.Padding(padding: const pw.EdgeInsets.fromLTRB(4, 8, 10, 8),
-              child: pw.Text(periodLabel, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: dark))),
-          pw.Padding(padding: const pw.EdgeInsets.fromLTRB(10, 8, 4, 8),
-              child: pw.Text('Generated On', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: dark))),
-          pw.Padding(padding: const pw.EdgeInsets.fromLTRB(4, 8, 10, 8),
-              child: pw.Text(generatedOn, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: dark))),
-        ]),
-        pw.TableRow(decoration: pw.BoxDecoration(color: bgStripe), children: [
-          pw.Padding(padding: const pw.EdgeInsets.fromLTRB(10, 8, 4, 8),
-              child: pw.Text('Total Expenses', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: dark))),
-          pw.Padding(padding: const pw.EdgeInsets.fromLTRB(4, 8, 10, 8),
-              child: pw.Text('${rows.length}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: dark))),
-          pw.Padding(padding: const pw.EdgeInsets.fromLTRB(10, 8, 4, 8),
-              child: pw.Text('Category', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: dark))),
-          pw.Padding(padding: const pw.EdgeInsets.fromLTRB(4, 8, 10, 8),
-              child: pw.Text(categoryFilter, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: dark))),
-        ]),
-      ]),
-      pw.SizedBox(height: 16),
-
-      // ── EXPENSE DETAILS ────────────────────────────────────────────
-      sectionBar('EXPENSE DETAILS'),
+      // ── EXPENSE DETAILS ──────────────────────────────────────────────
+      // Own top-level child so it can span pages; the column header row is
+      // repeated at the top of every page it flows onto.
       if (rows.isEmpty)
         pw.Padding(padding: const pw.EdgeInsets.all(14),
             child: pw.Text('No expenses recorded for this period.', style: pw.TextStyle(fontSize: 9.5, color: grey)))
@@ -173,7 +191,7 @@ Future<Uint8List> buildExpenseReportPdf({
             6: pw.FlexColumnWidth(1.3),
           },
           children: [
-            pw.TableRow(decoration: pw.BoxDecoration(color: bgStripe), children: [
+            pw.TableRow(repeat: true, decoration: pw.BoxDecoration(color: bgStripe), children: [
               th('Sl.No'), th('Date'), th('Voucher No.'), th('Paid To'),
               th('Category'), th('Mode'), th('Amount (Rs.)', align: pw.TextAlign.right),
             ]),
@@ -189,58 +207,62 @@ Future<Uint8List> buildExpenseReportPdf({
         ),
       pw.SizedBox(height: 16),
 
-      // ── CATEGORY BREAKDOWN ─────────────────────────────────────────
+      // ── CATEGORY BREAKDOWN ───────────────────────────────────────────
       if (catEntries.isNotEmpty) ...[
         sectionBar('CATEGORY BREAKDOWN'),
         pw.Table(
           columnWidths: const {0: pw.FlexColumnWidth(3), 1: pw.FlexColumnWidth(1.4), 2: pw.FlexColumnWidth(1.2)},
           children: [
-            pw.TableRow(decoration: pw.BoxDecoration(color: bgStripe), children: [
+            pw.TableRow(repeat: true, decoration: pw.BoxDecoration(color: bgStripe), children: [
               th('Category'), th('Amount (Rs.)', align: pw.TextAlign.right), th('Share', align: pw.TextAlign.right),
             ]),
             ...catEntries.map((e) => pw.TableRow(children: [
               td(e.key),
               td(_fmt(e.value), bold: true, align: pw.TextAlign.right),
-              td(total > 0 ? '${(e.value * 100 / total).round()}%' : '—', align: pw.TextAlign.right),
+              td(total > 0 ? '${(e.value * 100 / total).round()}%' : '-', align: pw.TextAlign.right),
             ])),
           ],
         ),
         pw.SizedBox(height: 16),
       ],
 
-      // ── SUMMARY ────────────────────────────────────────────────────
-      sectionBar('EXPENSE SUMMARY'),
-      pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-        child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-          pw.Text('Total Spent', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: dark)),
-          pw.Text('Rs. ${_fmt(total)}.00', style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold, color: orange)),
-        ]),
-      ),
-      pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(horizontal: 4),
-        child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-          pw.Text('AMOUNT IN WORDS', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: grey, letterSpacing: 0.3)),
-          pw.SizedBox(height: 3),
-          pw.Text(_amountInWords(total), style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: orange)),
-        ]),
-      ),
+      // ── SUMMARY ──────────────────────────────────────────────────────
+      pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        sectionBar('EXPENSE SUMMARY'),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+          child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+            pw.Text('Total Spent', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: dark)),
+            pw.Text('Rs. ${_fmt(total)}.00', style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold, color: orange)),
+          ]),
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 4),
+          child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Text('AMOUNT IN WORDS', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: grey, letterSpacing: 0.3)),
+            pw.SizedBox(height: 3),
+            pw.Text(_amountInWords(total), style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: orange)),
+          ]),
+        ),
+      ]),
       pw.SizedBox(height: 20),
 
-      // ── Statutory footer ───────────────────────────────────────────
-      sectionBar('STATUTORY REGISTRATION DETAILS'),
-      pw.Container(
-        width: double.infinity,
-        color: bgStripe,
-        padding: const pw.EdgeInsets.fromLTRB(12, 10, 12, 10),
-        child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-          pw.Text(_statutoryLine, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: dark)),
-          pw.SizedBox(height: 5),
-          pw.Text('This is an electronically generated internal expense report. No signature is required.',
-              style: pw.TextStyle(fontSize: 7.5, color: grey)),
-        ]),
-      ),
-    ])],
+      // ── Statutory footer ─────────────────────────────────────────────
+      pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        sectionBar('STATUTORY REGISTRATION DETAILS'),
+        pw.Container(
+          width: double.infinity,
+          color: bgStripe,
+          padding: const pw.EdgeInsets.fromLTRB(12, 10, 12, 10),
+          child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Text(_statutoryLine, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: dark)),
+            pw.SizedBox(height: 5),
+            pw.Text('This is an electronically generated internal expense report. No signature is required.',
+                style: pw.TextStyle(fontSize: 7.5, color: grey)),
+          ]),
+        ),
+      ]),
+    ],
   ));
   return doc.save();
 }

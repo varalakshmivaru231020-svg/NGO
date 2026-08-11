@@ -1957,38 +1957,46 @@ class _ExportDataState extends State<ExportDataScreen> {
     final dark   = PdfColor.fromInt(0xFF1F2937);
     final grey   = PdfColor.fromInt(0xFF6B7280);
 
-    pw.Widget section(String title, ({List<String> headers, List<List<String>> rows}) t) => pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.SizedBox(height: 16),
-        pw.Text(title, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: dark)),
-        pw.SizedBox(height: 6),
-        pw.TableHelper.fromTextArray(
-          headers: t.headers,
-          data: t.rows,
-          headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-          headerDecoration: pw.BoxDecoration(color: orange),
-          cellStyle: const pw.TextStyle(fontSize: 8),
-          cellHeight: 22,
-          cellAlignment: pw.Alignment.centerLeft,
-        ),
-      ],
-    );
+    // Returns the title and the table as SEPARATE top-level MultiPage children.
+    // Wrapping them in a Column would make the section one non-spanning widget,
+    // and any export taller than a page then loops adding blank pages instead
+    // of flowing the table over (Column is not a SpanningWidget; Table is).
+    List<pw.Widget> section(String title, ({List<String> headers, List<List<String>> rows}) t) => [
+      pw.SizedBox(height: 16),
+      pw.Text(title, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: dark)),
+      pw.SizedBox(height: 6),
+      pw.TableHelper.fromTextArray(
+        headers: t.headers,
+        data: t.rows,
+        headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+        headerDecoration: pw.BoxDecoration(color: orange),
+        cellStyle: const pw.TextStyle(fontSize: 8),
+        cellHeight: 22,
+        cellAlignment: pw.Alignment.centerLeft,
+        headerCount: 1,
+      ),
+    ];
 
     doc.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(28, 28, 28, 28),
+      footer: (ctx) => pw.Container(
+        alignment: pw.Alignment.centerRight,
+        margin: const pw.EdgeInsets.only(top: 8),
+        child: pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+            style: pw.TextStyle(fontSize: 7.5, color: grey)),
+      ),
       build: (ctx) => [
         pw.Text('Sri Krishnashraya Educational Trust', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: dark)),
         pw.Text('Data Export', style: pw.TextStyle(fontSize: 11, color: grey)),
         pw.SizedBox(height: 4),
         pw.Text('Range: $_range   |   Generated: ${DateTime.now().toString().substring(0, 16)}',
             style: pw.TextStyle(fontSize: 9, color: grey)),
-        if (_donors) section('Donors', _donorRows(donors)),
-        if (_donations) section('Donations', _donationRows(donations)),
-        if (_expenses) section('Expenses', _expenseRows(expenses)),
-        if (_students) section('Students', _studentRows(students)),
-        if (_reports && overview != null) section('Summary', _summaryRows(overview)),
+        if (_donors) ...section('Donors', _donorRows(donors)),
+        if (_donations) ...section('Donations', _donationRows(donations)),
+        if (_expenses) ...section('Expenses', _expenseRows(expenses)),
+        if (_students) ...section('Students', _studentRows(students)),
+        if (_reports && overview != null) ...section('Summary', _summaryRows(overview)),
       ],
     ));
     return doc.save();

@@ -375,7 +375,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           periodLabel = '${monthNames[now.month - 1]} ${now.year}';
         case 'Last 3 Months':
           final start = DateTime(now.year, now.month - 2, 1);
-          periodLabel = '${monthNames[start.month - 1]} ${start.year} – ${monthNames[now.month - 1]} ${now.year}';
+          // "to", not an en dash — the PDF's Helvetica drops U+2013 silently.
+          periodLabel = '${monthNames[start.month - 1]} ${start.year} to ${monthNames[now.month - 1]} ${now.year}';
         case 'This Year':
           periodLabel = 'Year ${now.year}';
         default:
@@ -393,7 +394,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           final list = inner is Map ? (inner['data'] as List? ?? const []) : (inner is List ? inner : const []);
           fetched.addAll(list.whereType<Map>().map((m) => _Expense.fromApi(m.cast<String, dynamic>())));
           final meta = (r['meta'] as Map?) ?? (inner is Map ? inner['meta'] as Map? : null);
-          if (meta?['hasNext'] != true) break;
+          // `list.isEmpty` also breaks: a meta that always reports hasNext
+          // would otherwise spin here forever with the spinner stuck on.
+          if (meta?['hasNext'] != true || list.isEmpty) break;
         }
         if (fetched.isNotEmpty) all = fetched;
       } catch (_) {}
