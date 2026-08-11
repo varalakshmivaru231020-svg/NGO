@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDonorDto } from './dto/create-donor.dto';
 import { UpdateDonorDto } from './dto/update-donor.dto';
@@ -37,7 +37,52 @@ export class DonorsService {
     return `DID${String(seq).padStart(5, '0')}`;
   }
 
+  // name + mobile together identify a donor. Two people may share a name, and
+  // a family may share one phone, but the pair repeating means the same donor
+  // is being entered twice.
+  private static normName(s: string) {
+    return (s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  private static normMobile(s: string) {
+    return (s ?? '').replace(/\D/g, '');
+  }
+
+  /**
+   * Rejects a second donor with the same name + mobile. Candidates are pulled
+   * on an exact match of EITHER field (both are indexed) and then compared on
+   * their normalised forms, so a difference in spacing/case/punctuation in one
+   * field is still caught via the other. Soft-deleted donors don't reserve the
+   * pair — a deleted donor can be re-added.
+   */
+  private async assertNotDuplicate(name: string, mobile: string, excludeId?: string) {
+    const wantName = DonorsService.normName(name);
+    const wantMobile = DonorsService.normMobile(mobile);
+    if (!wantName || !wantMobile) return;
+
+    const candidates = await this.prisma.donor.findMany({
+      where: {
+        isActive: true,
+        OR: [{ name: (name ?? '').trim() }, { mobile: (mobile ?? '').trim() }],
+      },
+      select: { id: true, name: true, mobile: true, donorCode: true },
+    });
+
+    const clash = candidates.find(
+      (d) =>
+        d.id !== excludeId &&
+        DonorsService.normName(d.name) === wantName &&
+        DonorsService.normMobile(d.mobile) === wantMobile,
+    );
+    if (clash) {
+      throw new ConflictException(
+        `${clash.name} with mobile ${clash.mobile} is already added (${clash.donorCode}).`,
+      );
+    }
+  }
+
   async create(dto: CreateDonorDto) {
+    await this.assertNotDuplicate(dto.name, dto.mobile);
     const { categoryIds, ...data } = dto;
     const donorCode = await this.nextCode();
     return this.prisma.donor.create({
@@ -98,7 +143,11 @@ export class DonorsService {
   }
 
   async update(id: string, dto: UpdateDonorDto) {
-    await this.findOne(id);
+    const current = await this.findOne(id);
+    // Editing must not merge this donor onto an existing name + mobile either.
+    if (dto.name !== undefined || dto.mobile !== undefined) {
+      await this.assertNotDuplicate(dto.name ?? current.name, dto.mobile ?? current.mobile, id);
+    }
     const { categoryIds, ...data } = dto;
     if (categoryIds !== undefined) {
       await this.prisma.donorCategoryMap.deleteMany({ where: { donorId: id } });

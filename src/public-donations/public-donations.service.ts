@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, OnModuleInit, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException, OnModuleInit, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -64,17 +64,35 @@ export class PublicDonationsService implements OnModuleInit {
     }
   }
 
+  /** The donor whose stored number is these digits once punctuation is ignored. */
+  private async findDonorByDigits(name: string, digits: string) {
+    const candidates = await this.prisma.donor.findMany({
+      where: { isActive: true, name: name.trim() },
+      take: 50,
+    });
+    return candidates.find((d) => (d.mobile ?? '').replace(/\D/g, '') === digits) ?? null;
+  }
+
   async initiate(dto: CreatePublicDonationDto) {
     const normalizedMobile = dto.mobile.replace(/\D/g, '');
 
     let donor = await this.prisma.donor.findFirst({ where: { mobile: normalizedMobile } });
     if (!donor) {
-      donor = await this.donorsService.create({
-        name: dto.name,
-        mobile: normalizedMobile,
-        email: dto.email,
-        pan: dto.pan,
-      } as any);
+      try {
+        donor = await this.donorsService.create({
+          name: dto.name,
+          mobile: normalizedMobile,
+          email: dto.email,
+          pan: dto.pan,
+        } as any);
+      } catch (e) {
+        // create() refuses a repeated name + mobile. The lookup above missed
+        // them only because the stored number is formatted differently, so
+        // reuse that donor — a public donation must never fail on this.
+        if (!(e instanceof ConflictException)) throw e;
+        donor = await this.findDonorByDigits(dto.name, normalizedMobile);
+        if (!donor) throw e;
+      }
     }
 
     const typeKey = CAUSE_TO_TYPE_KEY[dto.cause];
