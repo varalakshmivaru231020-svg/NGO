@@ -82,6 +82,9 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
   final Set<String> _commPref = {};
   bool _saving = false;
   Uint8List? _photoBytes;
+  // The already-registered donor this form collides with (same name + mobile),
+  // shown as an inline banner above the form fields.
+  Map<String, dynamic>? _duplicateOf;
 
   // categories loaded from API: name → id
   Map<String, String> _categoryNameToId = {};
@@ -198,9 +201,93 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
     return '${parts[2]}-${parts[1].padLeft(2,'0')}-${parts[0].padLeft(2,'0')}';
   }
 
+  // ── duplicate guard ────────────────────────────────────────────────
+  // name + mobile together identify a donor. The backend rejects a repeat with
+  // 409, but a non-Super-Admin's create is short-circuited into an approval
+  // request before it ever reaches that check — so look for the clash here too
+  // and tell the user straight away instead of queueing a doomed request.
+  static String _normName(String s) => s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  static String _normMobile(String s) => s.replaceAll(RegExp(r'\D'), '');
+
+  Future<Map<String, dynamic>?> _findDuplicate(String name, String mobile) async {
+    final wantName = _normName(name);
+    final wantMobile = _normMobile(mobile);
+    if (wantName.isEmpty || wantMobile.isEmpty) return null;
+
+    bool clashes(Map<String, dynamic> d) =>
+        (d['id'] as String?) != widget.donorId &&
+        _normName(d['name'] as String? ?? '') == wantName &&
+        _normMobile(d['mobile'] as String? ?? '') == wantMobile;
+
+    // Offline-only donors created earlier in this session.
+    for (final d in demoLocalDonors) {
+      if (clashes(d)) return d;
+    }
+
+    // Search on the number AND the name: the stored value may be spaced or
+    // punctuated differently, so whichever field matches exactly surfaces the
+    // record, and the normalised compare above then confirms both fields.
+    try {
+      final results = await Future.wait([
+        apiClient.get('/donors', params: {'search': wantMobile, 'limit': '100'}),
+        apiClient.get('/donors', params: {'search': name.trim(), 'limit': '100'}),
+      ]);
+      for (final res in results) {
+        for (final d in (res['data'] as List<dynamic>? ?? const [])) {
+          if (d is Map && clashes(d.cast<String, dynamic>())) return d.cast<String, dynamic>();
+        }
+      }
+    } catch (_) {
+      // Offline — the backend check still guards the real save.
+    }
+
+    // The user's own submissions still awaiting approval aren't in /donors
+    // yet, so without this the same donor could be queued twice and the clash
+    // would only surface to the Super Admin at approval time.
+    try {
+      final r = await apiClient.get('/approvals/mine');
+      final inner = r['data'];
+      final reqs = inner is List
+          ? inner
+          : (inner is Map ? (inner['data'] as List<dynamic>? ?? const []) : const []);
+      for (final q in reqs.whereType<Map<String, dynamic>>()) {
+        if ((q['module'] as String?)?.toLowerCase() != 'donors' ||
+            (q['action'] as String?)?.toUpperCase() != 'CREATE' ||
+            (q['status'] as String?)?.toUpperCase() != 'PENDING') continue;
+        final payload = (q['payload'] as Map?)?.cast<String, dynamic>() ?? const {};
+        if (_normName(payload['name'] as String? ?? '') == wantName &&
+            _normMobile(payload['mobile'] as String? ?? '') == wantMobile) {
+          return {...payload, 'id': 'pending-${q['id']}', '_pendingApproval': true};
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  void _reportDuplicate(Map<String, dynamic> d) {
+    final code = d['donorCode'] as String?;
+    _toast(
+      context,
+      d['_pendingApproval'] == true
+          ? '${d['name'] ?? 'This donor'} with mobile ${d['mobile'] ?? ''} is already submitted for approval'
+          : '${d['name'] ?? 'This donor'} with mobile ${d['mobile'] ?? ''} is already added'
+              '${code != null && code.isNotEmpty ? ' ($code)' : ''}',
+      error: true,
+    );
+  }
+
   Future<void> _save() async {
     if (!_form.currentState!.validate()) return;
     setState(() => _saving = true);
+
+    final existing = await _findDuplicate(_name.text, _mobile.text);
+    if (existing != null) {
+      if (!mounted) return;
+      setState(() { _saving = false; _duplicateOf = existing; });
+      _reportDuplicate(existing);
+      return;
+    }
+    if (_duplicateOf != null && mounted) setState(() => _duplicateOf = null);
 
     // Only fields the backend CreateDonorDto accepts (others → 400 rejection).
     final avatarB64 = _photoBytes != null ? base64Encode(_photoBytes!) : null;
@@ -246,6 +333,21 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
       final saved = (res['data'] as Map).cast<String, dynamic>();
       savedId = saved['id'] as String? ?? savedId;
     } catch (e) {
+      // 409 = this name + mobile is already registered. A deliberate refusal,
+      // not an outage, so never soften it into a local-only save — that would
+      // create the very duplicate the server just rejected.
+      if (e is DioException && e.response?.statusCode == 409) {
+        if (mounted) {
+          setState(() { _saving = false; _duplicateOf = {'name': _name.text.trim(), 'mobile': _mobile.text.trim()}; });
+          final data = e.response?.data;
+          _toast(context,
+              (data is Map && data['message'] != null)
+                  ? data['message'].toString()
+                  : 'This name and number is already added',
+              error: true);
+        }
+        return;
+      }
       if (_isEditing) {
         // Editing must reflect real backend state — don't fake a local save.
         if (mounted) {
@@ -327,6 +429,16 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+                // Stays put after the toast fades, with a link to the donor
+                // that already holds this name + number.
+                if (_duplicateOf != null) _DuplicateBanner(
+                  donor: _duplicateOf!,
+                  onOpen: () {
+                    final id = _duplicateOf!['id'] as String?;
+                    if (id != null) context.go('/donors/$id');
+                  },
+                ),
 
                 // ── Photo + Personal ──────────────────────────────────
                 _Section(title: 'Personal Information', children: [
@@ -482,6 +594,59 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
             ),
           ),
         ),
+      ]),
+    );
+  }
+}
+
+// ── Duplicate donor banner ────────────────────────────────────────────
+// name + mobile identify a donor; this is what the user sees when the pair is
+// already registered.
+class _DuplicateBanner extends StatelessWidget {
+  const _DuplicateBanner({required this.donor, required this.onOpen});
+  final Map<String, dynamic> donor;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final code = donor['donorCode'] as String? ?? '';
+    final pending = donor['_pendingApproval'] == true;
+    final id = donor['id'] as String?;
+    // Only a real saved donor has a profile to open — local-only and
+    // awaiting-approval entries have no route.
+    final isSaved = id != null && !id.startsWith('local_') && !id.startsWith('pending-');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: _errorColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _errorColor.withValues(alpha: 0.4)),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Icon(Icons.person_off_outlined, color: _errorColor, size: 20),
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(
+              pending
+                  ? 'This name and number is already submitted for approval'
+                  : 'This name and number is already added',
+              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: _errorColor)),
+          const SizedBox(height: 3),
+          Text(
+            '${donor['name'] ?? ''} · ${donor['mobile'] ?? ''}${code.isNotEmpty ? '  ($code)' : ''}',
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textSub),
+          ),
+          if (isSaved) Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: TextButton(
+              onPressed: onOpen,
+              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 30)),
+              child: const Text('Open existing donor',
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: _brand600)),
+            ),
+          ),
+        ])),
       ]),
     );
   }
