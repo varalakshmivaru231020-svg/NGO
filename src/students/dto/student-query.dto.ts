@@ -1,11 +1,11 @@
-import { IsOptional, IsIn, IsString } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 
-const STUDENT_STATUSES = ['ACTIVE', 'INACTIVE', 'GRADUATED', 'DROPPED'] as const;
 
 export class StudentQueryDto extends PaginationDto {
-  @ApiPropertyOptional({ enum: STUDENT_STATUSES }) @IsOptional() @IsIn(STUDENT_STATUSES) status?: string;
+  @ApiPropertyOptional({ description: 'StudentLookup key of type STATUS (Settings → Student Status)' })
+  @IsOptional() @IsString() status?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() centerId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() categoryId?: string;
   @ApiPropertyOptional({ description: 'Only students with an active sponsorship from this donor' })

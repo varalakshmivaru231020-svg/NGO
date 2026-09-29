@@ -26,12 +26,18 @@ import { PublicDonationsModule } from './public-donations/public-donations.modul
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
 
+    // Per-IP budget. It must comfortably cover one busy admin session: the
+    // dashboard alone fires a dozen calls and list screens page through every
+    // record, and an office shares one public IP between all its staff. At
+    // the old 100/min, hitting the cap returned 429s that showed up as zeros
+    // on screen — and a 429 on /auth/refresh signed the user out. Login keeps
+    // its own much tighter limit (see AuthController).
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => [
         {
-          ttl: config.get('THROTTLE_TTL', 60) * 1000,
-          limit: config.get('THROTTLE_LIMIT', 100),
+          ttl: Number(config.get('THROTTLE_TTL', 60)) * 1000,
+          limit: Math.max(Number(config.get('THROTTLE_LIMIT', 1000)), 1000),
         },
       ],
     }),

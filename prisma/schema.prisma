@@ -346,6 +346,27 @@ model StudentCategory {
   @@map("student_categories")
 }
 
+// Admin-managed option lists for students (Settings → Student Status /
+// Education Level). `type` picks the list; Student.status / educationLevel
+// store the stable `key`, so renaming a label never orphans existing rows.
+model StudentLookup {
+  id          String   @id @default(cuid())
+  type        String   // STATUS | EDUCATION_LEVEL
+  key         String
+  label       String
+  description String?  @db.Text
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  // Built-in rows other code depends on (e.g. ACTIVE drives "active
+  // students" counts) — renamable, but never deleted or deactivated.
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@unique([type, key])
+  @@index([type])
+  @@map("student_lookups")
+}
+
 model Student {
   id               String    @id @default(cuid())
   childId          String    @unique
@@ -376,6 +397,7 @@ model Student {
   section          String?
   permanence       String?
   studentType      String?
+  educationLevel   String?   // StudentLookup key (type EDUCATION_LEVEL)
   educationRemarks String?   @db.Text
 
   // Identity / government IDs

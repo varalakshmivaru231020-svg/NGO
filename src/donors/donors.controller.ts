@@ -24,6 +24,9 @@ export class DonorsController {
   @Get() @ApiOperation({ summary: 'List donors' })
   findAll(@Query() q: DonorQueryDto) { return this.svc.findAll(q); }
 
+  @Get(':id/avatar') @ApiOperation({ summary: 'Donor photo only (list rows omit it)' })
+  avatar(@Param('id') id: string) { return this.svc.getAvatar(id); }
+
   @Get(':id') @ApiOperation({ summary: 'Get donor by ID' })
   findOne(@Param('id') id: string) { return this.svc.findOne(id); }
 

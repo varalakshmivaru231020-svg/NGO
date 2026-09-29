@@ -4,7 +4,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CreateStudentDocumentDto } from './create-student-document.dto';
 
 const GENDERS = ['MALE', 'FEMALE', 'OTHER'] as const;
-const STUDENT_STATUSES = ['ACTIVE', 'INACTIVE', 'GRADUATED', 'DROPPED'] as const;
 
 export class CreateStudentDto {
   @ApiProperty() @IsString() name: string;
@@ -15,7 +14,8 @@ export class CreateStudentDto {
   @IsOptional() @IsString() categoryId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() class?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() school?: string;
-  @ApiPropertyOptional({ enum: STUDENT_STATUSES }) @IsOptional() @IsIn(STUDENT_STATUSES) status?: string;
+  @ApiPropertyOptional({ description: 'StudentLookup key of type STATUS (Settings → Student Status)' })
+  @IsOptional() @IsString() status?: string;
   @ApiPropertyOptional({ description: 'Profile photo, base64-encoded' }) @IsOptional() @IsString() photo?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() fatherName?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() motherName?: string;
@@ -34,6 +34,8 @@ export class CreateStudentDto {
   @ApiPropertyOptional() @IsOptional() @IsString() section?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() permanence?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() studentType?: string;
+  @ApiPropertyOptional({ description: 'StudentLookup key of type EDUCATION_LEVEL' })
+  @IsOptional() @IsString() educationLevel?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() educationRemarks?: string;
 
   // Identity / government IDs

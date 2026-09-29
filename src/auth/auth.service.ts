@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/co
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 
@@ -39,10 +40,21 @@ export class AuthService {
     });
   }
 
+  // Rotation with a short grace window: the old token stays usable for
+  // REFRESH_GRACE_MS instead of being deleted outright. Several requests (or
+  // two browser tabs) that hit a 401 at the same moment each try to refresh
+  // with the same token; deleting it on the first call made every other
+  // caller fail and sign the user out mid-work.
   async refresh(userId: string, email: string, role: string, oldToken: string, userAgent?: string) {
-    await this.prisma.refreshToken.deleteMany({ where: { token: oldToken } });
+    const graceUntil = new Date(Date.now() + AuthService.REFRESH_GRACE_MS);
+    await this.prisma.refreshToken.updateMany({
+      where: { token: oldToken, expiresAt: { gt: graceUntil } },
+      data: { expiresAt: graceUntil },
+    });
     return this.generateTokens(userId, email, role, userAgent);
   }
+
+  private static readonly REFRESH_GRACE_MS = 2 * 60 * 1000;
 
   async logout(userId: string, refreshToken: string) {
     // Scoped to the caller — otherwise any authenticated user could revoke
@@ -59,7 +71,10 @@ export class AuthService {
   }
 
   private async generateTokens(userId: string, email: string, role: any, userAgent?: string) {
-    const payload = { sub: userId, email, role };
+    // jti makes every token unique — without it two tokens issued for the
+    // same user in the same second were byte-identical, and the second
+    // insert hit RefreshToken.token's unique index (500 → forced logout).
+    const payload = { sub: userId, email, role, jti: randomUUID() };
 
     const accessToken = this.jwtService.sign(payload, {
       secret: this.configService.get('JWT_SECRET'),

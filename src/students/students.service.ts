@@ -1,4 +1,5 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
@@ -9,11 +10,46 @@ import { CreateGrowthRecordDto } from './dto/create-growth-record.dto';
 import { CreateStudentDocumentDto } from './dto/create-student-document.dto';
 import { CreateProgressRecordDto } from './dto/create-progress-record.dto';
 import { CreateStudentCategoryDto, UpdateStudentCategoryDto } from './dto/student-category.dto';
+import { CreateStudentLookupDto, UpdateStudentLookupDto, STUDENT_LOOKUP_TYPES, StudentLookupType } from './dto/student-lookup.dto';
 import { paginate, paginatedResponse } from '../common/dto/pagination.dto';
 
+// Seeded the first time a list is empty. Keys match the values the app has
+// always stored in Student.status, so existing children keep their status.
+const DEFAULT_LOOKUPS: Record<StudentLookupType, { key: string; label: string; isSystem?: boolean }[]> = {
+  STATUS: [
+    { key: 'ACTIVE', label: 'Active', isSystem: true },
+    { key: 'DROPPED', label: 'Drop Out' },
+    { key: 'INACTIVE', label: 'Relieved' },
+    { key: 'GRADUATED', label: 'Graduated' },
+    { key: 'FORMER', label: 'Former Student' },
+  ],
+  EDUCATION_LEVEL: [
+    { key: 'PRIMARY', label: 'Primary School' },
+    { key: 'HIGH_SCHOOL', label: 'High School' },
+    { key: 'INTERMEDIATE', label: 'Intermediate / Junior College' },
+    { key: 'COLLEGE', label: 'College / Degree' },
+  ],
+};
+
 @Injectable()
-export class StudentsService {
+export class StudentsService implements OnModuleInit {
+  private readonly logger = new Logger(StudentsService.name);
   constructor(private prisma: PrismaService) {}
+
+  async onModuleInit() {
+    try {
+      for (const type of STUDENT_LOOKUP_TYPES) {
+        if (await this.prisma.studentLookup.count({ where: { type } })) continue;
+        await this.prisma.studentLookup.createMany({
+          data: DEFAULT_LOOKUPS[type].map((d, i) => ({ type, key: d.key, label: d.label, isSystem: !!d.isSystem, sortOrder: i })),
+          skipDuplicates: true,
+        });
+      }
+    } catch (e) {
+      // Table not pushed yet — the app still runs, lists just come back empty.
+      this.logger.warn(`Could not seed student lookups: ${(e as Error).message}`);
+    }
+  }
 
   private include = {
     center: true,
@@ -25,12 +61,37 @@ export class StudentsService {
     _count: { select: { achievements: true, attendance: true } },
   };
 
+  // List rows leave out the base64 photo (100–300KB each). Returning it for
+  // every row made a page of 100 students several MB; the app pages through
+  // everything, so lists timed out and showed 0. Cards lazy-load the photo
+  // from GET /students/:id/photo using the `hasPhoto` flag instead.
+  private listSelect = {
+    ...Object.fromEntries(
+      Object.keys(Prisma.StudentScalarFieldEnum).filter((k) => k !== 'photo').map((k) => [k, true]),
+    ),
+    center: true,
+    category: true,
+    sponsorships: this.include.sponsorships,
+    _count: this.include._count,
+  } as Prisma.StudentSelect;
+
   // A bad categoryId would otherwise surface as an opaque Prisma FK error —
   // reject it up front. Empty string means "no category" (app convenience).
   private async assertCategoryExists(categoryId?: string | null) {
     if (!categoryId) return;
     const cat = await this.prisma.studentCategory.findUnique({ where: { id: categoryId } });
     if (!cat) throw new NotFoundException('Student category not found');
+  }
+
+  // status / educationLevel hold StudentLookup keys; reject anything that
+  // isn't in the admin-managed list instead of storing free text.
+  private async assertLookupKey(type: StudentLookupType, key?: string | null) {
+    if (!key) return;
+    const row = await this.prisma.studentLookup.findUnique({ where: { type_key: { type, key } } });
+    if (!row) {
+      const what = type === 'STATUS' ? 'student status' : 'education level';
+      throw new BadRequestException(`Unknown ${what} "${key}" — add it under Settings first`);
+    }
   }
 
   private async nextChildId(centerId: string): Promise<string> {
@@ -55,32 +116,52 @@ export class StudentsService {
   async create(dto: CreateStudentDto) {
     const { documents, ...rest } = dto;
     await this.assertCategoryExists(dto.categoryId);
-    const childId = await this.nextChildId(dto.centerId);
-    const student = await this.prisma.student.create({
-      data: {
-        ...rest,
-        childId,
-        categoryId: dto.categoryId || null,
-        dob: new Date(dto.dob),
-        admissionDate: dto.admissionDate ? new Date(dto.admissionDate) : new Date(),
-        joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : undefined,
-      },
-      include: this.include,
-    });
-    // Documents picked before the student existed — created here, using the
-    // real new id, instead of a separate follow-up request (see CreateStudentDto).
-    if (documents?.length) {
-      await this.prisma.studentDocument.createMany({
-        data: documents.map((d) => ({
-          studentId: student.id,
-          category: d.category,
-          fileName: d.fileName,
-          mimeType: d.mimeType,
-          data: d.data,
-        })),
-      });
+    await this.assertLookupKey('STATUS', dto.status);
+    await this.assertLookupKey('EDUCATION_LEVEL', dto.educationLevel);
+    // The student and its documents are written in one transaction: a failed
+    // document insert used to leave the student behind while the app showed an
+    // error, so the retry created a duplicate child.
+    const attempt = async () => {
+      const childId = await this.nextChildId(dto.centerId);
+      return this.prisma.$transaction(async (tx) => {
+        const student = await tx.student.create({
+          data: {
+            ...rest,
+            childId,
+            categoryId: dto.categoryId || null,
+            educationLevel: dto.educationLevel || null,
+            dob: new Date(dto.dob),
+            admissionDate: dto.admissionDate ? new Date(dto.admissionDate) : new Date(),
+            joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : undefined,
+          },
+          include: this.include,
+        });
+        // Documents picked before the student existed (see CreateStudentDto).
+        if (documents?.length) {
+          await tx.studentDocument.createMany({
+            data: documents.map((d) => ({
+              studentId: student.id,
+              category: d.category,
+              fileName: d.fileName,
+              mimeType: d.mimeType,
+              data: d.data,
+            })),
+          });
+        }
+        return student;
+      }, { timeout: 60_000 });
+    };
+    // Two children added at the same moment can compute the same childId;
+    // the unique index rejects the second, so mint a fresh id and retry.
+    for (let i = 0; ; i++) {
+      try {
+        return await attempt();
+      } catch (e) {
+        const dup = e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002'
+          && String((e.meta as any)?.target ?? '').includes('childId');
+        if (!dup || i >= 3) throw e;
+      }
     }
-    return student;
   }
 
   async findAll(query: StudentQueryDto) {
@@ -98,10 +179,17 @@ export class StudentsService {
     if (categoryId) where.categoryId = categoryId;
     if (sponsorDonorId) where.sponsorships = { some: { donorId: sponsorDonorId, isActive: true } };
 
-    const [data, total] = await Promise.all([
-      this.prisma.student.findMany({ where, include: this.include, ...paginate(page, limit), orderBy: { createdAt: 'desc' } }),
+    const [rows, total] = await Promise.all([
+      this.prisma.student.findMany({ where, select: this.listSelect, ...paginate(page, limit), orderBy: { createdAt: 'desc' } }),
       this.prisma.student.count({ where }),
     ]);
+    const withPhoto = new Set(
+      (await this.prisma.student.findMany({
+        where: { id: { in: rows.map((r: any) => r.id) }, photo: { not: null } },
+        select: { id: true },
+      })).map((r) => r.id),
+    );
+    const data = rows.map((r: any) => ({ ...r, hasPhoto: withPhoto.has(r.id) }));
     return paginatedResponse(data, total, page, limit);
   }
 
@@ -120,9 +208,17 @@ export class StudentsService {
     return student;
   }
 
+  async getPhoto(id: string) {
+    const row = await this.prisma.student.findUnique({ where: { id }, select: { id: true, photo: true } });
+    if (!row) throw new NotFoundException('Student not found');
+    return row;
+  }
+
   async update(id: string, dto: UpdateStudentDto) {
     await this.findOne(id);
     await this.assertCategoryExists(dto.categoryId);
+    await this.assertLookupKey('STATUS', dto.status);
+    await this.assertLookupKey('EDUCATION_LEVEL', dto.educationLevel);
     const { documents: _documents, ...rest } = dto;
     return this.prisma.student.update({
       where: { id },
@@ -130,6 +226,7 @@ export class StudentsService {
         ...rest,
         // '' clears the category; absent leaves it untouched.
         categoryId: dto.categoryId === undefined ? undefined : (dto.categoryId || null),
+        educationLevel: dto.educationLevel === undefined ? undefined : (dto.educationLevel || null),
         dob: dto.dob ? new Date(dto.dob) : undefined,
         admissionDate: dto.admissionDate ? new Date(dto.admissionDate) : undefined,
         joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : undefined,
@@ -144,7 +241,10 @@ export class StudentsService {
   }
 
   async findAllCategories() {
-    return this.prisma.studentCategory.findMany({ orderBy: { label: 'asc' } });
+    return this.prisma.studentCategory.findMany({
+      orderBy: { label: 'asc' },
+      include: { _count: { select: { students: true } } },
+    });
   }
 
   async createCategory(dto: CreateStudentCategoryDto) {
@@ -179,6 +279,109 @@ export class StudentsService {
         ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
       },
     });
+  }
+
+  // Only an unused category can be removed — otherwise children would lose
+  // their category silently. Deactivating hides it from Add Student instead.
+  async removeCategory(id: string) {
+    const existing = await this.prisma.studentCategory.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Student category not found');
+    const inUse = await this.prisma.student.count({ where: { categoryId: id } });
+    if (inUse) {
+      throw new ConflictException(
+        `"${existing.label}" is assigned to ${inUse} student${inUse === 1 ? '' : 's'}. ` +
+        'Move them to another category first, or switch it off instead of deleting.');
+    }
+    await this.prisma.studentCategory.delete({ where: { id } });
+    return { id, deleted: true };
+  }
+
+  // ── Student status / education level lists (Settings) ─────────────────
+  private assertLookupType(type: string): StudentLookupType {
+    const t = (type ?? '').toUpperCase();
+    if (!(STUDENT_LOOKUP_TYPES as readonly string[]).includes(t))
+      throw new BadRequestException(`Unknown list "${type}" — use ${STUDENT_LOOKUP_TYPES.join(' or ')}`);
+    return t as StudentLookupType;
+  }
+
+  private async lookupUsage(type: StudentLookupType, key?: string) {
+    return type === 'STATUS'
+      ? this.prisma.student.count({ where: key ? { status: key } : {} })
+      : this.prisma.student.count({ where: key ? { educationLevel: key } : {} });
+  }
+
+  async findLookups(type: string, includeInactive = false) {
+    const t = this.assertLookupType(type);
+    const rows = await this.prisma.studentLookup.findMany({
+      where: { type: t, ...(includeInactive ? {} : { isActive: true }) },
+      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+    });
+    if (!includeInactive) return rows;
+    // The admin list also shows how many children use each entry.
+    const counts: { key: string | null; n: number }[] = t === 'STATUS'
+      ? (await this.prisma.student.groupBy({ by: ['status'], _count: { _all: true } }))
+          .map((c) => ({ key: c.status, n: c._count._all }))
+      : (await this.prisma.student.groupBy({ by: ['educationLevel'], _count: { _all: true } }))
+          .map((c) => ({ key: c.educationLevel, n: c._count._all }));
+    const byKey = new Map(counts.map((c) => [c.key, c.n]));
+    return rows.map((r) => ({ ...r, studentCount: byKey.get(r.key) ?? 0 }));
+  }
+
+  async createLookup(type: string, dto: CreateStudentLookupDto) {
+    const t = this.assertLookupType(type);
+    const label = dto.label.trim();
+    if (!label) throw new BadRequestException('Name is required');
+    if (await this.prisma.studentLookup.findFirst({ where: { type: t, label } }))
+      throw new ConflictException(`"${label}" already exists`);
+    const base = label.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'ITEM';
+    let key = base;
+    for (let i = 2; await this.prisma.studentLookup.findUnique({ where: { type_key: { type: t, key } } }); i++) key = `${base}_${i}`;
+    const max = await this.prisma.studentLookup.aggregate({ where: { type: t }, _max: { sortOrder: true } });
+    return this.prisma.studentLookup.create({
+      data: {
+        type: t, key, label,
+        description: dto.description?.trim() || null,
+        sortOrder: dto.sortOrder ?? (max._max.sortOrder ?? -1) + 1,
+      },
+    });
+  }
+
+  async updateLookup(id: string, dto: UpdateStudentLookupDto) {
+    const existing = await this.prisma.studentLookup.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Entry not found');
+    let label: string | undefined;
+    if (dto.label !== undefined) {
+      label = dto.label.trim();
+      if (!label) throw new BadRequestException('Name is required');
+      if (await this.prisma.studentLookup.findFirst({ where: { type: existing.type, label, NOT: { id } } }))
+        throw new ConflictException(`"${label}" already exists`);
+    }
+    if (dto.isActive === false && existing.isSystem)
+      throw new BadRequestException(`"${existing.label}" is built in and cannot be switched off (you can rename it)`);
+    return this.prisma.studentLookup.update({
+      where: { id },
+      data: {
+        ...(label !== undefined ? { label } : {}),
+        ...(dto.description !== undefined ? { description: dto.description?.trim() || null } : {}),
+        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+      },
+    });
+  }
+
+  async removeLookup(id: string) {
+    const existing = await this.prisma.studentLookup.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Entry not found');
+    if (existing.isSystem)
+      throw new BadRequestException(`"${existing.label}" is built in and cannot be deleted (you can rename it)`);
+    const inUse = await this.lookupUsage(existing.type as StudentLookupType, existing.key);
+    if (inUse) {
+      throw new ConflictException(
+        `"${existing.label}" is used by ${inUse} student${inUse === 1 ? '' : 's'}. ` +
+        'Change them first, or switch it off instead of deleting.');
+    }
+    await this.prisma.studentLookup.delete({ where: { id } });
+    return { id, deleted: true };
   }
 
   async addSponsorship(studentId: string, dto: CreateSponsorshipDto) {

@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDonorDto } from './dto/create-donor.dto';
 import { UpdateDonorDto } from './dto/update-donor.dto';
@@ -21,6 +22,15 @@ export class DonorsService {
     categories: { include: { category: true } },
     _count: { select: { donations: true, sponsorships: true } },
   };
+
+  // List rows omit the base64 avatar — see StudentsService.listSelect. Cards
+  // lazy-load it from GET /donors/:id/avatar when `hasAvatar` is true.
+  private listSelect = {
+    ...Object.fromEntries(
+      Object.keys(Prisma.DonorScalarFieldEnum).filter((k) => k !== 'avatar').map((k) => [k, true]),
+    ),
+    ...this.include,
+  } as Prisma.DonorSelect;
 
   // Atomic — see DonationsService.nextReceiptNo() for why SELECT ... FOR
   // UPDATE inside a transaction is race-free under concurrent requests
@@ -114,11 +124,24 @@ export class DonorsService {
     if (city) where.city = { contains: city };
     if (categoryId) where.categories = { some: { categoryId } };
 
-    const [data, total] = await Promise.all([
-      this.prisma.donor.findMany({ where, include: this.include, ...paginate(page, limit), orderBy: { createdAt: 'desc' } }),
+    const [rows, total] = await Promise.all([
+      this.prisma.donor.findMany({ where, select: this.listSelect, ...paginate(page, limit), orderBy: { createdAt: 'desc' } }),
       this.prisma.donor.count({ where }),
     ]);
+    const withAvatar = new Set(
+      (await this.prisma.donor.findMany({
+        where: { id: { in: rows.map((r: any) => r.id) }, avatar: { not: null } },
+        select: { id: true },
+      })).map((r) => r.id),
+    );
+    const data = rows.map((r: any) => ({ ...r, hasAvatar: withAvatar.has(r.id) }));
     return paginatedResponse(data, total, page, limit);
+  }
+
+  async getAvatar(id: string) {
+    const row = await this.prisma.donor.findUnique({ where: { id }, select: { id: true, avatar: true } });
+    if (!row) throw new NotFoundException('Donor not found');
+    return row;
   }
 
   async findOne(id: string) {
@@ -148,21 +171,40 @@ export class DonorsService {
     if (dto.name !== undefined || dto.mobile !== undefined) {
       await this.assertNotDuplicate(dto.name ?? current.name, dto.mobile ?? current.mobile, id);
     }
-    const { categoryIds, ...data } = dto;
-    if (categoryIds !== undefined) {
-      await this.prisma.donorCategoryMap.deleteMany({ where: { donorId: id } });
+    const { categoryIds, ...raw } = dto;
+    // The edit form sends '' (or null) for a field the user cleared — store
+    // that as NULL so it actually clears. Non-nullable columns are never
+    // blanked (''/null there is ignored); undefined means "leave as is".
+    const required = new Set(['name', 'mobile', 'gender', 'tier']);
+    const data: Record<string, any> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (v === undefined) continue;
+      if (required.has(k)) {
+        if (v !== '' && v !== null) data[k] = v;
+        continue;
+      }
+      data[k] = v === '' ? null : v;
     }
-    return this.prisma.donor.update({
-      where: { id },
-      data: {
-        ...data,
-        dob: data.dob ? new Date(data.dob) : undefined,
-        anniversary: data.anniversary ? new Date(data.anniversary) : undefined,
-        categories: categoryIds?.length
-          ? { create: categoryIds.map((cid) => ({ categoryId: cid })) }
-          : undefined,
-      },
-      include: this.include,
+    const toDate = (v: unknown) => (v === undefined ? undefined : v === null ? null : new Date(v as string));
+
+    // Category replace is delete + recreate — one transaction so a failure
+    // can't leave the donor stripped of its categories.
+    return this.prisma.$transaction(async (tx) => {
+      if (categoryIds !== undefined) {
+        await tx.donorCategoryMap.deleteMany({ where: { donorId: id } });
+      }
+      return tx.donor.update({
+        where: { id },
+        data: {
+          ...data,
+          dob: toDate(data.dob),
+          anniversary: toDate(data.anniversary),
+          categories: categoryIds?.length
+            ? { create: categoryIds.map((cid) => ({ categoryId: cid })) }
+            : undefined,
+        },
+        include: this.include,
+      });
     });
   }
 

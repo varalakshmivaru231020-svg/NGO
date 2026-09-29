@@ -11,6 +11,7 @@ import { CreateStudentDocumentDto } from './dto/create-student-document.dto';
 import { CreateProgressRecordDto } from './dto/create-progress-record.dto';
 import { CreateCenterDto, UpdateCenterDto } from './dto/center.dto';
 import { CreateStudentCategoryDto, UpdateStudentCategoryDto } from './dto/student-category.dto';
+import { CreateStudentLookupDto, UpdateStudentLookupDto } from './dto/student-lookup.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -57,11 +58,34 @@ export class StudentsController {
     return this.svc.updateCategory(id, dto);
   }
 
+  @Delete('categories/:id') @Roles('ADMIN') @ApiOperation({ summary: 'Delete an unused student category' })
+  removeCategory(@Param('id') id: string) { return this.svc.removeCategory(id); }
+
+  // Student status / education level lists — same access split as categories.
+  // :type is STATUS or EDUCATION_LEVEL.
+  @Get('lookups/:type') @ApiOperation({ summary: 'List active entries of a student list (STATUS / EDUCATION_LEVEL)' })
+  lookups(@Param('type') type: string) { return this.svc.findLookups(type); }
+
+  @Get('lookups/:type/all') @Roles('ADMIN') @ApiOperation({ summary: 'List all entries incl. inactive, with usage counts' })
+  allLookups(@Param('type') type: string) { return this.svc.findLookups(type, true); }
+
+  @Post('lookups/:type') @Roles('ADMIN') @ApiOperation({ summary: 'Add an entry to a student list' })
+  createLookup(@Param('type') type: string, @Body() dto: CreateStudentLookupDto) { return this.svc.createLookup(type, dto); }
+
+  @Put('lookup-items/:id') @Roles('ADMIN') @ApiOperation({ summary: 'Rename / reorder / toggle a list entry' })
+  updateLookup(@Param('id') id: string, @Body() dto: UpdateStudentLookupDto) { return this.svc.updateLookup(id, dto); }
+
+  @Delete('lookup-items/:id') @Roles('ADMIN') @ApiOperation({ summary: 'Delete an unused list entry' })
+  removeLookup(@Param('id') id: string) { return this.svc.removeLookup(id); }
+
   @Post() @ApiOperation({ summary: 'Add a student' })
   create(@Body() dto: CreateStudentDto) { return this.svc.create(dto); }
 
   @Get() @ApiOperation({ summary: 'List students' })
   findAll(@Query() q: StudentQueryDto) { return this.svc.findAll(q); }
+
+  @Get(':id/photo') @ApiOperation({ summary: 'Student photo only (list rows omit it)' })
+  photo(@Param('id') id: string) { return this.svc.getPhoto(id); }
 
   @Get(':id') @ApiOperation({ summary: 'Get student by ID' })
   findOne(@Param('id') id: string) { return this.svc.findOne(id); }
