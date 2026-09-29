@@ -13,17 +13,14 @@ import '../../../core/widgets/phone_field_with_code.dart';
 import '../../../core/widgets/photo_picker_widget.dart';
 import '../../dashboard/presentation/dashboard_screen.dart' show dashboardRefreshProvider;
 import '../../donors/presentation/donors_screen.dart' show demoLocalDonors, mockDonorData;
+import '../student_lookups.dart';
 import 'students_screen.dart' show demoLocalStudents, demoCentres;
 
 // ── colours ───────────────────────────────────────────────────────────
 const _brand600 = Color(0xFFFF9933);
 const _brand100 = Color(0xFFFFE8CC);
-const _violet500 = Color(0xFF7C6CF0);
-const _violet100 = Color(0xFFE7E3FD);
 const _amber600 = Color(0xFFE0921A);
-const _amber100 = Color(0xFFFFF1D6);
 const _coral500 = Color(0xFFF2685E);
-const _coral100 = Color(0xFFFFE3DF);
 const _onSurface1 = Color(0xFF15211E);
 const _onSurface2 = Color(0xFF5A6B67);
 const _onSurface3 = Color(0xFF93A29F);
@@ -85,9 +82,11 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   String _centreName  = '';
   String _centreId    = '';
   String _gender      = 'Male';
-  String _status      = 'Active';
-  String _eduType     = 'School';
+  // Keys from Settings → Student Status / Education Level (admin-managed).
+  String _status      = 'ACTIVE';
+  String? _eduLevel;
   bool   _sponsored   = false;
+  final _sponsorAmt   = TextEditingController();
   String? _sponsorId;
   String? _sponsorName;
 
@@ -103,7 +102,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   // loaded from API
   List<({String id, String name})> _centres = [];
   List<({String id, String name, String city, String phone})> _apiDonors = [];
-  // Admin-managed student categories (Settings → Student Categories); the
+  // Admin-managed support categories (Settings → Support Categories); the
   // picker is hidden entirely while this is empty.
   List<({String id, String label})> _categories = [];
   String? _categoryId;
@@ -114,6 +113,13 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
     super.initState();
     _loadFormData();
     _loadCategories();
+    StudentLookups.load(force: true).then((_) {
+      if (!mounted) return;
+      setState(() {
+        final keys = StudentLookups.statuses.map((o) => o.key).toList();
+        if (!keys.contains(_status) && keys.isNotEmpty) _status = keys.first;
+      });
+    });
   }
 
   // Separate from _loadFormData so a missing/older backend can't take the
@@ -204,7 +210,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       _mobile,_address,_satNo,_familyNotes,_schoolName,_classGrade,_admissionNo,
       _acadYear,_performance,_schoolAddr,_height,_weight,_medHistory,
       _penNo,_cwcNo,_abhaNo,_rationCardNo,_missionVatsalyaNo,_caste,_subCaste,
-      _bankDetails,_siblingNames,_incomeCertAmt,_incomeCertRdNo]) { c.dispose(); }
+      _bankDetails,_siblingNames,_incomeCertAmt,_incomeCertRdNo,_sponsorAmt]) { c.dispose(); }
     super.dispose();
   }
 
@@ -342,17 +348,33 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       ));
       return;
     }
+    // The sponsorship is only created with an amount (backend requires it).
+    final sponsorAmount = int.tryParse(_sponsorAmt.text.trim());
+    if (_sponsored && _sponsorId != null && (sponsorAmount == null || sponsorAmount < 1)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Enter the annual sponsorship amount', style: TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor: _coral500, behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
     setState(() => _saving = true);
     try {
-      final statusMap = {'Active': 'ACTIVE', 'Graduated': 'GRADUATED', 'Relieved': 'INACTIVE', 'Drop out': 'DROPPED'};
+      // Performance and school address have no columns of their own — keep
+      // them in the education remarks instead of silently dropping them.
+      final eduRemarks = [
+        if (_performance.text.trim().isNotEmpty) 'Performance: ${_performance.text.trim()}',
+        if (_schoolAddr.text.trim().isNotEmpty) 'Institution address: ${_schoolAddr.text.trim()}',
+      ].join('\n');
       final photoB64 = _photoBytes != null ? base64Encode(_photoBytes!) : null;
       final body = <String, dynamic>{
         'name':       _name.text.trim(),
         'dob':        _toIso(_dob),
         'gender':     _gender == 'Male' ? 'MALE' : 'FEMALE',
         'centerId':   _centreId,
-        'status':     statusMap[_status] ?? 'ACTIVE',
+        'status':     _status,
         if (_categoryId != null) 'categoryId': _categoryId,
+        if (_eduLevel != null) 'educationLevel': _eduLevel,
+        if (eduRemarks.isNotEmpty) 'educationRemarks': eduRemarks,
         if (photoB64 != null) 'photo': photoB64,
         if (_classGrade.text.trim().isNotEmpty) 'class': _classGrade.text.trim(),
         if (_schoolName.text.trim().isNotEmpty) 'school': _schoolName.text.trim(),
@@ -404,30 +426,34 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       ];
       if (documents.isNotEmpty) body['documents'] = documents;
 
-      Map<String, dynamic>? res;
+      Map<String, dynamic> res;
       try {
         res = await apiClient.post('/students', body);
       } catch (e) {
-        // Server answered and rejected — surface the real reason instead of
-        // silently creating a local-only child that vanishes on reload.
-        if (e is DioException && e.response != null) {
-          if (mounted) {
-            setState(() => _saving = false);
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text(ApiClient.errorMessage(e, fallback: 'Could not save the child.'),
-                  style: const TextStyle(fontWeight: FontWeight.w700)),
-              backgroundColor: _coral500, behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ));
-          }
-          return;
+        // Never fall back to a local-only child: it showed up with empty
+        // fields and vanished on reload. A timeout may still have saved it on
+        // the server, so say so rather than inviting a duplicate.
+        final timedOut = e is DioException && e.response == null &&
+            (e.type == DioExceptionType.receiveTimeout || e.type == DioExceptionType.sendTimeout);
+        if (mounted) {
+          setState(() => _saving = false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                timedOut
+                    ? 'The server took too long to answer. Check the Students list before trying again, the child may already be saved.'
+                    : ApiClient.errorMessage(e, fallback: 'Could not save the child.'),
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+            backgroundColor: _coral500, behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 6),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ));
         }
-        // Backend unreachable — fall back to a local-only record below.
+        return;
       }
 
       // Non-Super-Admins: the backend queues this for approval instead of
       // creating it. Don't add anything locally — it must wait for approval.
-      final pending = res != null && (res['meta'] as Map?)?['pendingApproval'] == true;
+      final pending = (res['meta'] as Map?)?['pendingApproval'] == true;
       if (pending) {
         if (mounted) {
           setState(() => _saving = false);
@@ -450,18 +476,34 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         return;
       }
 
-      final created = (res?['data'] as Map?)?.cast<String, dynamic>();
+      final created = (res['data'] as Map?)?.cast<String, dynamic>();
       final savedId = created?['id'] as String?;
       final studentId = savedId ?? 'local-${DateTime.now().microsecondsSinceEpoch}';
+
+      // Link the chosen sponsor — the form collected it but never sent it,
+      // so the sponsorship was lost on every save.
+      String? sponsorWarning;
+      if (savedId != null && _sponsored && _sponsorId != null && sponsorAmount != null) {
+        try {
+          await apiClient.post('/students/$savedId/sponsorships', {
+            'donorId': _sponsorId,
+            'amount': sponsorAmount,
+            'frequency': 'ANNUAL',
+          });
+        } catch (e) {
+          sponsorWarning = ApiClient.errorMessage(e, fallback: 'The sponsor could not be linked.');
+        }
+      }
 
       // Full local record so the detail Profile tab shows everything immediately.
       demoLocalStudents.insert(0, {
         'id':          studentId,
-        'childId':     'SKT-C-new',
+        'childId':     created?['childId'] ?? 'SKT-C-new',
         'name':        _name.text.trim(),
         'gender':      _gender == 'Male' ? 'MALE' : 'FEMALE',
         'dob':         _toIso(_dob),
-        'status':      statusMap[_status] ?? 'ACTIVE',
+        'status':      _status,
+        'educationLevel': _eduLevel,
         'class':       _classGrade.text.trim(),
         'school':      _schoolName.text.trim(),
         'center':      {'name': _centreName},
@@ -497,8 +539,8 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         'incomeCertificateAmount':   _incomeCertAmt.text.trim(),
         'incomeCertificateRdNumber': _incomeCertRdNo.text.trim(),
         if (photoB64 != null) 'photo': photoB64,
-        'sponsorships': _sponsorId != null
-            ? [{'donor': {'name': _sponsorName ?? ''}}]
+        'sponsorships': _sponsored && _sponsorId != null && sponsorWarning == null
+            ? [{'donor': {'id': _sponsorId, 'name': _sponsorName ?? ''}, 'amount': sponsorAmount}]
             : <Map<String, dynamic>>[],
       });
 
@@ -520,22 +562,30 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
-            SizedBox(width: 8),
-            Text('Child enrolled successfully!', style: TextStyle(fontWeight: FontWeight.w700)),
+          content: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Flexible(child: Text(
+              sponsorWarning == null ? 'Child enrolled successfully!' : 'Child enrolled, but: $sponsorWarning',
+              style: const TextStyle(fontWeight: FontWeight.w700))),
           ]),
-          backgroundColor: _brand600,
+          backgroundColor: sponsorWarning == null ? _brand600 : _amber600,
           behavior: SnackBarBehavior.floating,
-          width: 280,
+          width: sponsorWarning == null ? 280 : null,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ));
         ProviderScope.containerOf(context).read(dashboardRefreshProvider.notifier).state++;
         context.go('/students/$studentId');
       }
     } catch (e) {
+      // Anything unexpected must still end the spinner and say what happened.
       if (mounted) {
         setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ApiClient.errorMessage(e, fallback: 'Could not save the child.'),
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+          backgroundColor: _coral500, behavior: SnackBarBehavior.floating,
+        ));
       }
     }
   }
@@ -631,7 +681,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                   _StatusChips(value: _status, onChanged: (v) => setState(() => _status = v)),
                   if (_categories.isNotEmpty) ...[
                     const SizedBox(height: 14),
-                    _FieldLabel('Category (optional)'),
+                    _FieldLabel('Support Category (optional)'),
                     Wrap(spacing: 8, runSpacing: 8, children: _categories.map((c) {
                       final active = _categoryId == c.id;
                       return GestureDetector(
@@ -746,10 +796,31 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
 
                 // ── Educational Details ──────────────────────────────
                 _SectionCard(title: 'Educational Details', children: [
-                  _FieldLabel('School or College'),
-                  _SegmentedToggle(options: const ['School', 'College'], value: _eduType, onChanged: (v) => setState(() => _eduType = v)),
+                  _FieldLabel('Education Level (optional)'),
+                  if (StudentLookups.educationLevels.isEmpty)
+                    Text('No education levels yet. Add them in Settings → Education Levels.',
+                        style: TextStyle(fontSize: 12.5, color: context.textHint, fontWeight: FontWeight.w500))
+                  else
+                    Wrap(spacing: 8, runSpacing: 8, children: StudentLookups.educationLevels.map((o) {
+                      final active = _eduLevel == o.key;
+                      return GestureDetector(
+                        // Tapping the selected level clears it — it stays optional.
+                        onTap: () => setState(() => _eduLevel = active ? null : o.key),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: active ? _brand100 : context.scaffoldBg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: active ? _brand600 : context.border),
+                          ),
+                          child: Text(o.label, style: TextStyle(
+                            fontSize: 12.5, fontWeight: FontWeight.w700,
+                            color: active ? _brand600 : context.textSub)),
+                        ),
+                      );
+                    }).toList()),
                   const SizedBox(height: 14),
-                  _FieldLabel('${_eduType} Name'),
+                  _FieldLabel('School / College Name'),
                   _textField(context, _schoolName, hint: 'Institution name'),
                   const SizedBox(height: 14),
                   Row(children: [
@@ -777,7 +848,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                   ]),
                   const SizedBox(height: 14),
                   _FieldLabel('Address'),
-                  _textField(context, _schoolAddr, hint: '${_eduType} address', maxLines: 2),
+                  _textField(context, _schoolAddr, hint: 'School / college address', maxLines: 2),
                   const SizedBox(height: 14),
                   _FieldLabel('Educational Documents'),
                   _UploadBox(label: 'Upload report card / TC / certificates', icon: Icons.description_outlined,
@@ -839,6 +910,10 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                         ),
                       ]),
                     ),
+                    const SizedBox(height: 12),
+                    _FieldLabel('Annual Sponsorship Amount (₹)'),
+                    _textField(context, _sponsorAmt, hint: 'e.g. 24000', keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
                   ] else if (_sponsored) ...[
                     const SizedBox(height: 12),
                     GestureDetector(
@@ -1004,25 +1079,23 @@ class _SegmentedToggle extends StatelessWidget {
 
 class _StatusChips extends StatelessWidget {
   const _StatusChips({required this.value, required this.onChanged});
-  final String value;
+  final String value; // status key
   final ValueChanged<String> onChanged;
   @override
   Widget build(BuildContext context) {
-    const statuses = ['Active', 'Graduated', 'Relieved', 'Drop out'];
-    const colors = {'Active': _brand600, 'Graduated': _violet500, 'Relieved': _amber600, 'Drop out': _coral500};
-    const bgs = {'Active': _brand100, 'Graduated': _violet100, 'Relieved': _amber100, 'Drop out': _coral100};
-    return Wrap(spacing: 8, runSpacing: 8, children: statuses.map((s) {
-      final active = value == s;
+    return Wrap(spacing: 8, runSpacing: 8, children: StudentLookups.statuses.map((o) {
+      final active = value == o.key;
+      final c = StudentLookups.statusColor(o.key);
       return GestureDetector(
-        onTap: () => onChanged(s),
+        onTap: () => onChanged(o.key),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
-            color: active ? (colors[s] ?? _brand600) : context.cardBg,
+            color: active ? c : context.cardBg,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: active ? (colors[s] ?? _brand600) : context.border, width: 1.5),
+            border: Border.all(color: active ? c : context.border, width: 1.5),
           ),
-          child: Text(s, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub)),
+          child: Text(o.label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub)),
         ),
       );
     }).toList());

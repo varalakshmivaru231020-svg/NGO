@@ -239,7 +239,7 @@ Future<Uint8List> buildStudentReportPdf({
         pairRow('Academic Year', show('acadYear'), 'Current Class / Grade', show('class')),
         pairRow('Section', show('section'), 'School / Institution',
             v('institution').isNotEmpty && v('institution') != '—' ? v('institution') : show('school')),
-        pairRow('Admission No.', show('admNo'), 'Student Type', show('studentType')),
+        pairRow('Admission No.', show('admNo'), 'Education Level', show('educationLevel')),
         pairRow('Education Status', eduStatusMap[statusText] ?? statusText, 'Remarks', show('eduRemarks'), last: true),
       ]),
 

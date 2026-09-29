@@ -20,6 +20,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _obscure = true;
   String? _error;
 
+  @override
+  void initState() {
+    super.initState();
+    if (sessionExpiredNotice) {
+      sessionExpiredNotice = false;
+      _error = 'Your session has expired. Please sign in again.';
+    }
+  }
+
   static const _bg      = Color(0xFFE07C1F);
   static const _brand   = Color(0xFFFF9933);
   static const _text1   = Color(0xFF1A2A24);

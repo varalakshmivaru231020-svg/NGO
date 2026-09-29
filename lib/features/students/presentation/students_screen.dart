@@ -1,66 +1,91 @@
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/lazy_photo.dart';
+import '../student_lookups.dart';
 
 // ── colours ───────────────────────────────────────────────────────────
 const _brand600  = Color(0xFFFF9933);
 const _brand100  = Color(0xFFFFE8CC);
 const _violet500 = Color(0xFF7C6CF0);
-const _violet100 = Color(0xFFE7E3FD);
-const _amber600  = Color(0xFFE0921A);
-const _amber100  = Color(0xFFFFF1D6);
 const _coral500  = Color(0xFFF2685E);
 const _coral100  = Color(0xFFFFE3DF);
 const _onSurface2 = Color(0xFF5A6B67);
 
 // ── API model ─────────────────────────────────────────────────────────
+// Tolerant readers — one odd row (null name, numeric field, missing nested
+// object) must not throw and blank the whole list.
+String _str(Object? v, [String fallback = '']) {
+  if (v == null) return fallback;
+  final s = v.toString();
+  return s.isEmpty ? fallback : s;
+}
+
 String _sponsorFromJson(Map<String, dynamic> j) {
-  final list = j['sponsorships'] as List<dynamic>?;
-  if (list == null || list.isEmpty) return '';
-  final first = list.first as Map<String, dynamic>;
-  final donor = first['donor'] as Map<String, dynamic>?;
-  return donor?['name'] as String? ?? '';
+  final list = j['sponsorships'];
+  if (list is! List || list.isEmpty) return '';
+  final first = list.first;
+  final donor = first is Map ? first['donor'] : null;
+  return donor is Map ? _str(donor['name']) : '';
 }
 
 String _centreFromJson(Map<String, dynamic> j) {
-  final center = j['center'] as Map<String, dynamic>?;
-  return center?['name'] as String? ?? '';
+  final center = j['center'];
+  return center is Map ? _str(center['name']) : '';
 }
 
 class _Student {
   _Student({required this.id, required this.childId, required this.name,
     required this.gender, required this.dobRaw, required this.status,
     required this.classGrade, required this.school,
-    required this.centreName, required this.sponsorName, this.category = '', this.photo});
+    required this.centreName, required this.sponsorName, this.category = '',
+    this.categoryId = '', this.photo, this.hasPhoto = false});
 
-  factory _Student.fromJson(Map<String, dynamic> j) => _Student(
-    id:         j['id']      as String,
-    childId:    j['childId'] as String? ?? '',
-    name:       j['name']    as String,
-    gender:     j['gender']  as String? ?? 'MALE',
-    dobRaw:     j['dob']     as String? ?? '',
-    status:     j['status']  as String? ?? 'ACTIVE',
-    classGrade: j['class']   as String? ?? '',
-    school:     j['school']  as String? ?? '',
-    centreName:  _centreFromJson(j),
-    sponsorName: _sponsorFromJson(j),
-    category:   ((j['category'] as Map?)?['label'] ?? '').toString(),
-    photo:      j['photo']   as String?,
-  );
-
-  final String id, childId, name, gender, dobRaw, status, classGrade, school, centreName, sponsorName, category;
-  final String? photo;
-
-  Uint8List? get photoBytes {
-    final p = photo;
-    if (p != null && p.isNotEmpty) {
-      try { return base64Decode(p); } catch (_) {}
+  factory _Student.fromJson(Map<String, dynamic> j) {
+    final cat = j['category'];
+    final categoryId = _str(cat is Map ? cat['id'] : null, _str(j['categoryId']));
+    var category = cat is Map ? _str(cat['label']) : '';
+    if (category.isEmpty && categoryId.isNotEmpty) {
+      final l = StudentLookups.categoryLabel(categoryId);
+      if (l != '—') category = l;
     }
-    return null;
+    final photo = j['photo'] is String ? j['photo'] as String : null;
+    return _Student(
+      id:          _str(j['id']),
+      childId:     _str(j['childId']),
+      name:        _str(j['name']),
+      gender:      _str(j['gender'], 'MALE'),
+      dobRaw:      _str(j['dob']),
+      status:      _str(j['status'], 'ACTIVE'),
+      classGrade:  _str(j['class']),
+      school:      _str(j['school']),
+      centreName:  _centreFromJson(j),
+      sponsorName: _sponsorFromJson(j),
+      category:    category,
+      categoryId:  categoryId,
+      photo:       photo,
+      hasPhoto:    j['hasPhoto'] == true || (photo != null && photo.isNotEmpty),
+    );
   }
+
+  // Parses one row; returns null (row skipped) instead of throwing.
+  static _Student? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    try {
+      final s = _Student.fromJson(raw.cast<String, dynamic>());
+      return s.id.isEmpty ? null : s;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  final String id, childId, name, gender, dobRaw, status, classGrade, school, centreName, sponsorName, category, categoryId;
+  final String? photo;   // only on local (not-yet-synced) records / full records
+  final bool hasPhoto;   // list rows carry this flag instead of the photo
+
+  Uint8List? get photoBytes => decodePhoto(photo);
 
   int get age {
     try {
@@ -72,32 +97,14 @@ class _Student {
     } catch (_) { return 0; }
   }
 
-  String get displayStatus => switch (status) {
-    'ACTIVE'    => 'Active',
-    'GRADUATED' => 'Graduated',
-    'INACTIVE'  => 'Relieved',
-    'DROPPED'   => 'Drop out',
-    _           => status,
-  };
+  // Label from the admin-managed status list (Settings → Student Status).
+  String get displayStatus => StudentLookups.statusLabel(status);
 
   bool get isSponsored => sponsorName.isNotEmpty;
 }
 
-// ── status helpers ─────────────────────────────────────────────────────
-Color _statusColor(String s) => switch (s) {
-  'Active'    => _brand600,
-  'Graduated' => _violet500,
-  'Relieved'  => _amber600,
-  'Drop out'  => _coral500,
-  _           => _onSurface2,
-};
-Color _statusBg(String s) => switch (s) {
-  'Active'    => _brand100,
-  'Graduated' => _violet100,
-  'Relieved'  => _amber100,
-  'Drop out'  => _coral100,
-  _           => const Color(0xFFF4F7F6),
-};
+// One chip in the filter row: "All", a status (by key) or a category (by label).
+typedef _FilterDef = ({String id, String label, Color color, bool Function(_Student) test});
 
 // Shared in-memory student list — new enrollments are appended here
 final demoLocalStudents = <Map<String, dynamic>>[];
@@ -132,8 +139,6 @@ String _initials(String name) {
   return ((p[0].isNotEmpty ? p[0][0] : '') + (p.length > 1 && p[1].isNotEmpty ? p[1][0] : '')).toUpperCase();
 }
 
-const _statusFilters = ['All', 'Active', 'Graduated', 'Relieved', 'Drop out'];
-
 // ══════════════════════════════════════════════════════════════════════
 class StudentsScreen extends StatefulWidget {
   const StudentsScreen({super.key});
@@ -149,29 +154,44 @@ class _StudentsScreenState extends State<StudentsScreen> {
 
   List<_Student> _all    = [];
   List<({String id, String name})> _centres = [];
-  // Admin-managed student categories (Settings → Student Categories) — shown
-  // as extra filter chips after the fixed statuses.
-  List<String> _categoryLabels = [];
   bool  _loading = true;
   String? _error;
 
-  // Statuses first, then the dynamic categories; labels already on loaded
-  // students always get a chip too (covers deactivated-but-assigned ones).
-  List<String> get _filterChips {
+  // "All", then every status from Settings → Student Status (plus any key
+  // found on a loaded student that the list no longer has, so counts stay
+  // complete), then the Settings → Student Categories labels (plus labels
+  // already on students, covering deactivated-but-assigned ones).
+  List<_FilterDef> get _filterChips {
+    final keys = <String>[for (final o in StudentLookups.statuses) o.key];
+    for (final s in _all) {
+      if (s.status.isNotEmpty && !keys.contains(s.status)) keys.add(s.status);
+    }
+    final statusLabels = keys.map(StudentLookups.statusLabel).toSet();
     final cats = <String>{
-      ..._categoryLabels,
+      ...StudentLookups.categories.where((c) => c.isActive).map((c) => c.label),
       ..._all.map((s) => s.category).where((c) => c.isNotEmpty),
     }.toList()..sort();
     // A category named like a status can't be told apart in this row — the
     // status chip wins, so drop the duplicate label.
-    cats.removeWhere((c) => _statusFilters.contains(c));
-    return [..._statusFilters, ...cats];
+    cats.removeWhere(statusLabels.contains);
+    return [
+      (id: 'All', label: 'All', color: _brand600, test: (_) => true),
+      for (final k in keys)
+        (id: 'status:$k', label: StudentLookups.statusLabel(k), color: StudentLookups.statusColor(k),
+          test: (s) => s.status == k),
+      for (final c in cats)
+        (id: 'cat:$c', label: c, color: _violet500, test: (s) => s.category == c),
+    ];
   }
 
-  bool _isStatusChip(String s) => _statusFilters.contains(s);
-
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _load();
+    // Status / category lists drive the chips and badges — rebuild once they
+    // arrive (fallback labels are used until then).
+    StudentLookups.load().then((_) { if (mounted) setState(() {}); });
+  }
 
   @override
   void dispose() { _searchCtrl.dispose(); super.dispose(); }
@@ -181,88 +201,116 @@ class _StudentsScreenState extends State<StudentsScreen> {
 
   static const _mockCentres = <({String id, String name})>[];
 
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
+      backgroundColor: _coral500, behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      action: SnackBarAction(label: 'Retry', textColor: Colors.white, onPressed: _load),
+    ));
+  }
+
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
-    _loadCategoryLabels();
-    try {
-      // Students paged to the end — one page capped the list at 100 children
-      // and made older ones look deleted.
-      Future<List<dynamic>> fetchAllStudents() async {
-        final all = <dynamic>[];
+    // Keep the current list on screen during a pull-to-refresh.
+    setState(() { _loading = _all.isEmpty; _error = null; });
+
+    // Students paged to the end — one page capped the list at 100 children
+    // and made older ones look deleted. Rows from pages that did arrive are
+    // kept even if a later page fails.
+    final fetched = <Map<String, dynamic>>[];
+    Object? pageError;
+    Future<void> fetchAllStudents() async {
+      try {
         for (int page = 1; ; page++) {
           final r = await apiClient.get('/students', params: {'limit': '100', 'page': '$page'});
-          final pageList = (r['data'] as List<dynamic>? ?? []);
-          all.addAll(pageList);
-          final meta = r['meta'] as Map?;
-          if (meta?['hasNext'] != true || pageList.isEmpty) break;
+          final data = r['data'];
+          final pageList = data is List ? data : const [];
+          for (final e in pageList) { if (e is Map) fetched.add(e.cast<String, dynamic>()); }
+          final meta = r['meta'];
+          if (meta is! Map || meta['hasNext'] != true || pageList.isEmpty) break;
         }
-        return all;
+      } catch (e) {
+        pageError = e;
       }
+    }
 
-      final studentsFuture = fetchAllStudents();
-      final cRes0 = await apiClient.get('/students/centers');
-      final sList = await studentsFuture;
-      // Cache the raw records so the detail screen resolves the right student.
-      loadedStudents
-        ..clear()
-        ..addAll(sList.map((e) => (e as Map).cast<String, dynamic>()));
-      final students = sList.map((e) => _Student.fromJson(e as Map<String, dynamic>)).toList();
-
-      final cList = (cRes0['data'] as List<dynamic>? ?? []);
-      final centres = cList.map<({String id, String name})>((c) {
-        final m = c as Map<String, dynamic>;
-        return (id: m['id'] as String, name: m['name'] as String);
-      }).toList();
-
-      // Backend is the source of truth even when empty (so a clean database
-      // shows an empty list, not demo data). Any not-yet-synced local
-      // enrollments show on top.
-      if (mounted) {
-        // Drop any optimistic local record the backend now returns (same id) so
-        // a just-added student doesn't appear twice.
-        final backendIds = students.map((s) => s.id).toSet();
-        final locals = demoLocalStudents
-            .where((m) => !backendIds.contains(m['id']))
-            .map(_Student.fromJson);
-        setState(() {
-          _all = [...locals, ...students];
-          _centres = centres;
-          _loading = false;
-        });
-        return;
+    Future<List<({String id, String name})>?> fetchCentres() async {
+      try {
+        final r = await apiClient.get('/students/centers');
+        final data = r['data'];
+        return [
+          for (final c in (data is List ? data : const []))
+            if (c is Map && _str(c['id']).isNotEmpty) (id: _str(c['id']), name: _str(c['name'])),
+        ];
+      } catch (_) {
+        return null; // centre tabs are secondary — keep what we had
       }
-    } catch (_) {}
-    // Backend unreachable → demo/mock so the app still works offline.
-    if (mounted) setState(() {
-      _all     = [...demoLocalStudents.map(_Student.fromJson), ..._mockStudents.map(_Student.fromJson)];
-      _centres = demoCentres;
+    }
+
+    // Both run in parallel and catch their own errors, so neither can end up
+    // as an unhandled async error while the other is awaited.
+    final centresFuture = fetchCentres();
+    await Future.wait([fetchAllStudents(), centresFuture]);
+    final centres = await centresFuture;
+    if (!mounted) return;
+
+    final failed = pageError != null;
+    final students = fetched.map(_Student.tryParse).whereType<_Student>().toList();
+
+    // Cache the raw records so the detail screen resolves the right student.
+    // A partial load only refreshes the rows it got.
+    if (!failed) loadedStudents.clear();
+    for (final m in fetched) {
+      loadedStudents.removeWhere((x) => x['id'] == m['id']);
+      loadedStudents.add(m);
+    }
+
+    // Drop any optimistic local record the backend now returns (same id) so
+    // a just-added student doesn't appear twice.
+    final backendIds = students.map((s) => s.id).toSet();
+    final locals = demoLocalStudents
+        .where((m) => !backendIds.contains(m['id']))
+        .map(_Student.tryParse).whereType<_Student>();
+
+    final msg = failed ? ApiClient.errorMessage(pageError!, fallback: 'Could not load children') : null;
+    setState(() {
+      if (!failed || students.isNotEmpty) {
+        // Backend is the source of truth even when empty (so a clean database
+        // shows an empty list, not demo data). Local enrollments show on top.
+        _all = [...locals, ...students];
+      } else if (_all.isEmpty) {
+        // Nothing fetched and nothing shown yet: local enrollments if any,
+        // otherwise the full-screen error with Retry.
+        _all = [...locals, ..._mockStudents.map(_Student.tryParse).whereType<_Student>()];
+        if (_all.isEmpty) _error = msg;
+      }
+      // (Refresh that fetched nothing keeps the list already on screen.)
+      if (centres != null) {
+        _centres = centres;
+      } else if (_centres.isEmpty) {
+        _centres = demoCentres.isNotEmpty ? demoCentres : _mockCentres;
+      }
       _loading = false;
     });
+    if (failed && _error == null) {
+      _snack(students.isNotEmpty
+          ? 'Showing ${students.length} children — the rest could not be loaded: $msg'
+          : msg!);
+    }
   }
 
-  // Fire-and-forget — chips fall back to labels found on students if this fails.
-  Future<void> _loadCategoryLabels() async {
-    try {
-      final r = await apiClient.get('/students/categories');
-      final list = (r['data'] as List? ?? []);
-      final labels = list.whereType<Map>()
-          .map((c) => c['label'] as String? ?? '')
-          .where((l) => l.isNotEmpty).toList();
-      if (mounted) setState(() => _categoryLabels = labels);
-    } catch (_) {}
+  List<_Student> get _filtered {
+    final chips = _filterChips;
+    final chip = chips.firstWhere((c) => c.id == _statusFilter, orElse: () => chips.first);
+    return _all.where((s) {
+      final matchSearch = _search.isEmpty ||
+        s.name.toLowerCase().contains(_search.toLowerCase()) ||
+        s.childId.toLowerCase().contains(_search.toLowerCase());
+      final matchCentre = _centre == 'All Centres' || s.centreName == _centre;
+      return matchSearch && matchCentre && chip.test(s);
+    }).toList();
   }
-
-  List<_Student> get _filtered => _all.where((s) {
-    final matchSearch = _search.isEmpty ||
-      s.name.toLowerCase().contains(_search.toLowerCase()) ||
-      s.childId.toLowerCase().contains(_search.toLowerCase());
-    final matchCentre = _centre == 'All Centres' || s.centreName == _centre;
-    // The chip row mixes fixed statuses and dynamic categories — decide which
-    // field to match on by which kind of chip is selected.
-    final matchStatus = _statusFilter == 'All' ||
-      (_isStatusChip(_statusFilter) ? s.displayStatus == _statusFilter : s.category == _statusFilter);
-    return matchSearch && matchCentre && matchStatus;
-  }).toList();
 
   @override
   Widget build(BuildContext context) {
@@ -459,19 +507,15 @@ class _StudentsScreenState extends State<StudentsScreen> {
               SizedBox(height: 42, child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.fromLTRB(18, 0, 18, 0),
-                children: _filterChips.map((s) {
-                  final centreFiltered = _centre == 'All Centres'
-                    ? _all
-                    : _all.where((st) => st.centreName == _centre).toList();
-                  final isStatus = _isStatusChip(s);
-                  final count = s == 'All'
-                    ? centreFiltered.length
-                    : centreFiltered.where((st) => isStatus ? st.displayStatus == s : st.category == s).length;
-                  final active = _statusFilter == s;
-                  final col = s == 'All' ? _brand600 : (isStatus ? _statusColor(s) : _violet500);
+                children: _filterChips.map((chip) {
+                  final count = centreFiltered.where(chip.test).length;
+                  final active = _statusFilter == chip.id ||
+                    (chip.id == 'All' && !_filterChips.any((c) => c.id == _statusFilter));
+                  final col = chip.color;
+                  final s = chip.label;
                   return Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () => setState(() => _statusFilter = s),
+                    onTap: () => setState(() => _statusFilter = chip.id),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                       decoration: BoxDecoration(
@@ -596,6 +640,8 @@ class _ChildCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = _avColor(student.name);
     final statusLabel = student.displayStatus;
+    final statusCol = StudentLookups.statusColor(student.status);
+    final initials = Center(child: Text(_initials(student.name), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)));
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -613,9 +659,15 @@ class _ChildCard extends StatelessWidget {
               gradient: LinearGradient(colors: [color, Color.lerp(color, Colors.black, 0.2)!], begin: Alignment.topLeft, end: Alignment.bottomRight),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: student.photoBytes != null
-              ? Image.memory(student.photoBytes!, fit: BoxFit.cover, width: 52, height: 52)
-              : Center(child: Text(_initials(student.name), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18))),
+            // List rows no longer carry the photo — fetched lazily per card.
+            child: LazyPhoto(
+              endpoint: '/students/${student.id}/photo',
+              field: 'photo',
+              size: 52,
+              enabled: student.hasPhoto && !student.id.startsWith('local-'),
+              initial: student.photoBytes,
+              placeholder: initials,
+            ),
           ),
           const SizedBox(width: 13),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -624,8 +676,8 @@ class _ChildCard extends StatelessWidget {
               const SizedBox(width: 7),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: _statusBg(statusLabel), borderRadius: BorderRadius.circular(8)),
-                child: Text(statusLabel, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: _statusColor(statusLabel))),
+                decoration: BoxDecoration(color: statusCol.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+                child: Text(statusLabel, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: statusCol)),
               ),
             ]),
             const SizedBox(height: 5),

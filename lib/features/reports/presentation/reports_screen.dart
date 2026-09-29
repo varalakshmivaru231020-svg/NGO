@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../../core/utils/native_file_saver.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/network/api_client.dart';
+import '../../students/student_lookups.dart';
 
 const _brand700 = Color(0xFFE07C1F);
 const _brand600 = Color(0xFFFF9933);
@@ -211,14 +212,70 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }).toList();
   }
 
+  // Every page of a list endpoint. The screen itself only loads the first
+  // 100 rows of each list for its charts; exporting those meant any record
+  // past #100 was silently missing from the downloaded report.
+  static Future<List<Map<String, dynamic>>> _fetchAll(String path) async {
+    final all = <Map<String, dynamic>>[];
+    for (int page = 1; page <= 500; page++) {
+      final r = await apiClient.get(path, params: {'limit': '100', 'page': '$page'});
+      final list = (r['data'] as List? ?? const []).whereType<Map>().map((m) => m.cast<String, dynamic>()).toList();
+      all.addAll(list);
+      if ((r['meta'] as Map?)?['hasNext'] != true || list.isEmpty) break;
+    }
+    return all;
+  }
+
+  static String _str(dynamic v) => v == null ? '' : v.toString().trim();
+
+  static String _date(dynamic v) {
+    final dt = DateTime.tryParse(_str(v));
+    return dt == null ? '' : DateFormat('dd/MM/yyyy').format(dt.toLocal());
+  }
+
+  static String _age(dynamic dob) {
+    final d = DateTime.tryParse(_str(dob));
+    if (d == null) return '';
+    final now = DateTime.now();
+    var years = now.year - d.year;
+    if (now.month < d.month || (now.month == d.month && now.day < d.day)) years--;
+    return years < 0 ? '' : '$years';
+  }
+
   Future<void> _export() async {
     setState(() => _exporting = true);
     final excel = xl.Excel.createExcel();
     final dateStr = DateFormat('ddMMyyyy').format(DateTime.now());
 
+    // Pull the complete lists the chosen report needs.
+    try {
+      final want = _reportFilter;
+      final results = await Future.wait([
+        (want == 'All' || want == 'Donations') ? _fetchAll('/donations') : Future.value(_donations),
+        (want == 'All' || want == 'Students') ? _fetchAll('/students') : Future.value(_students),
+        (want == 'All' || want == 'Donors') ? _fetchAll('/donors') : Future.value(_donors),
+        (want == 'All' || want == 'Expenses') ? _fetchAll('/expenses') : Future.value(_expenses),
+        if (want == 'All' || want == 'Students') StudentLookups.load(force: true).then((_) => const <Map<String, dynamic>>[]),
+      ]);
+      _donations = results[0];
+      _students = results[1];
+      _donors = results[2];
+      _expenses = results[3];
+    } catch (e) {
+      if (mounted) {
+        setState(() => _exporting = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ApiClient.errorMessage(e, fallback: 'Could not load the report data.'),
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+          backgroundColor: Colors.red, behavior: SnackBarBehavior.floating,
+        ));
+      }
+      return;
+    }
+
     if (_reportFilter == 'All' || _reportFilter == 'Donations') {
       final sheet = excel['Donations'];
-      _setRow(sheet, 0, ['#', 'Donor Name', 'Date', 'Category', 'Payment Method', 'Amount (₹)'], style: _headerStyle());
+      _setRow(sheet, 0, ['#', 'Receipt No.', 'Donor Name', 'Donor Mobile', 'Date', 'Category', 'Payment Method', 'Amount (₹)'], style: _headerStyle());
       final rows = _filteredDonations;
       int totalAmt = 0;
       final uniqueDonors = <String>{};
@@ -228,51 +285,75 @@ class _ReportsScreenState extends State<ReportsScreen> {
         final type = (r['type'] as Map?)?.cast<String, dynamic>() ?? const {};
         final amount = (r['amount'] as num?)?.toInt() ?? 0;
         final name = donor['name'] as String? ?? 'Unknown';
-        _setRow(sheet, i + 1, ['${i + 1}', name, (r['date'] as String? ?? '').split('T').first,
+        _setRow(sheet, i + 1, ['${i + 1}', _str(r['receiptNo']), name, _str(donor['mobile']), _date(r['date']),
           type['label'] as String? ?? '', r['paymentMode'] as String? ?? '', amount.toString()]);
         totalAmt += amount;
         uniqueDonors.add(name);
       }
       final sumRow = rows.length + 2;
-      _setRow(sheet, sumRow,     ['SUMMARY', '', '', '', '', ''],      style: _summaryStyle());
-      _setRow(sheet, sumRow + 1, ['Total Donations', '${rows.length}', '', '', '', ''], style: _summaryStyle());
-      _setRow(sheet, sumRow + 2, ['Total Donors',    '${uniqueDonors.length}',  '', '', '', ''], style: _summaryStyle());
-      _setRow(sheet, sumRow + 3, ['Total Amount (₹)', totalAmt.toString(),      '', '', '', ''], style: _summaryStyle());
+      _setRow(sheet, sumRow,     ['SUMMARY', '', '', '', '', '', '', ''],      style: _summaryStyle());
+      _setRow(sheet, sumRow + 1, ['Total Donations', '${rows.length}', '', '', '', '', '', ''], style: _summaryStyle());
+      _setRow(sheet, sumRow + 2, ['Total Donors',    '${uniqueDonors.length}',  '', '', '', '', '', ''], style: _summaryStyle());
+      _setRow(sheet, sumRow + 3, ['Total Amount (₹)', totalAmt.toString(),      '', '', '', '', '', ''], style: _summaryStyle());
     }
 
     if (_reportFilter == 'All' || _reportFilter == 'Students') {
       final sheet = excel['Students'];
-      _setRow(sheet, 0, ['#', 'Child ID', 'Name', 'Centre', 'Class', 'Status', 'Gender', 'Sponsor', 'Guardian Phone', 'Address'], style: _headerStyle());
+      const headers = [
+        '#', 'Child ID', 'Name', 'Gender', 'Date of Birth', 'Age', 'Centre', 'Status', 'Support Category',
+        "Father's Name", "Mother's Name", 'Guardian Name', 'Guardian Relation', 'Guardian Phone', 'Address',
+        'Education Level', 'School / College', 'Class', 'Academic Year', 'Admission No.', 'Admission Date',
+        'Aadhaar No.', 'Caste', 'Sponsor', 'Sponsor Phone', 'Medical Notes',
+      ];
+      _setRow(sheet, 0, headers, style: _headerStyle());
       for (int i = 0; i < _students.length; i++) {
         final r = _students[i];
-        final centre = (r['center'] as Map?)?['name'] as String? ?? '';
+        final centre = _str((r['center'] as Map?)?['name']);
+        final category = _str((r['category'] as Map?)?['label']);
         final sponsorships = (r['sponsorships'] as List?) ?? const [];
-        final sponsor = sponsorships.isNotEmpty ? (((sponsorships.first as Map?)?['donor'] as Map?)?['name'] as String? ?? '-') : '-';
-        _setRow(sheet, i + 1, ['${i + 1}', r['childId'] as String? ?? '', r['name'] as String? ?? '',
-          centre, r['class'] as String? ?? '', r['status'] as String? ?? '', r['gender'] as String? ?? '',
-          sponsor, r['guardianPhone'] as String? ?? '', r['address'] as String? ?? '']);
+        final donor = sponsorships.isNotEmpty ? ((sponsorships.first as Map?)?['donor'] as Map?) : null;
+        _setRow(sheet, i + 1, [
+          '${i + 1}', _str(r['childId']), _str(r['name']), _str(r['gender']), _date(r['dob']), _age(r['dob']),
+          centre, StudentLookups.statusLabel(_str(r['status'])), category,
+          _str(r['fatherName']), _str(r['motherName']), _str(r['guardianName']), _str(r['guardianRelation']),
+          _str(r['guardianPhone']), _str(r['address']),
+          _str(r['educationLevel']).isEmpty ? '' : StudentLookups.educationLabel(_str(r['educationLevel'])),
+          _str(r['school']), _str(r['class']), _str(r['academicYear']), _str(r['admissionNo']), _date(r['admissionDate']),
+          _str(r['aadhaarNumber']), _str(r['caste']), _str(donor?['name']), _str(donor?['mobile']), _str(r['medicalNotes']),
+        ]);
       }
+      final blank = List.filled(headers.length - 2, '');
       final sumRow = _students.length + 2;
-      _setRow(sheet, sumRow, ['SUMMARY', '', '', '', '', '', '', '', '', ''], style: _summaryStyle());
-      _setRow(sheet, sumRow + 1, ['Total Students', '${_students.length}', '', '', '', '', '', '', '', ''], style: _summaryStyle());
-      final active = _students.where((r) => r['status'] == 'ACTIVE').length;
+      _setRow(sheet, sumRow, ['SUMMARY', '', ...blank], style: _summaryStyle());
+      _setRow(sheet, sumRow + 1, ['Total Students', '${_students.length}', ...blank], style: _summaryStyle());
+      // One line per status, using the admin-managed labels.
+      final byStatus = <String, int>{};
+      for (final r in _students) {
+        final k = _str(r['status']);
+        byStatus[k] = (byStatus[k] ?? 0) + 1;
+      }
+      var row = sumRow + 2;
+      for (final e in byStatus.entries) {
+        _setRow(sheet, row++, [StudentLookups.statusLabel(e.key), '${e.value}', ...blank], style: _summaryStyle());
+      }
       final sponsored = _students.where((r) => ((r['sponsorships'] as List?) ?? const []).isNotEmpty).length;
-      _setRow(sheet, sumRow + 2, ['Active', '$active', '', '', '', '', '', '', '', ''], style: _summaryStyle());
-      _setRow(sheet, sumRow + 3, ['Sponsored', '$sponsored', '', '', '', '', '', '', '', ''], style: _summaryStyle());
+      _setRow(sheet, row, ['Sponsored', '$sponsored', ...blank], style: _summaryStyle());
     }
 
     if (_reportFilter == 'All' || _reportFilter == 'Donors') {
       final sheet = excel['Donors'];
-      _setRow(sheet, 0, ['#', 'Donor Code', 'Name', 'Mobile', 'City', 'Tier', 'Total Donations'], style: _headerStyle());
+      _setRow(sheet, 0, ['#', 'Donor Code', 'Name', 'Mobile', 'WhatsApp', 'Email', 'Address', 'City', 'State', 'Pincode', 'PAN',
+        'Tier', 'Total Donations', 'Sponsored Children'], style: _headerStyle());
       for (int i = 0; i < _donors.length; i++) {
         final r = _donors[i];
-        final donationCount = (r['_count'] as Map?)?['donations'] as int? ?? 0;
-        _setRow(sheet, i + 1, ['${i + 1}', r['donorCode'] as String? ?? '', r['name'] as String? ?? '',
-          r['mobile'] as String? ?? '', r['city'] as String? ?? '', r['tier'] as String? ?? '', donationCount.toString()]);
+        final count = (r['_count'] as Map?) ?? const {};
+        _setRow(sheet, i + 1, ['${i + 1}', _str(r['donorCode']), _str(r['name']), _str(r['mobile']), _str(r['whatsapp']),
+          _str(r['email']), _str(r['address']), _str(r['city']), _str(r['state']), _str(r['pincode']), _str(r['pan']),
+          _str(r['tier']), '${(count['donations'] as num?)?.toInt() ?? 0}', '${(count['sponsorships'] as num?)?.toInt() ?? 0}']);
       }
       final sumRow = _donors.length + 2;
-      _setRow(sheet, sumRow,     ['SUMMARY', '', '', '', '', '', ''],      style: _summaryStyle());
-      _setRow(sheet, sumRow + 1, ['Total Donors', '${_donors.length}', '', '', '', '', ''], style: _summaryStyle());
+      _setRow(sheet, sumRow,     ['SUMMARY', '', ...List.filled(12, '')],      style: _summaryStyle());
+      _setRow(sheet, sumRow + 1, ['Total Donors', '${_donors.length}', ...List.filled(12, '')], style: _summaryStyle());
     }
 
     if (_reportFilter == 'All' || _reportFilter == 'Expenses') {

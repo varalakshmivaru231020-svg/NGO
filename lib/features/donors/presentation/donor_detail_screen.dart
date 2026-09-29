@@ -7,6 +7,7 @@ import 'add_donor_screen.dart' show AddDonorScreen;
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/utils/open_bytes.dart';
+import '../../../core/widgets/lazy_photo.dart';
 import '../../../core/utils/native_file_saver.dart';
 import '../../../core/utils/video_player.dart';
 import '../../donations/presentation/receipt_generator.dart';
@@ -87,27 +88,40 @@ class _DonorDetailScreenState extends State<DonorDetailScreen> with SingleTicker
     return null;
   }
 
-  Future<void> _load() async {
+  // Donations are fetched on their own with an empty fallback — a failing
+  // /donations call must not turn a perfectly good donor into "not found".
+  Future<List<Map<String, dynamic>>> _loadDonations() async {
     try {
-      final results = await Future.wait([
-        apiClient.get('/donors/${widget.id}'),
-        apiClient.get('/donations', params: {'donorId': widget.id, 'limit': '50', 'page': '1'}),
-      ]);
-      final dRaw = results[0]['data'];
-      final donor = dRaw is Map ? Map<String, dynamic>.from(dRaw as Map) : <String, dynamic>{};
-      final doRaw = results[1]['data'];
+      final r = await apiClient.get('/donations', params: {'donorId': widget.id, 'limit': '50', 'page': '1'});
+      final doRaw = r['data'];
       final doList = doRaw is List ? doRaw : (doRaw is Map ? (doRaw['data'] as List? ?? []) : []);
-      if (mounted) setState(() {
-        _donor = donor.isNotEmpty ? donor : _findMock();
-        _donations = doList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-        _loading = false;
-      });
+      return doList.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
     } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> _load() async {
+    final donationsFuture = _loadDonations();
+    try {
+      final res = await apiClient.get('/donors/${widget.id}');
+      final dRaw = res['data'];
+      final donor = dRaw is Map ? Map<String, dynamic>.from(dRaw) : <String, dynamic>{};
+      final donations = await donationsFuture;
+      if (!mounted) return;
+      setState(() {
+        _donor = donor.isNotEmpty ? donor : _findMock();
+        _donations = donations;
+        _loading = false;
+        _error = _donor == null ? 'Donor not found' : null;
+      });
+    } catch (e) {
       final mock = _findMock();
-      if (mounted) setState(() {
+      if (!mounted) return;
+      setState(() {
         _donor = mock;
         _loading = false;
-        _error = mock == null ? 'Donor not found' : null;
+        _error = mock == null ? ApiClient.errorMessage(e, fallback: 'Donor not found') : null;
       });
     }
   }
@@ -122,9 +136,7 @@ class _DonorDetailScreenState extends State<DonorDetailScreen> with SingleTicker
   Uint8List? get _photoBytes {
     final local = localDonorPhotos[widget.id];
     if (local != null) return local;
-    final avatar = _donor?['avatar'] as String?;
-    if (avatar == null || avatar.isEmpty) return null;
-    try { return base64Decode(avatar); } catch (_) { return null; }
+    return decodePhoto(_donor?['avatar'] as String?);
   }
 
   String get _mobile => _donor?['mobile'] as String? ?? '';
@@ -186,6 +198,10 @@ class _DonorDetailScreenState extends State<DonorDetailScreen> with SingleTicker
           const Icon(Icons.error_outline, color: _coral500, size: 44),
           const SizedBox(height: 12),
           Text('Failed to load donor', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: context.textPrimary)),
+          if (_error != null) Padding(
+            padding: const EdgeInsets.fromLTRB(24, 6, 24, 0),
+            child: Text(_error!, textAlign: TextAlign.center, style: TextStyle(fontSize: 12.5, color: context.textHint)),
+          ),
           const SizedBox(height: 8),
           TextButton(
             onPressed: () { setState(() { _loading = true; _error = null; }); _load(); },
@@ -1047,7 +1063,15 @@ class _SponsoredTabState extends State<_SponsoredTab> {
   }
 
   Future<void> _removeSponsorship(String sponsorshipId) async {
-    try { await apiClient.delete('/students/sponsorships/$sponsorshipId'); } catch (_) {}
+    try {
+      await apiClient.delete('/students/sponsorships/$sponsorshipId');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ApiClient.errorMessage(e), style: const TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor: _coral500, behavior: SnackBarBehavior.floating));
+    }
+    if (!mounted) return;
     await _load();
   }
 
@@ -1059,6 +1083,21 @@ class _SponsoredTabState extends State<_SponsoredTab> {
     String query = '';
     List<Map<String, dynamic>> allStudents = [];
     bool loadingStudents = true;
+    String? loadError;
+    bool sheetOpen = true;
+    StateSetter? setSheetRef;
+
+    // Fetched ONCE, before the sheet opens — starting it inside the builder
+    // fired a new request on every rebuild (each keystroke while loading).
+    _fetchAllStudents().then((list) {
+      allStudents = list;
+      loadingStudents = false;
+      if (sheetOpen) setSheetRef?.call(() {});
+    }).catchError((Object e) {
+      loadError = ApiClient.errorMessage(e, fallback: 'Could not load children');
+      loadingStudents = false;
+      if (sheetOpen) setSheetRef?.call(() {});
+    });
 
     showModalBottomSheet(
       context: context,
@@ -1066,17 +1105,7 @@ class _SponsoredTabState extends State<_SponsoredTab> {
       backgroundColor: context.cardBg,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => StatefulBuilder(builder: (ctx, setSheet) {
-        if (loadingStudents) {
-          apiClient.get('/students', params: {'limit': '100', 'page': '1'}).then((r) {
-            final inner = r['data'];
-            final list = inner is Map ? (inner['data'] as List? ?? []) : (inner is List ? inner : []);
-            setSheet(() {
-              allStudents = list.whereType<Map>().map((m) => m.cast<String, dynamic>()).toList();
-              loadingStudents = false;
-            });
-          }).catchError((_) { setSheet(() => loadingStudents = false); });
-        }
-
+        setSheetRef = setSheet;
         final q = query.trim().toLowerCase();
         final filtered = q.isEmpty
             ? allStudents
@@ -1121,6 +1150,10 @@ class _SponsoredTabState extends State<_SponsoredTab> {
               Expanded(
                 child: loadingStudents
                   ? const Center(child: CircularProgressIndicator(color: _brand600))
+                  : loadError != null && allStudents.isEmpty
+                  ? Center(child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(loadError!, textAlign: TextAlign.center, style: const TextStyle(color: _coral500, fontSize: 13.5, fontWeight: FontWeight.w600))))
                   : filtered.isEmpty
                     ? Center(child: Text('No matching children', style: TextStyle(color: context.textHint, fontSize: 13.5)))
                     : ListView.builder(
@@ -1135,9 +1168,16 @@ class _SponsoredTabState extends State<_SponsoredTab> {
                           final centreName = (s['center'] as Map?)?['name'] as String? ?? '—';
                           return ListTile(
                             onTap: () { Navigator.pop(ctx); _promptAmountAndSave(s); },
-                            leading: CircleAvatar(backgroundColor: _brand100, child: Text(
-                              (s['name'] as String? ?? '?').characters.first.toUpperCase(),
-                              style: const TextStyle(color: _brand600, fontWeight: FontWeight.w800))),
+                            // List rows carry no photo — only `hasPhoto`.
+                            leading: ClipOval(child: SizedBox(width: 40, height: 40, child: LazyPhoto(
+                              endpoint: '/students/${s['id']}/photo',
+                              field: 'photo',
+                              size: 40,
+                              enabled: s['hasPhoto'] == true,
+                              placeholder: CircleAvatar(backgroundColor: _brand100, child: Text(
+                                ((s['name'] as String?)?.trim().isNotEmpty == true ? (s['name'] as String).trim() : '?').characters.first.toUpperCase(),
+                                style: const TextStyle(color: _brand600, fontWeight: FontWeight.w800))),
+                            ))),
                             title: Text(s['name'] as String? ?? '', style: TextStyle(fontWeight: FontWeight.w700, color: context.textPrimary)),
                             subtitle: Text(
                               currentSponsorName != null
@@ -1153,7 +1193,22 @@ class _SponsoredTabState extends State<_SponsoredTab> {
           ),
         );
       }),
-    );
+    ).whenComplete(() => sheetOpen = false);
+  }
+
+  // Every page of students (backend caps limit at 100). Rows are light now —
+  // no base64 photos — so paging through all of them is cheap.
+  Future<List<Map<String, dynamic>>> _fetchAllStudents() async {
+    final out = <Map<String, dynamic>>[];
+    for (int page = 1; page <= 200; page++) {
+      final r = await apiClient.get('/students', params: {'limit': '100', 'page': '$page'});
+      final inner = r['data'];
+      final list = inner is Map ? (inner['data'] as List? ?? []) : (inner is List ? inner : []);
+      out.addAll(list.whereType<Map>().map((m) => m.cast<String, dynamic>()));
+      final meta = r['meta'] as Map?;
+      if (meta?['hasNext'] != true || list.isEmpty) break;
+    }
+    return out;
   }
 
   Future<void> _promptAmountAndSave(Map<String, dynamic> student) async {
@@ -1508,7 +1563,7 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
         ],
       )),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
 
     setState(() => _uploading = true);
     try {

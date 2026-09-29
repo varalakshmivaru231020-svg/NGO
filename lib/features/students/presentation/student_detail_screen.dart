@@ -8,8 +8,10 @@ import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/open_bytes.dart';
 import '../../../core/utils/native_file_saver.dart';
+import '../../../core/widgets/lazy_photo.dart';
 import '../../../core/widgets/photo_picker_widget.dart';
-import 'students_screen.dart' show findStudentRecord;
+import '../student_lookups.dart';
+import 'students_screen.dart' show findStudentRecord, loadedStudents;
 import 'student_report_generator.dart';
 
 // ── colours ───────────────────────────────────────────────────────────
@@ -90,9 +92,14 @@ String _groupThousands(int n) {
   if (rest.isNotEmpty) parts.insert(0, rest);
   return '${parts.join(',')},$last3';
 }
-Color _statusColor(String s) => switch (s) {
-  'Active' => _brand600, 'Graduated' => _violet500,
-  'Relieved' => _amber600, 'Drop out' => _coral500, _ => const Color(0xFF93A29F),
+// Icon + hint for the long-standing statuses in the Update Status sheet;
+// admin-added statuses get a generic icon and no hint.
+const _statusHints = <String, (String, IconData)>{
+  'ACTIVE':    ('Currently enrolled and attending', Icons.check_circle_outline),
+  'GRADUATED': ('Completed the programme',          Icons.school_outlined),
+  'INACTIVE':  ('Left on own / family request',     Icons.logout_rounded),
+  'DROPPED':   ('Left without completing',          Icons.cancel_outlined),
+  'FORMER':    ('Former student of the programme',  Icons.history_edu_outlined),
 };
 
 final _vDivider = Container(
@@ -116,22 +123,78 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
   late final TabController _tabs;
   late Map<String, String> _data;
   Uint8List? _photoBytes; // student's uploaded profile photo, shown in the header
+  // True once _data comes from a real record (list cache or GET /students/:id)
+  // rather than the "Student / — / 0" placeholder.
+  bool _hasRecord = false;
+  bool _fetching = false;
+  String? _fetchError;
 
   @override
   void initState() {
     super.initState();
     _tabs = TabController(length: 6, vsync: this);
+    _hasRecord = _kChildren.containsKey(widget.id) || findStudentRecord(widget.id) != null;
     _data = _resolveData(widget.id);
     _photoBytes = _resolvePhoto(widget.id);
+    StudentLookups.load().then((_) {
+      if (mounted) setState(_refreshLookupLabels);
+    });
+    _fetchRecord();
+  }
+
+  // The list cache only holds what the last list load returned (and list rows
+  // carry no photo), so after a page refresh or right after adding a child
+  // the profile would show placeholders. Always load the full record.
+  Future<void> _fetchRecord() async {
+    if (widget.id.startsWith('local-') || _kChildren.containsKey(widget.id)) return;
+    setState(() { _fetching = true; _fetchError = null; });
+    try {
+      final r = await apiClient.get('/students/${widget.id}');
+      final raw = r['data'];
+      if (raw is! Map) throw StateError('Unexpected response');
+      final full = raw.cast<String, dynamic>();
+      // Keep the shared cache in step so the list / later opens agree.
+      final rec = findStudentRecord(widget.id);
+      if (rec != null) {
+        rec.addAll(full);
+      } else {
+        loadedStudents.add(Map<String, dynamic>.from(full));
+      }
+      if (!mounted) return;
+      setState(() {
+        _data = _dataFromRecord(widget.id, rec ?? full);
+        _refreshLookupLabels();
+        final photo = decodePhoto(full['photo'] as String?);
+        if (photo != null) _photoBytes = photo;
+        _hasRecord = true;
+        _fetching = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _fetching = false;
+        _fetchError = ApiClient.errorMessage(e, fallback: 'Could not load this child');
+      });
+      // Cached data is still on screen — just flag that it may be stale.
+      if (_hasRecord) _snackMsg('Could not refresh this profile: $_fetchError', isError: true);
+    }
+  }
+
+  // Labels come from the admin-managed lists; re-derive them once loaded so a
+  // rename in Settings shows here too.
+  void _refreshLookupLabels() {
+    final key = _data['statusKey'];
+    if (key != null && key.isNotEmpty) _data['status'] = StudentLookups.statusLabel(key);
+    final catId = _data['categoryId'] ?? '';
+    if (catId.isNotEmpty) {
+      final l = StudentLookups.categoryLabel(catId);
+      if (l != '—') _data['category'] = l;
+    }
   }
 
   // Decode the student's uploaded photo (base64) from their record, if any.
-  Uint8List? _resolvePhoto(String id) {
-    final rec = findStudentRecord(id);
-    final raw = (rec?['photo'] ?? '').toString();
-    if (raw.isEmpty) return null;
-    try { return base64Decode(raw); } catch (_) { return null; }
-  }
+  Uint8List? _resolvePhoto(String id) =>
+      decodePhoto(findStudentRecord(id)?['photo']?.toString());
 
   // Resolve the student's own data: rich demo records first, then the live
   // student store (created enrollments + dataset). Never falls back to another
@@ -146,37 +209,61 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
   Map<String, String> _dataFromRecord(String id, Map<String, dynamic> r) {
     String s(String k) => (r[k] ?? '').toString();
     final gender = switch (s('gender')) { 'MALE' => 'Male', 'FEMALE' => 'Female', final g => g };
-    const statusMap = {'ACTIVE': 'Active', 'GRADUATED': 'Graduated', 'INACTIVE': 'Relieved', 'DROPPED': 'Drop out'};
-    final centre = ((r['center'] as Map?)?['name'] ?? '').toString();
-    final sponsorships = (r['sponsorships'] as List?) ?? const [];
-    final sponsorName = sponsorships.isNotEmpty
-        ? (((sponsorships.first as Map?)?['donor'] as Map?)?['name'] ?? '').toString()
+    final center = r['center'];
+    final centre = center is Map ? (center['name'] ?? '').toString() : '';
+    final sponsorships = r['sponsorships'] is List ? r['sponsorships'] as List : const [];
+    final firstSp = sponsorships.isNotEmpty && sponsorships.first is Map ? sponsorships.first as Map : null;
+    final donor = firstSp?['donor'] is Map ? firstSp!['donor'] as Map : null;
+    final sponsorName = (donor?['name'] ?? '').toString();
+    final spAmount = firstSp?['amount'];
+    final spAmountStr = spAmount is num && spAmount > 0
+        ? '₹${_groupThousands(spAmount.round())}${firstSp?['frequency'] == 'MONTHLY' ? ' / month' : ' / year'}'
         : '';
+    final spSince = DateTime.tryParse((firstSp?['startDate'] ?? '').toString());
     final age = _ageFromIso(s('dob'));
-    // Prefer the explicit key, fall back to the backend's field name.
-    String pick(String a, String b) => s(a).isNotEmpty ? s(a) : s(b);
+    // Prefer the backend's field name (what GET /students and every edit
+    // write), falling back to the key used by not-yet-synced local records —
+    // otherwise a stale local value would win over a later edit (even one
+    // that cleared the field).
+    String pick(String backend, String local) => r[backend] != null ? s(backend) : s(local);
+    final cat = r['category'];
+    final categoryId = ((cat is Map ? cat['id'] : null) ?? r['categoryId'] ?? '').toString();
+    var category = cat is Map ? (cat['label'] ?? '').toString() : '';
+    if (category.isEmpty && categoryId.isNotEmpty) {
+      final l = StudentLookups.categoryLabel(categoryId);
+      if (l != '—') category = l;
+    }
+    final statusKey = s('status').isNotEmpty ? s('status') : 'ACTIVE';
     return {
       'childId':          s('childId').isNotEmpty ? s('childId') : id,
       'name':             s('name'),
       'centre':           centre,
-      // Admin-managed student category (Settings → Student Categories).
-      'category':         ((r['category'] as Map?)?['label'] ?? '').toString(),
-      'categoryId':       ((r['category'] as Map?)?['id'] ?? r['categoryId'] ?? '').toString(),
+      // Admin-managed support category (Settings → Student Categories).
+      'category':         category,
+      'categoryId':       categoryId,
       'age':              age.isNotEmpty ? age : '—',
       'gender':           gender.isNotEmpty ? gender : '—',
       'class':            s('class').isNotEmpty ? s('class') : '—',
-      'status':           statusMap[s('status')] ?? (s('status').isNotEmpty ? s('status') : 'Active'),
+      // Stable key + its current label (Settings → Student Status).
+      'statusKey':        statusKey,
+      'status':           StudentLookups.statusLabel(statusKey),
+      // Key from Settings → Education Level ('' = not set).
+      'educationLevelKey': s('educationLevel'),
       'dob':              s('dob'),
       'institution':      s('school'),
       'school':           s('school'),
       'sponsor':          sponsorName,
-      'sponsorshipAmt':   sponsorName.isNotEmpty ? '—' : '—',
-      'achievementCount': ((r['_count'] as Map?)?['achievements'] ?? 0).toString(),
-      // Detail fields shown on the Profile tab (local + backend field names).
-      'admDate':     pick('admDate', 'admissionDate'),
+      'sponsorId':        (donor?['id'] ?? '').toString(),
+      'sponsorDonorId':   (donor?['donorCode'] ?? donor?['id'] ?? '').toString(),
+      if (spAmountStr.isNotEmpty) 'sponsorAmt': spAmountStr,
+      if (spSince != null) 'sponsorSince': _fmtDate(spSince),
+      'sponsorshipAmt':   spAmountStr.isNotEmpty ? spAmountStr : '—',
+      'achievementCount': ((r['_count'] is Map ? (r['_count'] as Map)['achievements'] : null) ?? 0).toString(),
+      // Detail fields shown on the Profile tab (backend + local field names).
+      'admDate':     pick('admissionDate', 'admDate'),
       // Education Details tab
-      'admNo':       s('admissionNo'),
-      'acadYear':    s('academicYear'),
+      'admNo':       pick('admissionNo', 'admNo'),
+      'acadYear':    pick('academicYear', 'acadYear'),
       'joiningDate': s('joiningDate'),
       'section':     s('section'),
       'permanence':  s('permanence'),
@@ -184,19 +271,19 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
       'eduRemarks':  s('educationRemarks'),
       'createdAt':   s('createdAt'),
       'updatedAt':   s('updatedAt'),
-      'father':      s('fatherName'),
-      'mother':      s('motherName'),
-      'guardian':    pick('guardian', 'guardianName'),
-      'relation':    pick('relation', 'guardianRelation'),
-      'mobile':      pick('mobile', 'guardianPhone'),
+      'father':      pick('fatherName', 'father'),
+      'mother':      pick('motherName', 'mother'),
+      'guardian':    pick('guardianName', 'guardian'),
+      'relation':    pick('guardianRelation', 'relation'),
+      'mobile':      pick('guardianPhone', 'mobile'),
       'address':     s('address'),
-      'familyNotes': pick('familyNotes', 'notes'),
+      'familyNotes': pick('notes', 'familyNotes'),
       'height':      s('height'),
       'weight':      s('weight'),
-      'medHistory':  pick('medHistory', 'medicalNotes'),
+      'medHistory':  pick('medicalNotes', 'medHistory'),
       // Identity & government IDs
-      'aadhaar':          pick('aadhaar', 'aadhaarNumber'),
-      'sat':              pick('sat', 'satNumber'),
+      'aadhaar':          pick('aadhaarNumber', 'aadhaar'),
+      'sat':              pick('satNumber', 'sat'),
       'penNumber':        s('penNumber'),
       'cwcNumber':        s('cwcNumber'),
       'abhaNumber':       s('abhaNumber'),
@@ -214,7 +301,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
 
   Map<String, String> _emptyData(String id) => {
     'childId': id, 'name': 'Student', 'centre': '—', 'age': '—', 'gender': '—',
-    'class': '—', 'status': 'Active', 'sponsor': '', 'sponsorshipAmt': '—', 'achievementCount': '0',
+    'class': '—', 'statusKey': 'ACTIVE', 'status': StudentLookups.statusLabel('ACTIVE'),
+    'sponsor': '', 'sponsorshipAmt': '—', 'achievementCount': '0',
   };
 
   // Compute "N yrs" from an ISO yyyy-mm-dd date of birth.
@@ -341,6 +429,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
       final now = DateTime.now();
       final dateStr = '${now.day.toString().padLeft(2,'0')} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][now.month-1]} ${now.year}';
       final amtStr = '₹${_groupThousands(amount)} / year';
+      if (!mounted) return;
       setState(() {
         _data['sponsor']         = name;
         _data['sponsorId']       = donorId;
@@ -377,29 +466,43 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
 
   // Backend enum ↔ display maps.
   static const _genderBack = {'Male': 'MALE', 'Female': 'FEMALE', 'Other': 'OTHER'};
-  static const _statusBack = {'Active': 'ACTIVE', 'Graduated': 'GRADUATED', 'Relieved': 'INACTIVE', 'Drop out': 'DROPPED'};
-
-  void _applyStatus(String status) {
-    setState(() => _data['status'] = status);
-    final rec = findStudentRecord(widget.id);
-    if (rec != null) rec['status'] = _statusBack[status] ?? status;
-  }
 
   Future<List<({String id, String name})>> _fetchCentres() async {
     try {
       final r = await apiClient.get('/students/centers');
       final list = (r['data'] as List<dynamic>? ?? const []);
-      return list.whereType<Map>().map((m) => (id: m['id'] as String, name: m['name'] as String)).toList();
+      return list.whereType<Map>()
+          .where((m) => m['id'] != null)
+          .map((m) => (id: m['id'].toString(), name: (m['name'] ?? '').toString())).toList();
     } catch (_) { return const []; }
   }
 
-  Future<List<({String id, String label})>> _fetchCategories() async {
-    try {
-      final r = await apiClient.get('/students/categories');
-      final list = (r['data'] as List<dynamic>? ?? const []);
-      return list.whereType<Map>().map((m) => (id: m['id'] as String, label: m['label'] as String)).toList();
-    } catch (_) { return const []; }
+  // Admin-managed options plus the student's current value if it's no longer
+  // in the list (deactivated / deleted), so opening the picker never hides it.
+  List<StudentOption> _withCurrent(List<StudentOption> opts, String currentKey, String currentLabel) => [
+    ...opts,
+    if (currentKey.isNotEmpty && !opts.any((o) => o.key == currentKey))
+      StudentOption(id: '', key: currentKey, label: currentLabel),
+  ];
+
+  // Outcome of a save for the snackbar: saved, queued for Super Admin
+  // approval, or failed with the server's message.
+  void _snackSaved(bool saved, String okMsg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(saved ? okMsg : 'Submitted for Super Admin approval', style: const TextStyle(fontWeight: FontWeight.w700)),
+      backgroundColor: saved ? _brand600 : _amber600, behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
   }
+
+  Widget _sheetError(String? msg) => msg == null
+      ? const SizedBox.shrink()
+      : Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(color: _coral100, borderRadius: BorderRadius.circular(10)),
+          child: Text(msg, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _coral500)));
 
   // Comprehensive edit sheet covering every field collected at enrolment
   // (Personal, Contact, Address, Guardian, Education, Health) — pre-filled
@@ -407,8 +510,9 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
   // & government-ID / financial fields have their own dedicated edit sheet
   // (_showIdentityEditSheet, opened from that section's own Edit button).
   void _showEditSheet(BuildContext context, Map<String, String> data) async {
-    final centres = await _fetchCentres();
-    final categories = await _fetchCategories();
+    final centresFuture = _fetchCentres();
+    await Future.wait([centresFuture, StudentLookups.load()]);
+    final centres = await centresFuture;
     if (!context.mounted) return;
 
     final nameCtrl      = TextEditingController(text: data['name']);
@@ -428,18 +532,31 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
     final studentTypeCtrl = TextEditingController(text: data['studentType']);
     final eduRemarksCtrl = TextEditingController(text: data['eduRemarks']);
     String gender  = data['gender'] == 'Female' ? 'Female' : (data['gender'] == 'Other' ? 'Other' : 'Male');
-    String status  = data['status'] ?? 'Active';
+    // Status / education level / category are picked from the admin-managed
+    // lists by key (category: id) and only sent when changed, so a value that
+    // was deactivated since never blocks saving the other fields.
+    final initialStatusKey = data['statusKey'] ?? 'ACTIVE';
+    String statusKey = initialStatusKey;
+    final statusOpts = _withCurrent(StudentLookups.statuses, initialStatusKey, data['status'] ?? initialStatusKey);
+    final initialEduKey = data['educationLevelKey'] ?? '';
+    String eduKey = initialEduKey;
+    final eduOpts = [
+      const StudentOption(id: '', key: '', label: 'None'),
+      ..._withCurrent(StudentLookups.educationLevels, initialEduKey, StudentLookups.educationLabel(initialEduKey)),
+    ];
+    final initialCategoryId = data['categoryId'] ?? '';
+    String categoryId = initialCategoryId;
+    final categoryOpts = [
+      const StudentOption(id: '', key: '', label: 'None'),
+      ..._withCurrent(StudentLookups.categories, initialCategoryId,
+          (data['category'] ?? '').isNotEmpty ? data['category']! : 'Current category'),
+    ];
+    String? error;
     String centre  = centres.any((c) => c.name == data['centre']) ? data['centre']! : (centres.isNotEmpty ? centres.first.name : '');
     String dob     = data['dob'] ?? '';
     String admDate = data['admDate'] ?? '';
     String joiningDate = data['joiningDate'] ?? '';
     String permanence  = data['permanence']?.isNotEmpty == true ? data['permanence']! : 'Permanent';
-    // Selection is by label ('None' clears); mapped back to the id on save.
-    // The current category may have been deactivated since — keep it as an
-    // extra option and only send categoryId when the selection actually
-    // changes, so opening/saving the sheet never silently clears it.
-    final initialCategoryLabel = (data['category'] ?? '').isNotEmpty ? data['category']! : 'None';
-    String categoryLabel = initialCategoryLabel;
     Uint8List? newPhotoBytes = _photoBytes;
     bool saving = false;
 
@@ -510,6 +627,24 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             }).toList()),
           ]));
 
+        // Same chip look, but options are admin-managed (key, label) pairs.
+        Widget optionChips(String label, List<StudentOption> options, String selectedKey, void Function(String) onSelected) =>
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub)),
+              const SizedBox(height: 6),
+              Wrap(spacing: 8, runSpacing: 8, children: options.map((o) {
+                final active = selectedKey == o.key;
+                return GestureDetector(
+                  onTap: () => setSheet(() => onSelected(o.key)),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(color: active ? _brand600 : context.surface2, borderRadius: BorderRadius.circular(10)),
+                    child: Text(o.label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub))));
+              }).toList()),
+            ]));
+
         return Container(
           decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
           padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(ctx).viewInsets.bottom + 28),
@@ -531,15 +666,10 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             field('Full Name', nameCtrl),
             dateField('Date of Birth', dob, (v) => dob = v),
             chips('Gender', const ['Male', 'Female', 'Other'], gender, (v) => gender = v),
-            chips('Status', const ['Active', 'Graduated', 'Relieved', 'Drop out'], status, (v) => status = v),
+            optionChips('Status', statusOpts, statusKey, (v) => statusKey = v),
             if (centres.isNotEmpty) chips('Centre', centres.map((c) => c.name).toList(), centre, (v) => centre = v),
-            if (categories.isNotEmpty)
-              chips('Category', [
-                'None',
-                ...categories.map((c) => c.label),
-                if (initialCategoryLabel != 'None' && !categories.any((c) => c.label == initialCategoryLabel))
-                  initialCategoryLabel,
-              ], categoryLabel, (v) => categoryLabel = v),
+            if (categoryOpts.length > 1)
+              optionChips('Support Category', categoryOpts, categoryId, (v) => categoryId = v),
 
             sectionLabel('GUARDIAN DETAILS'),
             field("Father's Name", fatherCtrl),
@@ -552,6 +682,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             field('Address', addressCtrl, lines: 2),
 
             sectionLabel('EDUCATION DETAILS'),
+            if (eduOpts.length > 1)
+              optionChips('Education Level', eduOpts, eduKey, (v) => eduKey = v),
             field('School / Institution', schoolCtrl),
             field('Class / Grade', classCtrl),
             field('Section', sectionCtrl),
@@ -568,27 +700,25 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             field('Family Background Notes', familyNotesCtrl, lines: 2),
 
             const SizedBox(height: 6),
+            _sheetError(error),
             SizedBox(width: double.infinity, child: ElevatedButton(
               onPressed: saving ? null : () async {
-                setSheet(() => saving = true);
+                setSheet(() { saving = true; error = null; });
                 final centerId = centres.firstWhere(
                   (c) => c.name == centre, orElse: () => (id: '', name: '')).id;
-                final selectedCategoryId = categoryLabel == 'None'
-                  ? ''
-                  : categories.firstWhere((c) => c.label == categoryLabel, orElse: () => (id: '', label: '')).id;
-                // Only persist a category change the user actually made, and
-                // never map an unknown (deactivated) label to a clear.
-                final sendCategory = categories.isNotEmpty &&
-                  categoryLabel != initialCategoryLabel &&
-                  (categoryLabel == 'None' || selectedCategoryId.isNotEmpty);
-                await _saveIdentityFields({
+                final sendCategory = categoryId != initialCategoryId;
+                final photoChanged = !identical(newPhotoBytes, _photoBytes) && newPhotoBytes != null;
+                final bool saved;
+                try {
+                  saved = await _saveIdentityFields({
                   'name': nameCtrl.text.trim(),
                   if (dob.isNotEmpty) 'dob': dob,
                   'gender': _genderBack[gender] ?? 'MALE',
-                  'status': _statusBack[status] ?? 'ACTIVE',
+                  if (statusKey != initialStatusKey) 'status': statusKey,
                   if (centerId.isNotEmpty) 'centerId': centerId,
-                  // '' clears the category on the backend.
-                  if (sendCategory) 'categoryId': selectedCategoryId,
+                  // '' clears the category / education level on the backend.
+                  if (sendCategory) 'categoryId': categoryId,
+                  if (eduKey != initialEduKey) 'educationLevel': eduKey,
                   'fatherName': fatherCtrl.text.trim(),
                   'motherName': motherCtrl.text.trim(),
                   'guardianName': guardianCtrl.text.trim(),
@@ -607,18 +737,22 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
                   'permanence': permanence,
                   'studentType': studentTypeCtrl.text.trim(),
                   'educationRemarks': eduRemarksCtrl.text.trim(),
-                  if (!identical(newPhotoBytes, _photoBytes) && newPhotoBytes != null)
-                    'photo': base64Encode(newPhotoBytes!),
-                }, centreName: centre.isNotEmpty ? centre : null,
-                   categoryLabel: sendCategory ? (categoryLabel == 'None' ? '' : categoryLabel) : null);
-                if (!identical(newPhotoBytes, _photoBytes)) setState(() => _photoBytes = newPhotoBytes);
-                if (ctx.mounted) Navigator.pop(ctx);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: const Text('Student updated successfully', style: TextStyle(fontWeight: FontWeight.w700)),
-                    backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+                  if (photoChanged) 'photo': base64Encode(newPhotoBytes!),
+                  }, centreName: centre.isNotEmpty ? centre : null,
+                     categoryLabel: sendCategory
+                       ? (categoryId.isEmpty ? '' : categoryOpts.firstWhere((o) => o.key == categoryId).label)
+                       : null);
+                } catch (e) {
+                  // Keep the sheet open with the server's reason so nothing typed is lost.
+                  if (ctx.mounted) setSheet(() { saving = false; error = ApiClient.errorMessage(e); });
+                  return;
                 }
+                if (saved && photoChanged && mounted) {
+                  evictLazyPhoto('/students/${widget.id}/photo');
+                  setState(() => _photoBytes = newPhotoBytes);
+                }
+                if (ctx.mounted) Navigator.pop(ctx);
+                _snackSaved(saved, 'Student updated successfully');
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
@@ -637,28 +771,46 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
   // Persist fields to the backend so edits survive a reload (PUT
   // /students/:id), then reflect them in the on-screen data + local cache.
   static const _genderDisplay = {'MALE': 'Male', 'FEMALE': 'Female', 'OTHER': 'Other'};
-  static const _statusDisplay = {'ACTIVE': 'Active', 'GRADUATED': 'Graduated', 'INACTIVE': 'Relieved', 'DROPPED': 'Drop out'};
 
-  Future<void> _saveIdentityFields(Map<String, dynamic> body, {String? centreName, String? categoryLabel}) async {
-    try {
-      await apiClient.put('/students/${widget.id}', body);
-    } catch (_) {
-      // Best-effort: still reflect the edit locally so the UI isn't stuck,
-      // even if the backend is briefly unreachable.
-    }
+  // Returns true when saved, false when the backend queued the change for
+  // Super Admin approval (nothing is applied locally then). Throws on
+  // failure — callers show ApiClient.errorMessage(e).
+  Future<bool> _saveIdentityFields(Map<String, dynamic> body, {String? centreName, String? categoryLabel}) async {
+    final res = await apiClient.put('/students/${widget.id}', body);
+    if ((res['meta'] as Map?)?['pendingApproval'] == true) return false;
+    if (!mounted) return true;
     setState(() {
+      // Backend field name → the UI key the tabs read.
       body.forEach((k, v) {
         final val = v?.toString() ?? '';
         switch (k) {
           case 'aadhaarNumber': _data['aadhaar'] = val; break;
           case 'satNumber': _data['sat'] = val; break;
           case 'gender': _data['gender'] = _genderDisplay[val] ?? val; break;
-          case 'status': _data['status'] = _statusDisplay[val] ?? val; break;
+          case 'status':
+            _data['statusKey'] = val;
+            _data['status'] = StudentLookups.statusLabel(val);
+            break;
+          case 'educationLevel': _data['educationLevelKey'] = val; break;
+          case 'fatherName': _data['father'] = val; break;
+          case 'motherName': _data['mother'] = val; break;
           case 'guardianName': _data['guardian'] = val; break;
           case 'guardianRelation': _data['relation'] = val; break;
+          case 'guardianPhone': _data['mobile'] = val; break;
+          case 'medicalNotes': _data['medHistory'] = val; break;
+          case 'notes': _data['familyNotes'] = val; break;
+          case 'admissionDate': _data['admDate'] = val; break;
+          case 'school': _data['school'] = val; _data['institution'] = val; break;
           case 'admissionNo': _data['admNo'] = val; break;
           case 'academicYear': _data['acadYear'] = val; break;
           case 'educationRemarks': _data['eduRemarks'] = val; break;
+          case 'class': _data['class'] = val.isEmpty ? '—' : val; break;
+          case 'dob':
+            _data['dob'] = val;
+            final age = _ageFromIso(val);
+            _data['age'] = age.isNotEmpty ? age : '—';
+            break;
+          case 'photo': break;    // shown via _photoBytes, never kept as text
           case 'centerId': break; // resolved via centreName below instead
           default: _data[k] = val;
         }
@@ -674,6 +826,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
       rec['category'] = categoryLabel.isEmpty ? null : {'id': body['categoryId'], 'label': categoryLabel};
     }
     if (rec != null) body.forEach((k, v) => rec[k] = v);
+    return true;
   }
 
   void _showIdentityEditSheet(BuildContext context) {
@@ -689,6 +842,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
     final incomeAmt  = TextEditingController(text: _data['incomeCertificateAmount']);
     final incomeRdNo = TextEditingController(text: _data['incomeCertificateRdNumber']);
     bool saving = false;
+    String? error;
 
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
@@ -728,10 +882,13 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             field('Income Certificate Amount', incomeAmt, kb: TextInputType.number),
             field('Income Certificate RD Number', incomeRdNo),
             const SizedBox(height: 6),
+            _sheetError(error),
             SizedBox(width: double.infinity, child: ElevatedButton(
               onPressed: saving ? null : () async {
-                setSheet(() => saving = true);
-                await _saveIdentityFields({
+                setSheet(() { saving = true; error = null; });
+                final bool saved;
+                try {
+                  saved = await _saveIdentityFields({
                   'penNumber': pen.text.trim(),
                   'cwcNumber': cwc.text.trim(),
                   'abhaNumber': abha.text.trim(),
@@ -743,14 +900,13 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
                   'bankAccountDetails': bankInfo.text.trim(),
                   'incomeCertificateAmount': int.tryParse(incomeAmt.text.trim()),
                   'incomeCertificateRdNumber': incomeRdNo.text.trim(),
-                });
-                if (ctx.mounted) Navigator.pop(ctx);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: const Text('Identity details updated', style: TextStyle(fontWeight: FontWeight.w700)),
-                    backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+                  });
+                } catch (e) {
+                  if (ctx.mounted) setSheet(() { saving = false; error = ApiClient.errorMessage(e); });
+                  return;
                 }
+                if (ctx.mounted) Navigator.pop(ctx);
+                _snackSaved(saved, 'Identity details updated');
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
@@ -766,13 +922,18 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
     );
   }
 
-  void _showStatusSheet(BuildContext context, String current) {
-    String status = current;
-    const statuses = [
-      ('Active',     'Currently enrolled and attending', Icons.check_circle_outline, _brand600,  _brand100),
-      ('Graduated',  'Completed the programme',          Icons.school_outlined,      _violet500, _violet100),
-      ('Relieved',   'Left on own / family request',     Icons.logout_rounded,       _amber600,  _amber100),
-      ('Drop out',   'Left without completing',          Icons.cancel_outlined,      _coral500,  _coral100),
+  // Options come from Settings → Student Status; the chosen key is saved via
+  // PUT /students/:id (previously this only changed the screen locally).
+  Future<void> _showStatusSheet(BuildContext context, String currentKey) async {
+    await StudentLookups.load();
+    if (!context.mounted) return;
+    String status = currentKey;
+    bool saving = false;
+    String? error;
+    final statuses = [
+      for (final o in _withCurrent(StudentLookups.statuses, currentKey, StudentLookups.statusLabel(currentKey)))
+        (o.key, o.label, _statusHints[o.key]?.$1 ?? '', _statusHints[o.key]?.$2 ?? Icons.label_outline,
+          StudentLookups.statusColor(o.key)),
     ];
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
@@ -787,28 +948,30 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
           Text("Update the child's enrolment status.", style: TextStyle(fontSize: 13.5, color: context.textSub, fontWeight: FontWeight.w500)),
           const SizedBox(height: 16),
           ...statuses.map((s) {
-            final sel = status == s.$1;
+            final (key, label, hint, icon, col) = s;
+            final sel = status == key;
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: GestureDetector(
-                onTap: () => setSt(() => status = s.$1),
+                onTap: () => setSt(() => status = key),
                 child: Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: sel ? s.$5 : context.surface2,
+                    color: sel ? col.withValues(alpha: 0.12) : context.surface2,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: sel ? s.$4 : context.border, width: sel ? 2 : 1),
+                    border: Border.all(color: sel ? col : context.border, width: sel ? 2 : 1),
                   ),
                   child: Row(children: [
                     Container(width: 40, height: 40,
-                      decoration: BoxDecoration(color: sel ? s.$4 : context.cardBg, borderRadius: BorderRadius.circular(10)),
-                      child: Icon(s.$3, color: sel ? Colors.white : context.textHint, size: 20)),
+                      decoration: BoxDecoration(color: sel ? col : context.cardBg, borderRadius: BorderRadius.circular(10)),
+                      child: Icon(icon, color: sel ? Colors.white : context.textHint, size: 20)),
                     const SizedBox(width: 12),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(s.$1, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: sel ? s.$4 : context.textPrimary)),
-                      Text(s.$2, style: TextStyle(fontSize: 12.5, color: context.textSub, fontWeight: FontWeight.w500)),
+                      Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: sel ? col : context.textPrimary)),
+                      if (hint.isNotEmpty)
+                        Text(hint, style: TextStyle(fontSize: 12.5, color: context.textSub, fontWeight: FontWeight.w500)),
                     ])),
-                    if (sel) Icon(Icons.radio_button_checked, color: s.$4, size: 20)
+                    if (sel) Icon(Icons.radio_button_checked, color: col, size: 20)
                     else Icon(Icons.radio_button_unchecked, color: context.textHint, size: 20),
                   ]),
                 ),
@@ -816,21 +979,28 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             );
           }),
           const SizedBox(height: 8),
+          _sheetError(error),
           SizedBox(width: double.infinity, child: ElevatedButton(
-            onPressed: () {
-              _applyStatus(status);
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('Status updated to $status', style: const TextStyle(fontWeight: FontWeight.w700)),
-                backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ));
+            onPressed: saving ? null : () async {
+              if (status == currentKey) { Navigator.pop(ctx); return; }
+              setSt(() { saving = true; error = null; });
+              final bool saved;
+              try {
+                saved = await _saveIdentityFields({'status': status});
+              } catch (e) {
+                if (ctx.mounted) setSt(() { saving = false; error = ApiClient.errorMessage(e); });
+                return;
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+              _snackSaved(saved, 'Status updated to ${StudentLookups.statusLabel(status)}');
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               padding: const EdgeInsets.symmetric(vertical: 15)),
-            child: const Text('Save Status', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+            child: saving
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+              : const Text('Save Status', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
           )),
         ])),
       )),
@@ -865,6 +1035,13 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
     // Latest height/weight from Growth History — the profile map only carries
     // demo values, real measurements live in growth records.
     final data = Map<String, String>.from(_data);
+    // Labels (not keys) from the admin-managed lists for the PDF.
+    data['status'] = StudentLookups.statusLabel(_data['statusKey'] ?? 'ACTIVE');
+    data['educationLevel'] = StudentLookups.educationLabel(_data['educationLevelKey']);
+    final catId = _data['categoryId'] ?? '';
+    if (catId.isNotEmpty && StudentLookups.categoryLabel(catId) != '—') {
+      data['category'] = StudentLookups.categoryLabel(catId);
+    }
     try {
       final r = await apiClient.get('/students/${widget.id}/growth');
       final list = (r['data'] as List? ?? []).whereType<Map>().toList();
@@ -952,8 +1129,39 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
   @override
   Widget build(BuildContext context) {
     final data = _data;
-    final name = data['name']!;
+    final name = data['name'] ?? '';
     final color = _avColor(name);
+
+    // Opened by URL / right after adding: nothing cached yet, so wait for
+    // GET /students/:id instead of showing "Student", "—", 0.
+    if (!_hasRecord && (_fetching || _fetchError != null)) {
+      return Scaffold(
+        backgroundColor: context.scaffoldBg,
+        appBar: AppBar(
+          backgroundColor: _brand700,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+            onPressed: () => context.go('/students'),
+          ),
+        ),
+        body: Center(child: _fetching
+          ? const CircularProgressIndicator(color: _brand600)
+          : Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.wifi_off_rounded, size: 48, color: Color(0xFF93A29F)),
+              const SizedBox(height: 12),
+              Text('Could not load this child', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: context.textPrimary)),
+              const SizedBox(height: 6),
+              Text(_fetchError!, style: TextStyle(fontSize: 12, color: context.textHint), textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _fetchRecord,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white),
+              ),
+            ]))),
+      );
+    }
 
     return Scaffold(
       backgroundColor: context.scaffoldBg,
@@ -1041,7 +1249,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             bottom: _AppBarBottom(
               tabController: _tabs,
               status: data['status']!,
-              onUpdate: () => _showStatusSheet(context, data['status']!),
+              onUpdate: () => _showStatusSheet(context, data['statusKey'] ?? 'ACTIVE'),
             ),
           ),
         ],
@@ -1258,6 +1466,7 @@ class _EducationTab extends StatelessWidget {
       const SizedBox(height: 14),
       _CardSection(title: 'Education Details', icon: Icons.account_balance_outlined, children: [
         _InfoRow('Admission No.',    _na(data['admNo'])),
+        _InfoRow('Education Level',  _na(StudentLookups.educationLabel(data['educationLevelKey']))),
         _InfoRow('Academic Year',    _na(data['acadYear'])),
         _InfoRow('Admission Date',   _naDate(data['admDate'])),
         _InfoRow('Joining Date',     _naDate(data['joiningDate'])),
@@ -1691,14 +1900,20 @@ class _AchievementsTabState extends State<_AchievementsTab> {
                       'category': _catBack[cat] ?? 'OTHER',
                       'date': date.toIso8601String(),
                     };
+                    final Map<String, dynamic> res;
                     try {
-                      if (editing == null) {
-                        await apiClient.post('/achievements', {'studentId': widget.studentId, ...body});
-                      } else {
-                        await apiClient.put('/achievements/${editing.id}', body);
-                      }
-                    } catch (_) {}
+                      res = editing == null
+                        ? await apiClient.post('/achievements', {'studentId': widget.studentId, ...body})
+                        : await apiClient.put('/achievements/${editing.id}', body);
+                    } catch (e) {
+                      if (ctx.mounted) ss(() => saving = false);
+                      if (mounted) _showResultSnack(this.context, ApiClient.errorMessage(e), isError: true);
+                      return;
+                    }
                     if (ctx.mounted) Navigator.pop(ctx);
+                    final pending = (res['meta'] as Map?)?['pendingApproval'] == true;
+                    if (mounted) _showResultSnack(this.context, pending ? 'Submitted for Super Admin approval'
+                        : (editing == null ? 'Achievement added' : 'Achievement updated'), pending: pending);
                     await _load();
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
@@ -1839,6 +2054,16 @@ class _AchievementsTabState extends State<_AchievementsTab> {
         )),
     ]);
   }
+}
+
+// Snackbar for sub-tab saves: brand = saved, amber = queued for approval,
+// coral = failed (with the server's message).
+void _showResultSnack(BuildContext context, String msg, {bool isError = false, bool pending = false}) {
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
+    backgroundColor: isError ? _coral500 : (pending ? _amber600 : _brand600),
+    behavior: SnackBarBehavior.floating,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
 }
 
 String _fmtDate(DateTime d) {
@@ -2478,6 +2703,7 @@ class _ProgressTabState extends State<_ProgressTab> {
     final examResultCtrl = TextEditingController();
     final gradeCtrl = TextEditingController();
     bool saving = false;
+    String? error;
 
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
@@ -2532,12 +2758,20 @@ class _ProgressTabState extends State<_ProgressTab> {
             field('Mentor Remarks', mentorCtrl, lines: 2),
             field('Teacher Remarks', teacherCtrl, lines: 2),
             const SizedBox(height: 6),
+            if (error != null)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(color: _coral100, borderRadius: BorderRadius.circular(10)),
+                child: Text(error!, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _coral500))),
             SizedBox(width: double.infinity, child: ElevatedButton(
               onPressed: saving ? null : () async {
                 setSheet(() => saving = true);
                 final iso = '${date.year.toString().padLeft(4,'0')}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}';
+                final Map<String, dynamic> res;
                 try {
-                  await apiClient.post('/students/${widget.studentId}/progress', {
+                  res = await apiClient.post('/students/${widget.studentId}/progress', {
                     'date': iso,
                     if (academicScoreCtrl.text.trim().isNotEmpty) 'academicScore': int.tryParse(academicScoreCtrl.text.trim()),
                     if (attendanceCtrl.text.trim().isNotEmpty) 'attendancePercent': double.tryParse(attendanceCtrl.text.trim()),
@@ -2550,8 +2784,14 @@ class _ProgressTabState extends State<_ProgressTab> {
                     if (examResultCtrl.text.trim().isNotEmpty) 'examResult': examResultCtrl.text.trim(),
                     if (gradeCtrl.text.trim().isNotEmpty) 'grade': gradeCtrl.text.trim(),
                   });
-                } catch (_) {}
+                } catch (e) {
+                  // Sheet stays open (inline error) so nothing typed is lost.
+                  if (ctx.mounted) setSheet(() { saving = false; error = ApiClient.errorMessage(e); });
+                  return;
+                }
                 if (ctx.mounted) Navigator.pop(ctx);
+                final pending = (res['meta'] as Map?)?['pendingApproval'] == true;
+                if (mounted) _showResultSnack(this.context, pending ? 'Submitted for Super Admin approval' : 'Performance record added', pending: pending);
                 await _loadProgress();
               },
               style: ElevatedButton.styleFrom(
@@ -2616,14 +2856,21 @@ class _ProgressTabState extends State<_ProgressTab> {
             if (h == null && w == null) return;
             setDlg(() => saving = true);
             final iso = '${date.year.toString().padLeft(4,'0')}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}';
+            final Map<String, dynamic> res;
             try {
-              await apiClient.post('/students/${widget.studentId}/growth', {
+              res = await apiClient.post('/students/${widget.studentId}/growth', {
                 'date': iso,
                 if (h != null) 'heightCm': h,
                 if (w != null) 'weightKg': w,
               });
-            } catch (_) {}
+            } catch (e) {
+              if (ctx.mounted) setDlg(() => saving = false);
+              if (mounted) _showResultSnack(this.context, ApiClient.errorMessage(e), isError: true);
+              return;
+            }
             if (ctx.mounted) Navigator.pop(ctx);
+            final pending = (res['meta'] as Map?)?['pendingApproval'] == true;
+            if (mounted) _showResultSnack(this.context, pending ? 'Submitted for Super Admin approval' : 'Growth record added', pending: pending);
             await _loadGrowth();
           },
           style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),

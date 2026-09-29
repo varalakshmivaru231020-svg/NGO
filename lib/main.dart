@@ -15,6 +15,7 @@ void main() async {
   usePathUrlStrategy();
   // Restore the signed-in role from the saved token before rendering, so a
   // reload keeps the user's scoped access instead of defaulting to admin.
+  installSessionExpiryHandler();
   await restoreSession();
   runApp(const ProviderScope(child: SakshamApp()));
 }

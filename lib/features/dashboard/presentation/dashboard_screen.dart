@@ -147,11 +147,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Future<void> _loadCounts() async {
     Future<int?> count(String path) async {
       try {
-        // Backend caps limit at 100; use the server's reported total for an
-        // accurate count regardless of page size.
-        final r = await apiClient.get(path, params: {'limit': '100', 'page': '1'});
+        // Only meta.total is needed — ask for a single row instead of pulling
+        // 100 full records (with photos) just to count them. Unpaginated
+        // endpoints (e.g. /offices) ignore limit and fall through to length.
+        final r = await apiClient.get(path, params: {'limit': '1', 'page': '1'});
         final meta = r['meta'];
-        if (meta is Map && meta['total'] is int) return meta['total'] as int;
+        if (meta is Map && meta['total'] is num) return (meta['total'] as num).toInt();
         final inner = r['data'];
         final list = inner is List ? inner : (inner is Map ? (inner['data'] as List? ?? const []) : const []);
         return list.length;
@@ -301,7 +302,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       trend7M = computeTrend(7);
       trend1Y = computeTrend(12);
 
-    } catch (_) {}
+    } catch (_) {
+      // Failed request ≠ ₹0 raised — leave unknown so the header shows '—'.
+      raised = null;
+      today = null;
+    }
 
     return {
       'raised': raised, 'today': today, 'recent': recent, 'slices': slices,
@@ -314,7 +319,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     Future<int?> loadTotalRaised() async {
       try {
         final r = await apiClient.get('/reports/overview');
-        return ((r['data'] as Map?)?['donations'] as Map?)?['totalRaised'] as int?;
+        final v = ((r['data'] as Map?)?['donations'] as Map?)?['totalRaised'];
+        return v is num ? v.toInt() : num.tryParse('${v ?? ''}')?.toInt();
       } catch (_) { return null; }
     }
 
@@ -652,15 +658,15 @@ class _BrandHeader extends StatelessWidget {
                       Text("Today's Donations", style: TextStyle(fontSize: 12.5, color: Colors.white, fontWeight: FontWeight.w600)),
                     ]),
                     const SizedBox(height: 4),
-                    Text(_inr(todayRaised ?? 0), style: const TextStyle(fontSize: 36, color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: -1)),
+                    Text(todayRaised != null ? _inr(todayRaised!) : '—', style: const TextStyle(fontSize: 36, color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: -1)),
                   ],
                 )),
               ]),
               const SizedBox(height: 16),
               Row(children: [
-                Expanded(child: _StatPill(label: 'Total Raised', value: _inr(raised ?? 0, compact: true))),
+                Expanded(child: _StatPill(label: 'Total Raised', value: raised != null ? _inr(raised!, compact: true) : '—')),
                 const SizedBox(width: 10),
-                Expanded(child: _StatPill(label: "Today", value: _inr(todayRaised ?? 0, compact: true))),
+                Expanded(child: _StatPill(label: "Today", value: todayRaised != null ? _inr(todayRaised!, compact: true) : '—')),
               ]),
             ],
           ],

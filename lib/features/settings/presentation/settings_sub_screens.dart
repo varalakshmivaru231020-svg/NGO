@@ -20,6 +20,7 @@ import '../../../core/widgets/photo_picker_widget.dart';
 import '../../../core/auth/role_auth.dart';
 import '../profile_store.dart';
 import '../../students/presentation/students_screen.dart' show demoCentres;
+import '../../students/student_lookups.dart';
 
 // ── brand palette ────────────────────────────────────────────────
 const _brand600   = Color(0xFFFF9933);
@@ -1357,216 +1358,7 @@ class _DonationTypesState extends State<DonationTypesScreen> {
   }
 }
 
-// ════════════════════════════════════════════════════════════════
-// 5b. STUDENT CATEGORIES
-// ════════════════════════════════════════════════════════════════
-class StudentCategoriesScreen extends StatefulWidget {
-  const StudentCategoriesScreen({super.key});
-  @override
-  State<StudentCategoriesScreen> createState() => _StudentCategoriesState();
-}
-
-class _StudentCategoriesState extends State<StudentCategoriesScreen> {
-  // Loaded live from the backend — the same table Add Student reads, so a
-  // category added or toggled here shows up (or disappears) there immediately.
-  List<Map<String, dynamic>> _cats = [];
-  bool _loading = true;
-  String? _error;
-
-  @override
-  void initState() { super.initState(); _load(); }
-
-  Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
-    try {
-      final r = await apiClient.get('/students/categories/all');
-      final list = (r['data'] as List? ?? []).cast<Map<String, dynamic>>();
-      if (!mounted) return;
-      setState(() { _cats = list; _loading = false; });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() { _error = ApiClient.errorMessage(e, fallback: 'Could not load student categories.'); _loading = false; });
-    }
-  }
-
-  static (IconData, Color) _style(String label) {
-    final l = label.toLowerCase();
-    if (l.contains('orphan')) return (Icons.favorite_outline, _coral500);
-    if (l.contains('single') || l.contains('parent') || l.contains('family')) return (Icons.family_restroom_outlined, _violet500);
-    if (l.contains('day') || l.contains('school')) return (Icons.school_outlined, _sky500);
-    if (l.contains('hostel') || l.contains('resident') || l.contains('home')) return (Icons.night_shelter_outlined, _amber600);
-    if (l.contains('college')) return (Icons.menu_book_outlined, _violet500);
-    return (Icons.face_outlined, _brand600);
-  }
-
-  Future<void> _toggle(int i, bool v) async {
-    final c = _cats[i];
-    setState(() => _cats[i]['isActive'] = v);
-    try {
-      await apiClient.put('/students/categories/${c['id']}', {'isActive': v});
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _cats[i]['isActive'] = !v);
-      _snack(context, ApiClient.errorMessage(e, fallback: 'Could not update the category.'));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    body: Column(children: [
-      _buildHeader(context, 'Student Categories', sub: _loading ? 'Loading…' : '${_cats.length} categories'),
-      Expanded(child: _loading
-        ? const Center(child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600))
-        : _error != null
-          ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.cloud_off_outlined, size: 40, color: context.textHint),
-              const SizedBox(height: 10),
-              Text(_error!, textAlign: TextAlign.center, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textSub)),
-              const SizedBox(height: 14),
-              OutlinedButton(onPressed: _load, child: const Text('Retry', style: TextStyle(fontWeight: FontWeight.w700, color: _brand600))),
-            ])))
-          : RefreshIndicator(
-              onRefresh: _load,
-              color: _brand600,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
-                child: _cats.isEmpty
-                  ? Padding(padding: const EdgeInsets.only(top: 60), child: Center(child: Column(children: [
-                      Icon(Icons.face_outlined, size: 44, color: context.textHint),
-                      const SizedBox(height: 10),
-                      Text('No student categories yet.', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: context.textSub)),
-                      const SizedBox(height: 4),
-                      Text('Add categories like Orphan, Single Parent,\nDay Scholar — they appear in Add Student.',
-                          textAlign: TextAlign.center, style: TextStyle(fontSize: 12.5, color: context.textHint, fontWeight: FontWeight.w500)),
-                    ])))
-                  : _buildCard(context, child: Column(children: _cats.asMap().entries.map((e) {
-          final i = e.key; final t = e.value;
-          final label = t['label'] as String? ?? '';
-          final (icon, c) = _style(label);
-          final active = t['isActive'] as bool? ?? true;
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: i < _cats.length - 1 ? BoxDecoration(border: Border(bottom: BorderSide(color: context.border))) : null,
-            child: Row(children: [
-              Container(width: 40, height: 40,
-                decoration: BoxDecoration(color: c.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(11)),
-                child: Icon(icon, color: c, size: 20)),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
-                if ((t['description'] as String? ?? '').isNotEmpty)
-                  Text(t['description'] as String, style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w500)),
-              ])),
-              Switch(
-                value: active,
-                onChanged: (v) => _toggle(i, v),
-                activeColor: _brand600),
-            ]),
-          );
-        }).toList())),
-              ),
-            )),
-    ]),
-    floatingActionButton: FloatingActionButton.extended(
-      onPressed: () => _showAddCategoryDialog(context),
-      backgroundColor: _brand600, foregroundColor: Colors.white,
-      icon: const Icon(Icons.add),
-      label: const Text('Add Category', style: TextStyle(fontWeight: FontWeight.w700)),
-    ),
-  );
-
-  void _showAddCategoryDialog(BuildContext context) {
-    final nameCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-    String? nameError;
-    bool saving = false;
-
-    showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
-        return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-            decoration: BoxDecoration(color: ctx.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: ctx.border, borderRadius: BorderRadius.circular(2)))),
-              const SizedBox(height: 16),
-              const Text('Add Student Category', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 16),
-              Row(children: [
-                Text('Category Name', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: ctx.textSub)),
-                const Text(' *', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _coral500)),
-              ]),
-              const SizedBox(height: 6),
-              TextField(
-                controller: nameCtrl,
-                onChanged: (_) { if (nameError != null) setSheet(() => nameError = null); },
-                style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
-                decoration: InputDecoration(
-                  hintText: 'e.g. Orphan, Single Parent, Day Scholar…', hintStyle: TextStyle(color: ctx.textHint),
-                  filled: true, fillColor: ctx.surface2,
-                  errorText: nameError,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
-                  errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _coral500, width: 1.5)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12))),
-              const SizedBox(height: 12),
-              Text('Description (optional)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: ctx.textSub)),
-              const SizedBox(height: 6),
-              TextField(
-                controller: descCtrl,
-                style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
-                decoration: InputDecoration(
-                  hintText: 'Short description of this category', hintStyle: TextStyle(color: ctx.textHint),
-                  filled: true, fillColor: ctx.surface2,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12))),
-              const SizedBox(height: 20),
-              SizedBox(width: double.infinity, child: ElevatedButton(
-                onPressed: saving ? null : () async {
-                  final name = nameCtrl.text.trim();
-                  if (name.isEmpty) {
-                    setSheet(() => nameError = 'Category name is required');
-                    return;
-                  }
-                  setSheet(() => saving = true);
-                  try {
-                    await apiClient.post('/students/categories', {
-                      'label': name,
-                      if (descCtrl.text.trim().isNotEmpty) 'description': descCtrl.text.trim(),
-                    });
-                    // The category exists now — refresh the list even if the
-                    // sheet was dismissed while the request was in flight.
-                    if (ctx.mounted) Navigator.pop(ctx);
-                    if (!mounted) return;
-                    _snack(context, '"$name" added — it now appears in Add Student');
-                    _load();
-                  } catch (e) {
-                    if (!ctx.mounted) return;
-                    setSheet(() {
-                      saving = false;
-                      nameError = ApiClient.errorMessage(e, fallback: 'Could not save the category.');
-                    });
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(vertical: 15)),
-                child: saving
-                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Text('Save Category', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-              )),
-            ]),
-          ),
-        );
-      }),
-    );
-  }
-}
+// 5b. STUDENT CATEGORIES / STATUS / EDUCATION LEVELS → student_masters_screen.dart
 
 // ════════════════════════════════════════════════════════════════
 // 5c. EXPENSE CATEGORIES
@@ -1793,18 +1585,18 @@ class _ExportDataState extends State<ExportDataScreen> {
 
   // Paged fetch — the backend caps limit at 100 (a limit=500 request is
   // rejected with a 400, which used to silently produce an empty export).
+  // Errors propagate: swallowing them here produced a "successful" download
+  // that was silently empty or cut off part-way.
   Future<List<Map<String, dynamic>>> _fetchList(String path) async {
     final all = <Map<String, dynamic>>[];
-    try {
-      for (int page = 1; ; page++) {
-        final r = await apiClient.get(path, params: {'limit': '100', 'page': '$page'});
-        final inner = r['data'];
-        final list = inner is Map ? (inner['data'] as List? ?? const []) : (inner is List ? inner : const []);
-        all.addAll(list.whereType<Map>().map((m) => m.cast<String, dynamic>()));
-        final meta = (r['meta'] as Map?) ?? (inner is Map ? inner['meta'] as Map? : null);
-        if (meta?['hasNext'] != true) break;
-      }
-    } catch (_) {}
+    for (int page = 1; page <= 500; page++) {
+      final r = await apiClient.get(path, params: {'limit': '100', 'page': '$page'});
+      final inner = r['data'];
+      final list = inner is Map ? (inner['data'] as List? ?? const []) : (inner is List ? inner : const []);
+      all.addAll(list.whereType<Map>().map((m) => m.cast<String, dynamic>()));
+      final meta = (r['meta'] as Map?) ?? (inner is Map ? inner['meta'] as Map? : null);
+      if (meta?['hasNext'] != true || list.isEmpty) break;
+    }
     return all;
   }
 
@@ -1861,15 +1653,29 @@ class _ExportDataState extends State<ExportDataScreen> {
     }).toList(),
   );
 
-  ({List<String> headers, List<List<String>> rows}) _studentRows(List<Map<String, dynamic>> students) => (
-    headers: const ['#', 'Child ID', 'Name', 'Centre', 'Class', 'Status', 'Gender'],
-    rows: students.asMap().entries.map((e) {
-      final i = e.key, r = e.value;
-      final centre = (r['center'] as Map?)?['name'] as String? ?? '';
-      return ['${i + 1}', r['childId'] as String? ?? '', r['name'] as String? ?? '',
-        centre, r['class'] as String? ?? '', r['status'] as String? ?? '', r['gender'] as String? ?? ''];
-    }).toList(),
-  );
+  // Full contact details — the old export had only name/class/status, which
+  // was useless for reaching a child's family.
+  ({List<String> headers, List<List<String>> rows}) _studentRows(List<Map<String, dynamic>> students) {
+    String s(dynamic v) => v == null ? '' : v.toString().trim();
+    String d(dynamic v) {
+      final dt = DateTime.tryParse(s(v));
+      return dt == null ? '' : DateFormat('dd/MM/yyyy').format(dt.toLocal());
+    }
+    return (
+      headers: const ['#', 'Child ID', 'Name', 'Gender', 'DOB', 'Centre', 'Status', 'Support Category',
+        "Father's Name", "Mother's Name", 'Guardian', 'Relation', 'Guardian Phone', 'Address',
+        'Education Level', 'School / College', 'Class'],
+      rows: students.asMap().entries.map((e) {
+        final i = e.key, r = e.value;
+        final edu = s(r['educationLevel']);
+        return ['${i + 1}', s(r['childId']), s(r['name']), s(r['gender']), d(r['dob']),
+          s((r['center'] as Map?)?['name']), StudentLookups.statusLabel(s(r['status'])),
+          s((r['category'] as Map?)?['label']), s(r['fatherName']), s(r['motherName']),
+          s(r['guardianName']), s(r['guardianRelation']), s(r['guardianPhone']), s(r['address']),
+          edu.isEmpty ? '' : StudentLookups.educationLabel(edu), s(r['school']), s(r['class'])];
+      }).toList(),
+    );
+  }
 
   ({List<String> headers, List<List<String>> rows}) _summaryRows(Map<String, dynamic> overview) => (
     headers: const ['Metric', 'Value'],
@@ -1970,16 +1776,17 @@ class _ExportDataState extends State<ExportDataScreen> {
         data: t.rows,
         headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
         headerDecoration: pw.BoxDecoration(color: orange),
-        cellStyle: const pw.TextStyle(fontSize: 8),
-        cellHeight: 22,
+        cellStyle: const pw.TextStyle(fontSize: 7.5),
+        cellHeight: 20,
         cellAlignment: pw.Alignment.centerLeft,
         headerCount: 1,
       ),
     ];
 
     doc.addPage(pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.fromLTRB(28, 28, 28, 28),
+      // Landscape: the student table carries 17 columns of contact details.
+      pageFormat: PdfPageFormat.a4.landscape,
+      margin: const pw.EdgeInsets.fromLTRB(24, 24, 24, 24),
       footer: (ctx) => pw.Container(
         alignment: pw.Alignment.centerRight,
         margin: const pw.EdgeInsets.only(top: 8),
@@ -2009,6 +1816,7 @@ class _ExportDataState extends State<ExportDataScreen> {
       final donations = _donations ? _filterByDate(await _fetchList('/donations'), 'date') : <Map<String, dynamic>>[];
       final expenses = _expenses ? _filterByDate(await _fetchList('/expenses'), 'date') : <Map<String, dynamic>>[];
       final students = _students ? await _fetchList('/students') : <Map<String, dynamic>>[];
+      if (_students) await StudentLookups.load(force: true);
       final overview = _reports ? await _fetchOverview() : null;
 
       final dateStr = DateFormat('ddMMyyyy').format(DateTime.now());
@@ -2032,10 +1840,10 @@ class _ExportDataState extends State<ExportDataScreen> {
       if (!mounted) return;
       setState(() => _exporting = false);
       _snack(context, ok ? '✓ Downloaded $filename' : 'Failed to save file');
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() => _exporting = false);
-        _snack(context, 'Export failed — check your connection and try again');
+        _snack(context, ApiClient.errorMessage(e, fallback: 'Export failed — check your connection and try again'));
       }
     }
   }

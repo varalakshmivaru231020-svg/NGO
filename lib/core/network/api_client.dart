@@ -27,7 +27,11 @@ class ApiClient {
     _dio = Dio(BaseOptions(
       baseUrl: defaultBaseUrl,
       connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 30),
+      // Photos/documents travel base64 in the JSON body; on a slow uplink a
+      // few MB can take well over 30s, which used to abort a save that the
+      // server then completed anyway.
+      sendTimeout: kIsWeb ? null : const Duration(minutes: 3),
+      receiveTimeout: const Duration(seconds: 90),
       headers: {'Content-Type': 'application/json'},
     ));
 
@@ -43,34 +47,96 @@ class ApiClient {
         handler.next(options);
       },
       onError: (error, handler) async {
-        if (error.response?.statusCode == 401) {
-          final prefs = await SharedPreferences.getInstance();
-          final refresh = prefs.getString('refresh_token');
-          if (refresh != null) {
-            try {
-              final custom = prefs.getString(serverUrlKey);
-              final base = (custom != null && custom.isNotEmpty) ? custom : defaultBaseUrl;
-              final refreshDio = Dio();
-              applySslBypass(refreshDio.httpClientAdapter);
-              final res = await refreshDio.post('$base/auth/refresh', data: {'refreshToken': refresh});
-              final data = res.data['data'] as Map;
-              final newToken = data['accessToken'] as String;
-              final newRefresh = data['refreshToken'] as String?;
-              await prefs.setString('access_token', newToken);
-              // The backend rotates refresh tokens (old one is deleted server-side
-              // on every /auth/refresh call) — must persist the new one too, or
-              // the *next* refresh fails and silently logs the user out.
-              if (newRefresh != null) await prefs.setString('refresh_token', newRefresh);
-              error.requestOptions.headers['Authorization'] = 'Bearer $newToken';
-              handler.resolve(await _dio.fetch(error.requestOptions));
-              return;
-            } catch (_) {}
-          }
-          await clearTokens();
+        // Only a 401 on a normal call is worth a refresh; a 401 from the
+        // retried call itself means the fresh token was rejected too.
+        if (error.response?.statusCode != 401 ||
+            error.requestOptions.extra['_retried'] == true ||
+            error.requestOptions.path.contains('/auth/login')) {
+          handler.next(error);
+          return;
         }
+        final sentAuth = error.requestOptions.headers['Authorization'] as String?;
+        final outcome = await _refreshOnce(sentAuth);
+        if (outcome == _RefreshOutcome.refreshed) {
+          final prefs = await SharedPreferences.getInstance();
+          final token = prefs.getString('access_token');
+          final opts = error.requestOptions
+            ..headers['Authorization'] = 'Bearer $token'
+            ..extra['_retried'] = true;
+          try {
+            handler.resolve(await _dio.fetch(opts));
+          } on DioException catch (e) {
+            handler.next(e);
+          }
+          return;
+        }
+        if (outcome == _RefreshOutcome.rejected) {
+          await clearTokens();
+          onSessionExpired?.call();
+        }
+        // transient: keep the tokens — the next call can try again.
         handler.next(error);
       },
     ));
+  }
+
+  // Called once the server has definitively refused the session, so the app
+  // can route to the login screen instead of rendering every screen with
+  // empty data (every call 401s once the tokens are gone).
+  static void Function()? onSessionExpired;
+
+  // Single-flight: when the access token expires, the dashboard fires a dozen
+  // requests that all 401 together. Each used to call /auth/refresh with the
+  // same token; the backend rotates it, so all but the first failed and the
+  // user was logged out. Now they all await the one in-flight refresh.
+  Future<_RefreshOutcome>? _inflightRefresh;
+
+  Future<_RefreshOutcome> _refreshOnce(String? sentAuth) {
+    return _inflightRefresh ??= _doRefresh(sentAuth).whenComplete(() => _inflightRefresh = null);
+  }
+
+  Future<_RefreshOutcome> _doRefresh(String? sentAuth) async {
+    final prefs = await SharedPreferences.getInstance();
+    // Another browser tab may have refreshed already and written new tokens
+    // to localStorage; SharedPreferences caches per tab, so re-read it.
+    try { await prefs.reload(); } catch (_) {}
+    final current = prefs.getString('access_token');
+    if (current != null && sentAuth != null && sentAuth != 'Bearer $current') {
+      return _RefreshOutcome.refreshed; // already renewed elsewhere — just retry
+    }
+    final refresh = prefs.getString('refresh_token');
+    if (refresh == null || refresh.isEmpty) return _RefreshOutcome.rejected;
+    try {
+      final custom = prefs.getString(serverUrlKey);
+      final base = (custom != null && custom.isNotEmpty) ? custom : defaultBaseUrl;
+      final refreshDio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 20),
+      ));
+      applySslBypass(refreshDio.httpClientAdapter);
+      final res = await refreshDio.post('$base/auth/refresh', data: {'refreshToken': refresh});
+      final data = res.data['data'] as Map;
+      await prefs.setString('access_token', data['accessToken'] as String);
+      // The backend rotates refresh tokens — persist the new one too, or the
+      // next refresh uses a retired token.
+      final newRefresh = data['refreshToken'] as String?;
+      if (newRefresh != null) await prefs.setString('refresh_token', newRefresh);
+      return _RefreshOutcome.refreshed;
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      // Only 401/403 mean the refresh token itself is dead. Timeouts, no
+      // connection, 429 rate-limit or a 5xx are temporary — signing out over
+      // them is what logged people out "randomly".
+      if (code == 401 || code == 403) {
+        // Last chance: another tab may have rotated it just now.
+        try { await prefs.reload(); } catch (_) {}
+        if (prefs.getString('refresh_token') != refresh) return _RefreshOutcome.refreshed;
+        return _RefreshOutcome.rejected;
+      }
+      return _RefreshOutcome.transient;
+    } catch (_) {
+      return _RefreshOutcome.transient;
+    }
   }
 
   Future<Map<String, dynamic>> get(String path, {Map<String, dynamic>? params}) async {
@@ -140,3 +206,5 @@ class ApiClient {
 }
 
 final apiClient = ApiClient();
+
+enum _RefreshOutcome { refreshed, rejected, transient }

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../network/api_client.dart';
 import 'role_auth.dart';
@@ -16,6 +17,27 @@ import '../../features/settings/profile_store.dart';
 
 // True while a user is signed in (backend or local). Drives the auth redirect.
 bool isLoggedIn = false;
+
+// Bumped whenever the session ends so the router re-runs its redirect and
+// lands on /login (see routerProvider's refreshListenable).
+final authChanges = ValueNotifier<int>(0);
+
+// Hooked into the API client: when the server definitively rejects the
+// session, end it here instead of leaving the user on screens that silently
+// render zeros because every call now fails with 401.
+void installSessionExpiryHandler() {
+  ApiClient.onSessionExpired = () {
+    if (!isLoggedIn) return;
+    currentLoggedInRole = null;
+    isLoggedIn = false;
+    sessionExpiredNotice = true;
+    authChanges.value++;
+  };
+}
+
+// Set when the session was ended by the server (not by the user tapping
+// Logout) so the login screen can explain why they are there.
+bool sessionExpiredNotice = false;
 
 // Maps a backend /auth/me user onto the frontend session and returns the
 // landing route. SUPER_ADMIN/ADMIN get full access (currentLoggedInRole = null);
@@ -66,26 +88,29 @@ Future<void> restoreSession() async {
     currentLoggedInRole = null;
     return;
   }
-  try {
-    final meResp = await apiClient.get('/auth/me');
-    final me = (meResp['data'] as Map).cast<String, dynamic>();
-    applyBackendUser(me);
-  } on DioException catch (e) {
-    // The refresh-token interceptor already retried once on a 401 before this
-    // error reaches us. A response means the server genuinely rejected the
-    // session (or the retry also failed) — sign out for real. No response at
-    // all (timeout, connection refused, DB cold-start) is a transient network
-    // hiccup, not an invalid session — don't destroy a possibly-valid token
-    // over it, or a routine reload during a slow backend start logs the user
-    // out for no reason. Just don't grant access on *this* load.
-    if (e.response != null) {
-      await apiClient.clearTokens();
-      currentLoggedInRole = null;
-    }
-    isLoggedIn = false;
-  } catch (_) {
-    isLoggedIn = false;
+  // A cold backend / flaky connection on reload must not look like a logout:
+  // retry transient failures a few times before giving up on this load.
+  for (var attempt = 0; attempt < 3; attempt++) {
+    try {
+      final meResp = await apiClient.get('/auth/me');
+      final me = (meResp['data'] as Map).cast<String, dynamic>();
+      applyBackendUser(me);
+      return;
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      // 401/403 survive the interceptor's refresh attempt, so the session is
+      // genuinely gone. Anything else (no response, 429, 5xx) is transient —
+      // keep the token so the next load can still use it.
+      if (code == 401 || code == 403) {
+        await apiClient.clearTokens();
+        currentLoggedInRole = null;
+        isLoggedIn = false;
+        return;
+      }
+    } catch (_) {}
+    await Future.delayed(Duration(milliseconds: 800 * (attempt + 1)));
   }
+  isLoggedIn = false;
 }
 
 // Sign out: clear tokens + session so the router routes to login.
@@ -93,4 +118,5 @@ Future<void> logoutSession() async {
   await apiClient.clearTokens();
   currentLoggedInRole = null;
   isLoggedIn = false;
+  authChanges.value++;
 }

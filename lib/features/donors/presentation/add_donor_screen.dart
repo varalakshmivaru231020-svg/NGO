@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../core/widgets/phone_field_with_code.dart';
 import '../../../core/widgets/photo_picker_widget.dart';
+import '../../../core/widgets/lazy_photo.dart' show decodePhoto, evictLazyPhoto;
 import '../../dashboard/presentation/dashboard_screen.dart' show dashboardRefreshProvider;
 import 'donors_screen.dart' show donorsProvider, demoLocalDonors, donorRefreshProvider, localDonorPhotos;
 
@@ -31,17 +32,6 @@ void _toast(BuildContext ctx, String msg, {bool error = false}) {
     behavior: SnackBarBehavior.floating,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
   ));
-}
-
-String _donorSaveError(Object e) {
-  if (e is DioException) {
-    final code = e.response?.statusCode;
-    final data = e.response?.data;
-    final msg = (data is Map && data['message'] != null) ? data['message'].toString() : null;
-    if (code == 401 || code == 403) return 'Saved locally — log in as admin to sync to server';
-    return msg != null ? 'Not saved to server: $msg' : 'Saved locally (server unavailable)';
-  }
-  return 'Saved locally (server unavailable)';
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -91,6 +81,9 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
   bool _loadingCategories = true;
   bool get _isEditing => widget.donorId != null;
   bool _loadingDonor = false;
+  String? _loadError;
+  // Only re-send the (large) base64 avatar when the user actually changed it.
+  bool _photoChanged = false;
 
   @override
   void initState() {
@@ -151,20 +144,21 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
       final gender = s('gender');
       final categories = (d['categories'] as List?) ?? const [];
       final firstCatName = categories.isNotEmpty ? (((categories.first as Map?)?['category'] as Map?)?['name'] as String?) : null;
-      Uint8List? avatar;
-      final avatarB64 = s('avatar');
-      if (avatarB64.isNotEmpty) {
-        try { avatar = base64Decode(avatarB64); } catch (_) {}
-      }
+      final avatar = decodePhoto(s('avatar'));
       if (mounted) setState(() {
         if (gender == 'FEMALE') _gender = 'Female';
         if (gender == 'MALE') _gender = 'Male';
         if (firstCatName != null) _category = firstCatName;
         if (avatar != null) _photoBytes = avatar;
         _loadingDonor = false;
+        _loadError = null;
       });
-    } catch (_) {
-      if (mounted) setState(() => _loadingDonor = false);
+    } catch (e) {
+      // Don't fall through to an empty form — saving it would wipe the donor.
+      if (mounted) setState(() {
+        _loadingDonor = false;
+        _loadError = ApiClient.errorMessage(e, fallback: 'Could not load this donor');
+      });
     }
   }
 
@@ -280,58 +274,76 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
     if (!_form.currentState!.validate()) return;
     setState(() => _saving = true);
 
-    final existing = await _findDuplicate(_name.text, _mobile.text);
+    // Best-effort pre-check — a slow or failing lookup must never block the
+    // save; the backend's own 409 check still guards the real write.
+    Map<String, dynamic>? existing;
+    try {
+      existing = await _findDuplicate(_name.text, _mobile.text)
+          .timeout(const Duration(seconds: 8), onTimeout: () => null);
+    } catch (_) {
+      existing = null;
+    }
+    if (!mounted) return;
     if (existing != null) {
       if (!mounted) return;
       setState(() { _saving = false; _duplicateOf = existing; });
       _reportDuplicate(existing);
       return;
     }
-    if (_duplicateOf != null && mounted) setState(() => _duplicateOf = null);
+    if (_duplicateOf != null) setState(() => _duplicateOf = null);
 
-    // Only fields the backend CreateDonorDto accepts (others → 400 rejection).
-    final avatarB64 = _photoBytes != null ? base64Encode(_photoBytes!) : null;
+    // Only fields the backend CreateDonorDto accepts (forbidNonWhitelisted →
+    // anything else is a 400). preferredLanguage has no DTO field — not sent.
+    //
+    // Create: omit empty optionals. Edit: send every optional so a field the
+    // user cleared really clears — '' for plain strings (backend maps '' →
+    // null), null for email/dates whose validators reject ''.
+    String t(TextEditingController c) => c.text.trim();
+    final edit = _isEditing;
+    void opt(Map<String, dynamic> m, String key, String v, {bool nullWhenEmpty = false}) {
+      if (v.isNotEmpty) {
+        m[key] = v;
+      } else if (edit) {
+        m[key] = nullWhenEmpty ? null : '';
+      }
+    }
     final payload = <String, dynamic>{
-      'name':   _name.text.trim(),
-      'mobile': _mobile.text.trim(),
+      'name':   t(_name),
+      'mobile': t(_mobile),
       'gender': _gender == 'Male' ? 'MALE' : 'FEMALE',
-      'tier':   'SILVER',
-      if (_whatsapp.text.trim().isNotEmpty)   'whatsapp':   _whatsapp.text.trim(),
-      if (_email.text.trim().isNotEmpty)       'email':      _email.text.trim(),
-      if (_pan.text.trim().isNotEmpty)         'pan':        _pan.text.trim(),
-      if (_aadhaar.text.trim().isNotEmpty)     'aadhaar':    _aadhaar.text.trim(),
-      if (_city.text.trim().isNotEmpty)        'city':       _city.text.trim(),
-      if (_state.text.trim().isNotEmpty)       'state':      _state.text.trim(),
-      if (_country.text.trim().isNotEmpty)     'country':    _country.text.trim(),
-      if (_pincode.text.trim().isNotEmpty)     'pincode':    _pincode.text.trim(),
-      if (_commPref.isNotEmpty)                'preferredContactMethod': _commPref.map((m) => m.toUpperCase()).join(','),
-      if (_occupation.text.trim().isNotEmpty)  'occupation': _occupation.text.trim(),
-      if (_org.text.trim().isNotEmpty)         'company':    _org.text.trim(),
-      if (_notes.text.trim().isNotEmpty)       'notes':      _notes.text.trim(),
-      if (_street.text.trim().isNotEmpty)      'address':    _street.text.trim(),
-      if (_dob.text.trim().isNotEmpty)         'dob':         _toIso(_dob.text.trim()),
-      if (_anniv.text.trim().isNotEmpty)       'anniversary': _toIso(_anniv.text.trim()),
-      if (avatarB64 != null)                   'avatar':     avatarB64,
-      if (_category != null && _categoryNameToId.containsKey(_category))
-        'categoryIds': [_categoryNameToId[_category]!],
+      // Only a new donor gets the default tier — an edit must not reset it.
+      if (!edit) 'tier': 'SILVER',
     };
+    opt(payload, 'whatsapp', t(_whatsapp));
+    opt(payload, 'email', t(_email), nullWhenEmpty: true);
+    opt(payload, 'pan', t(_pan));
+    opt(payload, 'aadhaar', t(_aadhaar));
+    opt(payload, 'city', t(_city));
+    opt(payload, 'state', t(_state));
+    opt(payload, 'country', t(_country));
+    opt(payload, 'pincode', t(_pincode));
+    opt(payload, 'preferredContactMethod', _commPref.map((m) => m.toUpperCase()).join(','));
+    opt(payload, 'occupation', t(_occupation));
+    opt(payload, 'company', t(_org));
+    opt(payload, 'notes', t(_notes));
+    opt(payload, 'address', t(_street));
+    opt(payload, 'dob', t(_dob).isNotEmpty ? _toIso(t(_dob)) : '', nullWhenEmpty: true);
+    opt(payload, 'anniversary', t(_anniv).isNotEmpty ? _toIso(t(_anniv)) : '', nullWhenEmpty: true);
+    // Avatar: always on create when picked; on edit only when changed (null = removed).
+    if (!edit && _photoBytes != null) payload['avatar'] = base64Encode(_photoBytes!);
+    if (edit && _photoChanged) payload['avatar'] = _photoBytes != null ? base64Encode(_photoBytes!) : null;
+    if (_category != null && _categoryNameToId.containsKey(_category)) {
+      payload['categoryIds'] = [_categoryNameToId[_category]!];
+    } else if (edit && _category == null && _categoryNameToId.isNotEmpty) {
+      payload['categoryIds'] = <String>[]; // user cleared the category
+    }
 
     String? savedId = widget.donorId;
+    Map<String, dynamic> res;
     try {
-      final res = _isEditing
+      res = edit
           ? await apiClient.put('/donors/${widget.donorId}', payload)
           : await apiClient.post('/donors', payload);
-      // Non-Super-Admins: queued for approval — don't add/update locally.
-      if ((res['meta'] as Map?)?['pendingApproval'] == true) {
-        if (mounted) {
-          setState(() => _saving = false);
-          _toast(context, 'Submitted for Super Admin approval');
-          context.go(_isEditing ? '/donors/${widget.donorId}' : '/donors');
-        }
-        return;
-      }
-      final saved = (res['data'] as Map).cast<String, dynamic>();
-      savedId = saved['id'] as String? ?? savedId;
     } catch (e) {
       // 409 = this name + mobile is already registered. A deliberate refusal,
       // not an outage, so never soften it into a local-only save — that would
@@ -348,45 +360,47 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
         }
         return;
       }
-      if (_isEditing) {
-        // Editing must reflect real backend state — don't fake a local save.
-        if (mounted) {
-          setState(() => _saving = false);
-          _toast(context, _donorSaveError(e), error: true);
-        }
-        return;
-      }
-      // Create: backend rejected/unreachable — fall back to a local-only
-      // donor so the user isn't blocked, but tell them it wasn't saved.
-      final localId = 'local_${DateTime.now().microsecondsSinceEpoch}';
-      demoLocalDonors.insert(0, {
-        ...payload,
-        'id': localId,
-        '_count': {'donations': 0},
-        'categories': _category != null
-            ? [{'category': {'name': _category!, 'color': '#FF9933'}}]
-            : <dynamic>[],
-      });
-      if (_photoBytes != null) localDonorPhotos[localId] = _photoBytes!;
+      // Any other failure (validation, auth, server down): NOT saved. Stay on
+      // the form with the user's input intact and show the real reason — a
+      // fake local donor here used to show up as a 0-donation "saved" record
+      // that vanished on reload.
       if (mounted) {
-        ref.read(donorRefreshProvider.notifier).state++;
         setState(() => _saving = false);
-        _toast(context, _donorSaveError(e), error: true);
-        context.go('/donors');
+        _toast(context, ApiClient.errorMessage(e, fallback: 'Donor was not saved. Please try again.'), error: true);
       }
       return;
     }
 
-    // Saved to the database. Cache the photo by its real id for instant display.
-    if (savedId != null && _photoBytes != null) localDonorPhotos[savedId] = _photoBytes!;
-    if (mounted) {
-      ref.read(donorRefreshProvider.notifier).state++; // refetch list from backend
-      ref.read(dashboardRefreshProvider.notifier).state++;
+    // The request succeeded — from here on nothing is treated as a save
+    // failure, even if the response shape is unexpected.
+    if (!mounted) return;
+    // Non-Super-Admins: queued for approval — don't add/update locally.
+    final meta = res['meta'];
+    if (meta is Map && meta['pendingApproval'] == true) {
       setState(() => _saving = false);
-      _toast(context, _isEditing ? 'Donor updated successfully!' : 'Donor saved successfully!');
-      // Open the donor so the change is clearly visible.
-      context.go(savedId != null ? '/donors/$savedId' : '/donors');
+      _toast(context, 'Submitted for approval');
+      ref.read(donorRefreshProvider.notifier).state++; // shows it as pending
+      context.go(edit ? '/donors/${widget.donorId}' : '/donors');
+      return;
     }
+    final data = res['data'];
+    if (data is Map && data['id'] != null) savedId = data['id'].toString();
+
+    // Saved to the database. Cache the photo by its real id for instant display.
+    if (savedId != null) {
+      evictLazyPhoto('/donors/$savedId/avatar');
+      if (_photoBytes != null) {
+        localDonorPhotos[savedId] = _photoBytes!;
+      } else {
+        localDonorPhotos.remove(savedId);
+      }
+    }
+    ref.read(donorRefreshProvider.notifier).state++; // refetch list from backend
+    ref.read(dashboardRefreshProvider.notifier).state++;
+    setState(() => _saving = false);
+    _toast(context, edit ? 'Donor updated successfully!' : 'Donor saved successfully!');
+    // Open the donor so the change is clearly visible.
+    context.go(savedId != null ? '/donors/$savedId' : '/donors');
   }
 
   @override
@@ -417,6 +431,20 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
 
         if (_loadingDonor)
           const Expanded(child: Center(child: CircularProgressIndicator(color: _brand600)))
+        else if (_loadError != null)
+          Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.error_outline, color: _errorColor, size: 44),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(_loadError!, textAlign: TextAlign.center, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.textSub)),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () { setState(() => _loadError = null); _loadDonor(); },
+              child: const Text('Retry', style: TextStyle(color: _brand600, fontWeight: FontWeight.w700)),
+            ),
+          ])))
         else
         // ── form ───────────────────────────────────────────────────
         Expanded(
@@ -442,7 +470,7 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
 
                 // ── Photo + Personal ──────────────────────────────────
                 _Section(title: 'Personal Information', children: [
-                  Center(child: PhotoPickerCircle(label: 'Photo', size: 92, initialImage: _photoBytes, onImageChanged: (b) => setState(() => _photoBytes = b))),
+                  Center(child: PhotoPickerCircle(label: 'Photo', size: 92, initialImage: _photoBytes, onImageChanged: (b) => setState(() { _photoBytes = b; _photoChanged = true; }))),
                   const SizedBox(height: 16),
                   _Row2(
                     left:  _Field(label: 'Full Name *', child: _textField(context, _name, hint: 'e.g. Rajesh Khanna', validator: (v) => v!.isEmpty ? 'Required' : null)),

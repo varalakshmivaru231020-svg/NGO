@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'donor_categories_screen.dart' show donorCategoriesProvider;
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/lazy_photo.dart';
 
 // ── colours ───────────────────────────────────────────────────────────
 const _brand700 = Color(0xFFE07C1F);
@@ -24,44 +24,50 @@ const _green100 = Color(0xFFD4F3E7);
 const _onSurface3 = Color(0xFF93A29F);
 
 // ── API donor model ───────────────────────────────────────────────────
+// Category entries as {category: {name, color}} — anything else is skipped.
+List<Map> _catMaps(dynamic raw) => (raw is List ? raw : const [])
+    .whereType<Map>()
+    .map((c) => c['category'])
+    .whereType<Map>()
+    .toList();
+
 class _Donor {
+  // Tolerant parsing: a missing/odd-typed field on one row must not throw —
+  // a single cast error used to blank the whole list into "0 donors".
   _Donor.fromJson(Map<String, dynamic> j)
-      : id = j['id'] as String,
-        name = j['name'] as String,
-        mobile = (j['mobile'] ?? '') as String,
-        city = (j['city'] ?? '') as String,
-        tier = (j['tier'] ?? 'SILVER') as String,
-        gender = (j['gender'] ?? 'MALE') as String,
-        donationCount = (j['_count'] as Map<String, dynamic>?)?['donations'] as int? ?? 0,
-        categories = (j['categories'] as List<dynamic>? ?? [])
-            .map((c) => (c['category']?['name'] ?? '') as String)
+      : id = (j['id'] ?? '').toString(),
+        name = (j['name'] ?? '').toString(),
+        mobile = (j['mobile'] ?? '').toString(),
+        city = (j['city'] ?? '').toString(),
+        tier = (j['tier'] ?? 'SILVER').toString(),
+        gender = (j['gender'] ?? 'MALE').toString(),
+        donationCount = ((j['_count'] is Map ? (j['_count'] as Map)['donations'] : null) as num?)?.toInt() ?? 0,
+        categories = _catMaps(j['categories'])
+            .map((c) => (c['name'] ?? '').toString())
             .where((s) => s.isNotEmpty)
             .toList(),
-        categoryColor = (j['categories'] as List<dynamic>? ?? []).isNotEmpty
-            ? (j['categories'][0]['category']?['color'] as String?)
+        categoryColor = _catMaps(j['categories']).isNotEmpty
+            ? _catMaps(j['categories']).first['color']?.toString()
             : null,
-        avatar = j['avatar'] as String?,
-        isPending = (j['_pendingApproval'] as bool?) ?? false;
+        avatar = j['avatar'] is String ? j['avatar'] as String : null,
+        hasAvatar = j['hasAvatar'] == true || (j['avatar'] is String && (j['avatar'] as String).isNotEmpty),
+        isPending = j['_pendingApproval'] == true;
 
   final String id, name, mobile, city, tier, gender;
   final int donationCount;
   final List<String> categories;
   final String? categoryColor;
+  // Only local/pending rows still carry an inline avatar — backend list rows
+  // have `hasAvatar` and the photo is lazy-loaded from /donors/:id/avatar.
   final String? avatar;
+  final bool hasAvatar;
   // True for a non-Super-Admin's own just-submitted donor, awaiting approval —
   // synthesized from GET /approvals/mine, not a real backend donor yet.
   final bool isPending;
 
-  // Profile photo bytes: locally-cached image (instant) or the DB avatar.
-  Uint8List? get photoBytes {
-    final local = localDonorPhotos[id];
-    if (local != null) return local;
-    final a = avatar;
-    if (a != null && a.isNotEmpty) {
-      try { return base64Decode(a); } catch (_) {}
-    }
-    return null;
-  }
+  // Photo bytes already on hand: locally-cached image (instant) or an inline
+  // avatar. Null means LazyPhoto fetches it (when hasAvatar).
+  Uint8List? get photoBytes => localDonorPhotos[id] ?? decodePhoto(avatar);
 
   String get displayCategory =>
       categories.isNotEmpty ? categories.first : _tierLabel(tier);
@@ -152,35 +158,61 @@ Future<List<_Donor>> _loadMyPendingDonors() async {
   }
 }
 
+// Parse each row on its own so one malformed record can't take down the list.
+List<_Donor> _parseRows(Iterable<dynamic> rows) {
+  final out = <_Donor>[];
+  for (final r in rows) {
+    try {
+      if (r is Map) out.add(_Donor.fromJson(r.cast<String, dynamic>()));
+    } catch (_) {}
+  }
+  return out;
+}
+
+// Loaded donors plus, when a page failed part-way, why — the screen keeps
+// what did load and shows [error] instead of pretending there are 0 donors.
+class _DonorsLoad {
+  const _DonorsLoad(this.donors, {this.error, this.partial = false});
+  final List<_Donor> donors;
+  final String? error;
+  final bool partial; // some pages loaded, a later one failed
+}
+
 // ── Provider ──────────────────────────────────────────────────────────
-final donorsProvider = FutureProvider<List<_Donor>>((ref) async {
+final donorsProvider = FutureProvider<_DonorsLoad>((ref) async {
   ref.watch(donorRefreshProvider); // re-run whenever refresh counter changes
-  final pending = await _loadMyPendingDonors();
-  try {
-    // Page through EVERYTHING — the backend caps limit at 100, and a single
-    // page made donor #101+ vanish from the app (they looked "deleted" even
-    // though the database still had them).
-    final list = <dynamic>[];
-    for (int page = 1; ; page++) {
+  final pendingFuture = _loadMyPendingDonors();
+  // Page through EVERYTHING — the backend caps limit at 100, and a single
+  // page made donor #101+ vanish from the app (they looked "deleted" even
+  // though the database still had them).
+  final list = <_Donor>[];
+  String? error;
+  bool anyPage = false;
+  for (int page = 1; page <= 500; page++) {
+    try {
       final res = await apiClient.get('/donors', params: {'limit': '100', 'page': '$page'});
-      final data = (res['data'] as List<dynamic>? ?? []);
-      list.addAll(data);
-      final meta = res['meta'] as Map<String, dynamic>?;
+      final data = res['data'] is List ? res['data'] as List : const [];
+      list.addAll(_parseRows(data));
+      anyPage = true;
+      final meta = res['meta'] is Map ? res['meta'] as Map : null;
       if (meta?['hasNext'] != true || data.isEmpty) break;
+    } catch (e) {
+      error = ApiClient.errorMessage(e, fallback: 'Could not load donors');
+      break;
     }
-    // Backend is the source of truth even when empty (clean DB = empty list).
-    return [
+  }
+  final pending = await pendingFuture;
+  // Backend is the source of truth even when empty (clean DB = empty list).
+  return _DonorsLoad(
+    [
       ...pending,
-      ...demoLocalDonors.map(_Donor.fromJson),
-      ...list.map((e) => _Donor.fromJson(e as Map<String, dynamic>)),
-    ];
-  } catch (_) {}
-  // Backend unreachable → demo/mock so the app still works offline.
-  return [
-    ...pending,
-    ...demoLocalDonors.map(_Donor.fromJson),
-    ...mockDonorData.map(_Donor.fromJson),
-  ];
+      ..._parseRows(demoLocalDonors),
+      if (!anyPage) ..._parseRows(mockDonorData),
+      ...list,
+    ],
+    error: error,
+    partial: error != null && anyPage,
+  );
 });
 
 // ── avatar helpers ────────────────────────────────────────────────────
@@ -257,8 +289,19 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
           }
           return; // don't remove locally — it's only pending
         }
-      } catch (_) {}
+      } catch (e) {
+        // Not deleted on the server — don't report it as deleted.
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ApiClient.errorMessage(e), style: const TextStyle(fontWeight: FontWeight.w700)),
+            backgroundColor: _coral500, behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ));
+        }
+        return;
+      }
     }
+    if (!mounted) return;
 
     // Remove from local stores so the UI updates instantly.
     demoLocalDonors.removeWhere((m) => m['id'] == d.id);
@@ -321,7 +364,31 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
             ),
           ]))),
         ]),
-        data: (allDonors) {
+        data: (load) {
+          final allDonors = load.donors;
+          // Nothing loaded at all and the request failed → an error, not "0 donors".
+          if (allDonors.isEmpty && load.error != null) {
+            return Column(children: [
+              Container(color: context.headerBg, height: top + 70),
+              Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.wifi_off_rounded, size: 48, color: _onSurface3),
+                const SizedBox(height: 12),
+                Text('Could not load donors', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: context.textPrimary)),
+                const SizedBox(height: 6),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(load.error!, style: TextStyle(fontSize: 12, color: context.textHint), textAlign: TextAlign.center),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: () => ref.invalidate(donorsProvider),
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Retry'),
+                  style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white),
+                ),
+              ]))),
+            ]);
+          }
           final donors = _filtered(allDonors);
           // Pending (not-yet-approved) donors show up in the list so the staff
           // member who created them can track status, but aren't real donors
@@ -452,6 +519,27 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
                 ]),
               ),
               const SizedBox(height: 10),
+
+              // ── partial-load banner ──────────────────────────────────
+              // Some pages loaded, a later one failed: keep what we have and
+              // say the list (and the counts above) may be incomplete.
+              if (load.error != null)
+                Container(
+                  margin: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+                  padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+                  decoration: BoxDecoration(color: _coral100, borderRadius: BorderRadius.circular(12)),
+                  child: Row(children: [
+                    const Icon(Icons.error_outline, size: 18, color: _coral500),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(
+                      '${load.partial ? 'Only part of the donor list loaded' : 'Could not reach the server'} — ${load.error}',
+                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _coral500))),
+                    TextButton(
+                      onPressed: () => ref.invalidate(donorsProvider),
+                      child: const Text('Retry', style: TextStyle(fontWeight: FontWeight.w800, color: _coral500)),
+                    ),
+                  ]),
+                ),
 
               // ── list ─────────────────────────────────────────────────
               Expanded(
@@ -616,9 +704,15 @@ class _DonorCard extends StatelessWidget {
               gradient: LinearGradient(colors: [color, Color.lerp(color, Colors.black, 0.2)!], begin: Alignment.topLeft, end: Alignment.bottomRight),
               shape: BoxShape.circle,
             ),
-            child: photo != null
-              ? Image.memory(photo, fit: BoxFit.cover, width: 52, height: 52)
-              : Center(child: Text(_initials(donor.name), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18))),
+            child: LazyPhoto(
+              endpoint: '/donors/${donor.id}/avatar',
+              field: 'avatar',
+              size: 52,
+              // Pending/local rows have no backend record to fetch from.
+              enabled: donor.hasAvatar && !donor.isPending && !donor.id.startsWith('local_'),
+              initial: photo,
+              placeholder: Center(child: Text(_initials(donor.name), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18))),
+            ),
           ),
           const SizedBox(width: 13),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
