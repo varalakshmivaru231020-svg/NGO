@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import 'receipt_generator.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 const _brand700 = Color(0xFFE07C1F);
 const _brand600 = Color(0xFFFF9933);
@@ -320,7 +321,7 @@ class _DonationsScreenState extends State<DonationsScreen> {
           child: Column(children: [
             Row(children: [
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Donations', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+                const Text('Donations', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
                 Text('${_real.length} donations', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
               ])),
               GestureDetector(
@@ -414,44 +415,49 @@ class _DonationsScreenState extends State<DonationsScreen> {
   }
 
   Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: _brand600));
+    // First load: skeleton rows. A reload (search, pull-to-refresh) keeps the
+    // current list on screen with a thin progress bar — no layout jump.
+    if (_loading && _donations.isEmpty) {
+      return const SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(4, 10, 4, 0),
+        child: SkeletonList(rows: 6, rowHeight: 72),
+      );
     }
     if (_error != null) {
-      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.wifi_off_outlined, size: 48, color: _coral500),
-        const SizedBox(height: 12),
-        Text('Could not load donations', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: context.textPrimary)),
-        const SizedBox(height: 4),
-        Text('Make sure the backend is running', style: TextStyle(fontSize: 13, color: context.textSub)),
-        const SizedBox(height: 16),
-        ElevatedButton.icon(
-          onPressed: _load,
-          icon: const Icon(Icons.refresh),
-          label: const Text('Retry'),
-          style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white),
-        ),
-      ]));
+      return ListView(children: [
+        ErrorState(message: 'Could not load donations. Check your connection and try again.', onRetry: _load),
+      ]);
     }
     final items = _filtered;
-    if (items.isEmpty) {
-      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.receipt_long_outlined, size: 48, color: context.textHint),
-        const SizedBox(height: 12),
-        Text('No donations found', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: context.textHint)),
-      ]));
-    }
-    return RefreshIndicator(
-      onRefresh: _load,
-      color: _brand600,
-      child: ListView.separated(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(18, 14, 18, 100),
-        itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (_, i) => _DonationCard(d: items[i]),
-      ),
-    );
+    final Widget list = items.isEmpty
+        ? ListView(physics: const AlwaysScrollableScrollPhysics(), children: [
+            _search.isNotEmpty || _filter != 'All'
+                ? const EmptyState(
+                    icon: Icons.search_off_rounded,
+                    title: 'No matching donations',
+                    message: 'Try a different search or type filter.',
+                  )
+                : EmptyState(
+                    icon: Icons.receipt_long_outlined,
+                    title: 'No donations yet',
+                    message: 'Recorded donations will appear here.',
+                    actionLabel: 'Add Donation',
+                    onAction: () => context.go('/donations/new'),
+                  ),
+          ])
+        : ListView.separated(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 100),
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (_, i) => _DonationCard(d: items[i]),
+          );
+    return Stack(children: [
+      RefreshIndicator(onRefresh: _load, color: _brand600, child: list),
+      if (_loading)
+        const Positioned(top: 0, left: 0, right: 0,
+          child: LinearProgressIndicator(minHeight: 2, color: _brand600, backgroundColor: Colors.transparent)),
+    ]);
   }
 }
 

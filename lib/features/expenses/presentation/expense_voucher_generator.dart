@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../../../core/utils/native_file_saver.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 // Voucher palette — mirrors the physical SKET payment voucher form: mostly
 // black/white with a small orange accent for the amount, not the orange-heavy
@@ -246,7 +247,7 @@ pw.Widget _signatureCol(String label, String value, PdfColor dark, PdfColor grey
 // ── Voucher Bottom Sheet ───────────────────────────────────────────────────
 
 Future<void> showVoucherSheet(BuildContext context, ExpenseVoucher voucher) async {
-  await showModalBottomSheet(
+  await showAppSheet(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
@@ -274,7 +275,7 @@ class _VoucherSheet extends StatelessWidget {
         ),
         child: Column(children: [
           const SizedBox(height: 12),
-          Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+          const SheetHandle(),
           Expanded(child: SingleChildScrollView(
             controller: sc,
             padding: const EdgeInsets.fromLTRB(0, 16, 0, 0),
@@ -403,7 +404,7 @@ class _VoucherSheet extends StatelessWidget {
                     final filename = 'Voucher_${voucher.voucherNo.replaceAll('/', '-')}.pdf';
                     final ok = await NativeFileSaver.saveBytes(filename, bytes, 'application/pdf');
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      AppToast.fromSnackBar(context, SnackBar(
                         content: Text(ok ? 'Voucher saved as PDF' : 'Failed to save'),
                         backgroundColor: _dark,
                         behavior: SnackBarBehavior.floating,
@@ -411,7 +412,7 @@ class _VoucherSheet extends StatelessWidget {
                     }
                   } catch (_) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      AppToast.fromSnackBar(context, const SnackBar(
                         content: Text('Could not generate PDF'),
                         backgroundColor: Color(0xFFF2685E),
                         behavior: SnackBarBehavior.floating,

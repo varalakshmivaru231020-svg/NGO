@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../donors/presentation/donors_screen.dart' show demoLocalDonors;
 import 'donations_screen.dart' show demoLocalDonations;
 import 'receipt_generator.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 const _brand700 = Color(0xFFE07C1F);
 const _brand600 = Color(0xFFFF9933);
@@ -202,7 +203,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
 
   Future<void> _openDonorPicker() async {
     String search = '';
-    await showModalBottomSheet(
+    await showAppSheet(
       context: context, isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) {
@@ -223,7 +224,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
           decoration: BoxDecoration(color: ctx.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
           child: Column(children: [
             const SizedBox(height: 8),
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: ctx.border, borderRadius: BorderRadius.circular(2))),
+            const SheetHandle(),
             Padding(padding: const EdgeInsets.fromLTRB(18, 16, 18, 0), child: Row(children: [
               Expanded(child: Text('Select Donor', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: ctx.textPrimary))),
               IconButton(icon: const Icon(Icons.close, size: 20), onPressed: () => Navigator.pop(ctx), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
@@ -236,10 +237,14 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                   prefixIcon: Icon(Icons.search, color: ctx.textHint, size: 20), border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(vertical: 12)),
               ))),
             if (_loadingData)
-              const Expanded(child: Center(child: CircularProgressIndicator(color: _brand600)))
+              const Expanded(child: SingleChildScrollView(child: SkeletonList(rows: 6, rowHeight: 60)))
             else
               Expanded(child: filtered.isEmpty
-                ? Center(child: Text('No donors found', style: TextStyle(color: ctx.textSub)))
+                ? SingleChildScrollView(child: EmptyState(
+                    icon: search.isEmpty ? Icons.people_outline : Icons.search_off_rounded,
+                    title: search.isEmpty ? 'No donors yet' : 'No matching donors',
+                    message: search.isEmpty ? 'Add a donor first, then record the donation.' : 'Try a different name, mobile or city.',
+                  ))
                 : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
                   itemCount: filtered.length,
@@ -278,21 +283,27 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     );
   }
 
+  // Field-level validation messages, shown under the relevant field.
+  String? _amountError, _donorError, _txnError;
+
   void _save() async {
+    if (_saving) return; // ignore repeated taps while a save is in flight
     // Parse ONCE and reuse — a later bare int.parse threw uncaught on
     // over-long input.
-    final amount = int.tryParse(_amountCtrl.text.trim());
-    if (amount == null || amount <= 0) {
-      _snack('Please enter a valid amount', isError: true); return;
+    final parsed = int.tryParse(_amountCtrl.text.trim());
+    setState(() {
+      _amountError = (parsed == null || parsed <= 0) ? 'Please enter a valid amount.' : null;
+      _donorError = _selectedDonorId == null ? 'Please select a donor.' : null;
+      // Every non-cash payment has a reference (UTR/UPI ref/cheque no.) —
+      // require it at entry so invoices carry it. Cash stays optional.
+      _txnError = (_method != 'Cash' && _txnIdCtrl.text.trim().isEmpty)
+          ? 'Required for $_method payments.' : null;
+    });
+    if (_amountError != null || _donorError != null || _txnError != null) {
+      _snack('Please check the highlighted fields', isError: true);
+      return;
     }
-    if (_selectedDonorId == null) {
-      _snack('Please select a donor', isError: true); return;
-    }
-    // Every non-cash payment has a reference (UTR/UPI ref/cheque no.) — require
-    // it at entry so invoices carry it. Cash stays optional (fill-in blank).
-    if (_method != 'Cash' && _txnIdCtrl.text.trim().isEmpty) {
-      _snack('Please enter the Transaction ID / Reference No. for $_method', isError: true); return;
-    }
+    final int amount = parsed!; // validated above
     final typeId = _typeLabelToId[_donationType] ?? _donationType;
     setState(() => _saving = true);
 
@@ -312,7 +323,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       if ((resp['meta'] as Map?)?['pendingApproval'] == true) {
         if (mounted) {
           setState(() => _saving = false);
-          _snack('Submitted for Super Admin approval');
+          AppToast.warning(context, 'Submitted for approval', detail: 'A Super Admin will review this donation.');
           context.go('/donations');
         }
         return;
@@ -326,7 +337,8 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       if (e is DioException && e.response != null) {
         if (mounted) {
           setState(() => _saving = false);
-          _snack(ApiClient.errorMessage(e, fallback: 'Could not save the donation.'), isError: true);
+          _snack('Unable to save donation', isError: true,
+              detail: ApiClient.errorMessage(e, fallback: 'Please try again.'));
         }
         return;
       }
@@ -368,18 +380,30 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
         'notes': _descriptionCtrl.text.trim(),
       });
     }
+    if (backendOk) AppToast.success(context, 'Donation recorded', detail: receiptNo);
     await showReceiptSheet(context, receipt);
     if (mounted) context.go('/donations');
   }
 
 
-  void _snack(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
-      backgroundColor: isError ? _coral500 : _brand600,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+  void _snack(String msg, {bool isError = false, String? detail}) {
+    if (isError) {
+      AppToast.error(context, msg, detail: detail);
+    } else {
+      AppToast.success(context, msg, detail: detail);
+    }
   }
+
+  // Small inline error line under a field.
+  Widget _fieldError(String? msg) => AnimatedSize(
+    duration: const Duration(milliseconds: 150),
+    child: msg == null
+        ? const SizedBox(width: double.infinity)
+        : Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Text(msg, style: const TextStyle(fontSize: 12, color: _coral500, fontWeight: FontWeight.w600)),
+          ),
+  );
 
   @override
   void dispose() { _amountCtrl.dispose(); _descriptionCtrl.dispose(); _txnIdCtrl.dispose(); super.dispose(); }
@@ -423,12 +447,13 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                 const _Label('Amount'),
                 const SizedBox(height: 8),
                 Container(
-                  decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: context.border, width: 1.5)),
+                  decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: _amountError != null ? _coral500 : context.border, width: 1.5)),
                   child: Row(children: [
                     Container(width: 44, height: 52, alignment: Alignment.center,
                       child: const Text('₹', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _brand600))),
                     Expanded(child: TextField(
                       controller: _amountCtrl,
+                      onChanged: (_) { if (_amountError != null) setState(() => _amountError = null); },
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: context.textPrimary),
@@ -436,10 +461,11 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                     )),
                   ]),
                 ),
+                _fieldError(_amountError),
                 const SizedBox(height: 12),
                 Row(children: _quickAmounts.map((a) {
                   return Expanded(child: Padding(padding: EdgeInsets.only(right: a == _quickAmounts.last ? 0 : 8), child: GestureDetector(
-                    onTap: () { _pickAmount(a); setState(() {}); },
+                    onTap: () { _pickAmount(a); setState(() => _amountError = null); },
                     child: Container(padding: const EdgeInsets.symmetric(vertical: 7),
                       decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: context.border)),
                       child: Center(child: Text(a >= 1000 ? '₹${a ~/ 1000}K' : '₹$a', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand700)))),
@@ -456,7 +482,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                 GestureDetector(
                   onTap: _openDonorPicker,
                   child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-                    decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: _selectedDonorId != null ? _brand600 : context.border, width: 1.5)),
+                    decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: _selectedDonorId != null ? _brand600 : (_donorError != null ? _coral500 : context.border), width: 1.5)),
                     child: Row(children: [
                       if (_selectedDonorName != null) ...[
                         Container(width: 32, height: 32, decoration: BoxDecoration(gradient: LinearGradient(colors: [_avColor(_selectedDonorName!), Color.lerp(_avColor(_selectedDonorName!), Colors.black, 0.2)!]), shape: BoxShape.circle),
@@ -472,6 +498,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                       ],
                     ])),
                 ),
+                if (_selectedDonorId == null) _fieldError(_donorError),
               ])),
 
               const SizedBox(height: 12),
@@ -575,8 +602,11 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _txnIdCtrl,
+                  onChanged: (_) { if (_txnError != null) setState(() => _txnError = null); },
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.textPrimary),
                   decoration: InputDecoration(
+                    // Only relevant while a non-cash method is selected.
+                    errorText: _method == 'Cash' ? null : _txnError,
                     hintText: _method == 'Cash'
                         ? 'Leave blank to fill on printed invoice'
                         : 'Enter UTR / UPI Ref / Cheque No. for $_method',
@@ -638,34 +668,22 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
               ])),
 
             // ── Inline action buttons ──────────────────────────────
-            Row(children: [
-              Expanded(child: OutlinedButton(
-                onPressed: () => context.go('/donations'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF5A6B67),
-                  backgroundColor: Colors.white,
-                  side: const BorderSide(color: Color(0xFFD8E5E0), width: 1.5),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: const Text('Cancel', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-              )),
-              const SizedBox(width: 14),
-              Expanded(flex: 2, child: ElevatedButton(
-                onPressed: _saving ? null : _save,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _brand600,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: _brand600.withValues(alpha: 0.6),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  elevation: 0,
-                ),
-                child: _saving
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                  : const Text('Save Donation', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-              )),
-            ]),
+            // Right-aligned on wide screens, full-width pair on phones.
+            const SizedBox(height: 20),
+            Builder(builder: (context) {
+              final narrow = MediaQuery.sizeOf(context).width < 600;
+              final cancel = AppButton(
+                label: 'Cancel', variant: AppButtonVariant.secondary, expand: narrow,
+                onPressed: _saving ? null : () => context.go('/donations'),
+              );
+              final save = AppButton(
+                label: 'Save Donation', busyLabel: 'Saving…', icon: Icons.check_rounded,
+                loading: _saving, expand: narrow, onPressed: _save,
+              );
+              return narrow
+                  ? Row(children: [Expanded(child: cancel), const SizedBox(width: 10), Expanded(flex: 2, child: save)])
+                  : Row(mainAxisAlignment: MainAxisAlignment.end, children: [cancel, const SizedBox(width: 8), save]);
+            }),
 
             ])),
           )),

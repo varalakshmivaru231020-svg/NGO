@@ -6,6 +6,7 @@ import '../../../core/auth/role_auth.dart';
 import '../../../core/auth/session.dart';
 import '../../notifications/notification_store.dart';
 import '../../settings/profile_store.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 const _brand600 = Color(0xFFFF9933);
 const _brand100 = Color(0xFFFFE8CC);
@@ -27,28 +28,35 @@ class _MoreScreenState extends State<MoreScreen> {
     final nameCtrl = TextEditingController(text: p.name);
     final roleCtrl = TextEditingController(text: p.role);
     final orgCtrl  = TextEditingController(text: p.org);
-    showModalBottomSheet(
+    showAppSheet(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
         child: Container(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-          decoration: BoxDecoration(color: ctx.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+          decoration: BoxDecoration(color: ctx.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(16))),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: ctx.border, borderRadius: BorderRadius.circular(2)))),
-            const SizedBox(height: 16),
+            const SheetHandle(margin: EdgeInsets.only(bottom: 10)),
             Row(children: [
-              const Expanded(child: Text('Edit Profile', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
-              IconButton(icon: const Icon(Icons.close, size: 20), onPressed: () => Navigator.pop(ctx), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Edit Profile', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text('Shown on this menu and the sidebar.', style: TextStyle(fontSize: 12.5, color: ctx.textSub)),
+              ])),
+              IconButton(tooltip: 'Close', icon: Icon(Icons.close_rounded, size: 20, color: ctx.textSub), onPressed: () => Navigator.pop(ctx)),
             ]),
-            const SizedBox(height: 18),
+            const SizedBox(height: 16),
             _EditField('Display Name', nameCtrl, Icons.person_outline),
             const SizedBox(height: 12),
             _EditField('Role', roleCtrl, Icons.badge_outlined),
             const SizedBox(height: 12),
             _EditField('Foundation Name', orgCtrl, Icons.business_outlined),
-            const SizedBox(height: 20),
-            SizedBox(width: double.infinity, child: ElevatedButton(
+            const SizedBox(height: 18),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              AppButton(label: 'Cancel', variant: AppButtonVariant.secondary, onPressed: () => Navigator.pop(ctx)),
+              const SizedBox(width: 8),
+              AppButton(
+              label: 'Save Changes',
               onPressed: () {
                 final newName = nameCtrl.text.trim();
                 updateProfile(adminProfile.value.copyWith(
@@ -61,15 +69,10 @@ class _MoreScreenState extends State<MoreScreen> {
                   apiClient.patch('/users/me/profile', {'name': newName}).catchError((_) => <String, dynamic>{});
                 }
                 Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: const Text('Profile updated', style: TextStyle(fontWeight: FontWeight.w700)),
-                  backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+                AppToast.success(context, 'Profile updated');
               },
-              style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: const EdgeInsets.symmetric(vertical: 15)),
-              child: const Text('Save Changes', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-            )),
+            ),
+            ]),
           ]),
         ),
       ),
@@ -134,14 +137,14 @@ class _MoreScreenState extends State<MoreScreen> {
                       const SizedBox(height: 3),
                       Text(cardSub, style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
                     ])),
-                    GestureDetector(
+                    Tooltip(message: 'Edit profile', child: GestureDetector(
                       // Members edit their own profile (My Profile screen);
                       // only the admin edits the org/admin profile here.
                       onTap: member == null ? _openEditProfile : () => context.go('/settings'),
                       child: Container(width: 36, height: 36,
                         decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(10)),
                         child: const Icon(Icons.edit_outlined, color: Colors.white, size: 17)),
-                    ),
+                    )),
                   ]),
                 );
               },
@@ -191,7 +194,7 @@ class _MoreScreenState extends State<MoreScreen> {
           // ── Log Out ───────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18),
-            child: GestureDetector(
+            child: Semantics(button: true, label: 'Log out', child: GestureDetector(
               onTap: () async { await logoutSession(); if (context.mounted) context.go('/login'); },
               child: Container(
                 width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
@@ -202,7 +205,7 @@ class _MoreScreenState extends State<MoreScreen> {
                   Text('Log Out', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _coral500)),
                 ]),
               ),
-            ),
+            )),
           ),
 
           const SizedBox(height: 16),

@@ -6,6 +6,7 @@ import 'donor_categories_screen.dart' show donorCategoriesProvider;
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/lazy_photo.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 // ── colours ───────────────────────────────────────────────────────────
 const _brand700 = Color(0xFFE07C1F);
@@ -21,7 +22,6 @@ const _sky500 = Color(0xFF2D9CDB);
 const _sky100 = Color(0xFFDCEFFB);
 const _green600 = Color(0xFF1FA971);
 const _green100 = Color(0xFFD4F3E7);
-const _onSurface3 = Color(0xFF93A29F);
 
 // ── API donor model ───────────────────────────────────────────────────
 // Category entries as {category: {name, color}} — anything else is skipped.
@@ -258,63 +258,34 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
   void dispose() { _searchCtrl.dispose(); super.dispose(); }
 
   Future<void> _confirmDelete(_Donor d) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        icon: const Icon(Icons.delete_outline, color: _coral500, size: 40),
-        title: const Text('Delete donor?', style: TextStyle(fontWeight: FontWeight.w800), textAlign: TextAlign.center),
-        content: Text('Remove ${d.name}? This cannot be undone.', textAlign: TextAlign.center, style: const TextStyle(fontSize: 13.5)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: _coral500, fontWeight: FontWeight.w800))),
-        ],
-      ),
-    );
-    if (ok != true) return;
-
     // Soft-delete on the server for real (backend) donors first, so a
     // non-Super-Admin's delete goes to approval instead of vanishing locally.
-    if (!d.id.startsWith('local_')) {
-      try {
+    // Runs inside the confirm dialog: its button shows "Deleting…" and a
+    // failure keeps the dialog open with an error toast (nothing removed).
+    bool pending = false;
+    final ok = await AppConfirm.show(
+      context,
+      title: 'Delete donor?',
+      message: 'Are you sure you want to delete ${d.name}? This action cannot be undone.',
+      onConfirm: () async {
+        if (d.id.startsWith('local_')) return;
         final res = await apiClient.delete('/donors/${d.id}');
-        if ((res?['meta'] as Map?)?['pendingApproval'] == true) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: const Text('Submitted for Super Admin approval', style: TextStyle(fontWeight: FontWeight.w700)),
-              backgroundColor: const Color(0xFFE0921A), behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ));
-          }
-          return; // don't remove locally — it's only pending
-        }
-      } catch (e) {
-        // Not deleted on the server — don't report it as deleted.
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(ApiClient.errorMessage(e), style: const TextStyle(fontWeight: FontWeight.w700)),
-            backgroundColor: _coral500, behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ));
-        }
-        return;
-      }
+        pending = (res?['meta'] as Map?)?['pendingApproval'] == true;
+      },
+      errorText: (e) => ApiClient.errorMessage(e, fallback: 'Unable to delete donor.'),
+    );
+    if (!ok || !mounted) return;
+    if (pending) {
+      AppToast.warning(context, 'Submitted for approval', detail: 'A Super Admin must approve this deletion.');
+      return; // don't remove locally — it's only pending
     }
-    if (!mounted) return;
 
     // Remove from local stores so the UI updates instantly.
     demoLocalDonors.removeWhere((m) => m['id'] == d.id);
     mockDonorData.removeWhere((m) => m['id'] == d.id);
     localDonorPhotos.remove(d.id);
     ref.read(donorRefreshProvider.notifier).state++;
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('${d.name} deleted', style: const TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: _coral500, behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ));
-    }
+    AppToast.success(context, 'Donor deleted', detail: d.name);
   }
 
   List<_Donor> _filtered(List<_Donor> all) {
@@ -349,20 +320,10 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
         ]),
         error: (e, _) => Column(children: [
           Container(color: context.headerBg, height: top + 70),
-          Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.wifi_off_rounded, size: 48, color: _onSurface3),
-            const SizedBox(height: 12),
-            Text('Could not load donors', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: context.textPrimary)),
-            const SizedBox(height: 6),
-            Text(e.toString(), style: TextStyle(fontSize: 12, color: context.textHint), textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () => ref.invalidate(donorsProvider),
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white),
-            ),
-          ]))),
+          Expanded(child: Center(child: SingleChildScrollView(child: ErrorState(
+            message: ApiClient.errorMessage(e, fallback: 'Could not load donors.'),
+            onRetry: () => ref.invalidate(donorsProvider),
+          )))),
         ]),
         data: (load) {
           final allDonors = load.donors;
@@ -370,23 +331,10 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
           if (allDonors.isEmpty && load.error != null) {
             return Column(children: [
               Container(color: context.headerBg, height: top + 70),
-              Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.wifi_off_rounded, size: 48, color: _onSurface3),
-                const SizedBox(height: 12),
-                Text('Could not load donors', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: context.textPrimary)),
-                const SizedBox(height: 6),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Text(load.error!, style: TextStyle(fontSize: 12, color: context.textHint), textAlign: TextAlign.center),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: () => ref.invalidate(donorsProvider),
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('Retry'),
-                  style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white),
-                ),
-              ]))),
+              Expanded(child: Center(child: SingleChildScrollView(child: ErrorState(
+                message: load.error!,
+                onRetry: () => ref.invalidate(donorsProvider),
+              )))),
             ]);
           }
           final donors = _filtered(allDonors);
@@ -407,7 +355,7 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
                 padding: EdgeInsets.fromLTRB(18, top + 14, 18, 16),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Donors', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: -0.5, height: 1, color: context.textPrimary)),
+                    Text('Donors', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5, height: 1, color: context.textPrimary)),
                     const SizedBox(height: 3),
                     Text('${realDonors.length} total · ${categories.length} categories',
                       style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
@@ -544,11 +492,21 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
               // ── list ─────────────────────────────────────────────────
               Expanded(
                 child: donors.isEmpty
-                  ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.people_outline, size: 48, color: _onSurface3.withValues(alpha: 0.5)),
-                      const SizedBox(height: 12),
-                      Text('No donors found', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: context.textHint)),
-                    ]))
+                  ? ListView(children: [
+                      realDonors.isEmpty && _search.isEmpty && _activeFilter == 'All'
+                          ? EmptyState(
+                              icon: Icons.people_outline,
+                              title: 'No donors yet',
+                              message: 'Add your first donor to start recording donations.',
+                              actionLabel: 'Add Donor',
+                              onAction: () => context.go('/donors/new'),
+                            )
+                          : const EmptyState(
+                              icon: Icons.search_off_rounded,
+                              title: 'No matching donors',
+                              message: 'Try a different search or category filter.',
+                            ),
+                    ])
                   : ListView.separated(
                       padding: const EdgeInsets.fromLTRB(18, 0, 18, 100),
                       itemCount: donors.length,
@@ -761,16 +719,20 @@ class _DonorCard extends StatelessWidget {
             Text(donor.mobile, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _brand700)),
           if (onDelete != null)
             PopupMenuButton<String>(
+              tooltip: 'Actions for ${donor.name}',
               icon: Icon(Icons.more_vert, size: 20, color: context.textHint),
               padding: EdgeInsets.zero,
               splashRadius: 18,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              position: PopupMenuPosition.under,
+              offset: const Offset(0, 4),
+              constraints: const BoxConstraints(minWidth: 150),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               onSelected: (v) { if (v == 'delete') onDelete!.call(); },
               itemBuilder: (_) => const [
-                PopupMenuItem(value: 'delete', child: Row(children: [
-                  Icon(Icons.delete_outline, size: 18, color: _coral500),
-                  SizedBox(width: 8),
-                  Text('Delete', style: TextStyle(fontWeight: FontWeight.w700)),
+                PopupMenuItem(value: 'delete', height: 36, child: Row(children: [
+                  Icon(Icons.delete_outline_rounded, size: 17, color: _coral500),
+                  SizedBox(width: 10),
+                  Text('Delete', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500, color: _coral500)),
                 ])),
               ],
             ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 const _brand600 = Color(0xFFFF9933);
 const _brand100 = Color(0xFFFFE8CC);
@@ -11,7 +12,6 @@ const _violet500 = Color(0xFF7C6CF0);
 const _violet100 = Color(0xFFE7E3FD);
 const _sky500 = Color(0xFF2D9CDB);
 const _sky100 = Color(0xFFDCEFFB);
-const _green500 = Color(0xFF14A98C);
 const _onSurface2 = Color(0xFF5A6B67);
 const _onSurface3 = Color(0xFF93A29F);
 const _border = Color(0xFFE5EBE9);
@@ -43,12 +43,7 @@ class _HelpScreenState extends State<HelpScreen> {
   String _search = '';
   final Set<int> _expanded = {};
 
-  void _toast(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
-    backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    duration: const Duration(seconds: 2),
-  ));
+  void _toast(String msg) => AppToast.info(context, msg);
 
   @override
   Widget build(BuildContext context) {
@@ -64,11 +59,11 @@ class _HelpScreenState extends State<HelpScreen> {
           Container(color: Colors.white, padding: EdgeInsets.fromLTRB(18, top + 14, 18, 16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20), onPressed: () => context.go('/more'), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+                IconButton(tooltip: 'Back', icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18), onPressed: () => context.go('/more'), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
                 const SizedBox(width: 10),
                 const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Help & Support', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-                  Text('We\'re here to help', style: TextStyle(fontSize: 13, color: _onSurface2, fontWeight: FontWeight.w600)),
+                  Text('Help & Support', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.2)),
+                  Text('We\'re here to help', style: TextStyle(fontSize: 12.5, color: _onSurface2, fontWeight: FontWeight.w500)),
                 ])),
               ]),
               const SizedBox(height: 12),
@@ -121,7 +116,7 @@ class _HelpScreenState extends State<HelpScreen> {
             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: _border),
               boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 6, offset: Offset(0, 2))]),
             child: Column(children: filtered.isEmpty
-              ? [const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('No topics matched', style: TextStyle(fontSize: 14, color: _onSurface3, fontWeight: FontWeight.w600))))]
+              ? [const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: EmptyStateLike(icon: Icons.search_off_rounded, title: 'No topics matched', message: 'Try a different word, or contact us below.'))]
               : filtered.asMap().entries.map((e) {
                   final i = e.key; final t = e.value;
                   return GestureDetector(
@@ -190,12 +185,12 @@ class _ContactBtn extends StatelessWidget {
   const _ContactBtn({required this.icon, required this.label, required this.onTap});
   final IconData icon; final String label; final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => Expanded(child: GestureDetector(onTap: onTap,
+  Widget build(BuildContext context) => Expanded(child: Semantics(button: true, label: label, child: GestureDetector(onTap: onTap,
     child: Container(padding: const EdgeInsets.symmetric(vertical: 11),
       decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.white.withValues(alpha: 0.3))),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(icon, color: Colors.white, size: 20),
         const SizedBox(height: 4),
         Text(label, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
-      ]))));
+      ])))));
 }

@@ -20,7 +20,10 @@ class ApiClient {
     return '${Uri.base.origin}/api/v1';
   }
 
-  static const serverUrlKey = 'server_url';
+  // Key of the old "Server URL" override (screen removed now that the server
+  // has a permanent address). Any value still saved on a device is deleted
+  // on first use so it can't silently point the app somewhere else.
+  static const _legacyServerUrlKey = 'server_url';
   late final Dio _dio;
 
   ApiClient() {
@@ -42,8 +45,7 @@ class ApiClient {
         final prefs = await SharedPreferences.getInstance();
         final token = prefs.getString('access_token');
         if (token != null) options.headers['Authorization'] = 'Bearer $token';
-        final custom = prefs.getString(serverUrlKey);
-        if (custom != null && custom.isNotEmpty) options.baseUrl = custom;
+        if (prefs.containsKey(_legacyServerUrlKey)) await prefs.remove(_legacyServerUrlKey);
         handler.next(options);
       },
       onError: (error, handler) async {
@@ -107,8 +109,7 @@ class ApiClient {
     final refresh = prefs.getString('refresh_token');
     if (refresh == null || refresh.isEmpty) return _RefreshOutcome.rejected;
     try {
-      final custom = prefs.getString(serverUrlKey);
-      final base = (custom != null && custom.isNotEmpty) ? custom : defaultBaseUrl;
+      final base = defaultBaseUrl;
       final refreshDio = Dio(BaseOptions(
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 20),

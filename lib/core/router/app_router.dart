@@ -87,7 +87,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/settings/privacy-policy',  builder: (ctx, state) => const PrivacyPolicyScreen()),
           GoRoute(path: '/settings/terms-of-service',builder: (ctx, state) => const TermsOfServiceScreen()),
           GoRoute(path: '/settings/about-us',        builder: (ctx, state) => const AboutUsScreen()),
-          GoRoute(path: '/settings/server-url',      builder: (ctx, state) => const ServerUrlScreen()),
           GoRoute(path: '/settings/razorpay',        builder: (ctx, state) => const RazorpayCredentialsScreen()),
           GoRoute(path: '/settings/whatsapp',        builder: (ctx, state) => const WhatsappSettingsScreen()),
           GoRoute(path: '/settings/centres',         builder: (ctx, state) => const ManageCentresScreen()),

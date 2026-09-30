@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 Future<void> launchPhone(String phone, BuildContext context) async {
   final clean = phone.replaceAll(RegExp(r'\s|-'), '');
@@ -42,7 +43,7 @@ Future<void> launchLink(String url, BuildContext context) async {
 }
 
 void _toast(BuildContext context, String msg) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+  AppToast.fromSnackBar(context, SnackBar(
     content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
     behavior: SnackBarBehavior.floating,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

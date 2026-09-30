@@ -8,6 +8,7 @@ import '../../../core/auth/role_auth.dart';
 import '../../settings/profile_store.dart';
 import 'expenses_screen.dart' show demoLocalExpenses;
 import 'expense_voucher_generator.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 const _orange   = Color(0xFFF97316);
 const _orange700 = Color(0xFFC2410C);
@@ -103,39 +104,23 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   }
 
   Future<void> _addCategory() async {
-    final ctrl = TextEditingController();
-    final label = await showDialog<String>(
+    // Same request as before, run inside the dialog: "Adding…" on the button,
+    // and the typed name stays if it fails.
+    final created = await showDialog<({String id, String label})>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('New Category'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(hintText: 'e.g. Fuel & Travel'),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Add')),
-        ],
-      ),
+      builder: (ctx) => _NewCategoryDialog(onSubmit: (label) async {
+        final r = await apiClient.post('/expenses/categories', {'label': label});
+        final m = (r['data'] as Map).cast<String, dynamic>();
+        return (id: m['id'] as String, label: m['label'] as String);
+      }),
     );
-    if (label == null || label.isEmpty) return;
-
-    try {
-      final r = await apiClient.post('/expenses/categories', {'label': label});
-      final m = (r['data'] as Map).cast<String, dynamic>();
-      final created = (id: m['id'] as String, label: m['label'] as String);
-      if (!mounted) return;
-      setState(() {
-        _categories = [..._categories, created];
-        _categoryId = created.id;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      _snack('Could not add category — check your connection and try again', isError: true);
-    }
+    if (created == null || !mounted) return;
+    setState(() {
+      _categories = [..._categories, created];
+      _categoryId = created.id;
+      _categoryError = null;
+    });
+    AppToast.success(context, 'Category added', detail: created.label);
   }
 
   String get _voucherPreview => 'EXP/${DateTime.now().year}/${(DateTime.now().millisecondsSinceEpoch % 9999 + 1000)}';
@@ -156,12 +141,23 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     });
   }
 
+  // Field-level validation messages, shown under the relevant field.
+  String? _amountError, _paidToError, _purposeError, _categoryError;
+
   void _save() async {
-    final amount = int.tryParse(_amountCtrl.text.trim());
-    if (amount == null || amount <= 0) { _snack('Please enter a valid amount', isError: true); return; }
-    if (_paidToCtrl.text.trim().isEmpty) { _snack('Please enter who this was paid to', isError: true); return; }
-    if (_purposeCtrl.text.trim().isEmpty) { _snack('Please describe what this expense was for', isError: true); return; }
-    if (_categoryId == null) { _snack('Please select a category', isError: true); return; }
+    if (_saving) return; // ignore repeated taps while a save is in flight
+    final parsed = int.tryParse(_amountCtrl.text.trim());
+    setState(() {
+      _amountError = (parsed == null || parsed <= 0) ? 'Please enter a valid amount.' : null;
+      _paidToError = _paidToCtrl.text.trim().isEmpty ? 'Please enter who this was paid to.' : null;
+      _purposeError = _purposeCtrl.text.trim().isEmpty ? 'Please describe what this expense was for.' : null;
+      _categoryError = _categoryId == null ? 'Please select a category.' : null;
+    });
+    if (_amountError != null || _paidToError != null || _purposeError != null || _categoryError != null) {
+      _snack('Please check the highlighted fields', isError: true);
+      return;
+    }
+    final int amount = parsed!; // validated above
 
     setState(() => _saving = true);
 
@@ -185,7 +181,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       if ((resp['meta'] as Map?)?['pendingApproval'] == true) {
         if (mounted) {
           setState(() => _saving = false);
-          _snack('Submitted for Super Admin approval');
+          AppToast.warning(context, 'Submitted for approval', detail: 'A Super Admin will review this expense.');
           context.go('/expenses');
         }
         return;
@@ -199,7 +195,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       if (e is DioException && e.response != null) {
         if (mounted) {
           setState(() => _saving = false);
-          _snack(ApiClient.errorMessage(e, fallback: 'Could not save the expense.'), isError: true);
+          _snack('Unable to save expense', isError: true,
+              detail: ApiClient.errorMessage(e, fallback: 'Please try again.'));
         }
         return;
       }
@@ -238,17 +235,29 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         'notes': _notesCtrl.text.trim(),
       });
     }
+    if (backendOk) AppToast.success(context, 'Expense recorded', detail: voucherNo);
     await showVoucherSheet(context, voucher);
     if (mounted) context.go('/expenses');
   }
 
-  void _snack(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
-      backgroundColor: isError ? _coral500 : _orange,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+  void _snack(String msg, {bool isError = false, String? detail}) {
+    if (isError) {
+      AppToast.error(context, msg, detail: detail);
+    } else {
+      AppToast.success(context, msg, detail: detail);
+    }
   }
+
+  // Small inline error line under a field.
+  Widget _fieldError(String? msg) => AnimatedSize(
+    duration: const Duration(milliseconds: 150),
+    child: msg == null
+        ? const SizedBox(width: double.infinity)
+        : Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Text(msg, style: const TextStyle(fontSize: 12, color: _coral500, fontWeight: FontWeight.w600)),
+          ),
+  );
 
   @override
   void dispose() {
@@ -294,12 +303,13 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               const _Label('Amount'),
               const SizedBox(height: 8),
               Container(
-                decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: context.border, width: 1.5)),
+                decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: _amountError != null ? _coral500 : context.border, width: 1.5)),
                 child: Row(children: [
                   Container(width: 44, height: 52, alignment: Alignment.center,
                     child: const Text('₹', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _orange))),
                   Expanded(child: TextField(
                     controller: _amountCtrl,
+                    onChanged: (_) { if (_amountError != null) setState(() => _amountError = null); },
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: context.textPrimary),
@@ -307,10 +317,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   )),
                 ]),
               ),
+              _fieldError(_amountError),
               const SizedBox(height: 12),
               Row(children: _quickAmounts.map((a) {
                 return Expanded(child: Padding(padding: EdgeInsets.only(right: a == _quickAmounts.last ? 0 : 8), child: GestureDetector(
-                  onTap: () { _pickAmount(a); setState(() {}); },
+                  onTap: () { _pickAmount(a); setState(() => _amountError = null); },
                   child: Container(padding: const EdgeInsets.symmetric(vertical: 7),
                     decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: context.border)),
                     child: Center(child: Text(a >= 1000 ? '₹${a ~/ 1000}K' : '₹$a', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _orange700)))),
@@ -326,8 +337,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               const SizedBox(height: 8),
               TextField(
                 controller: _paidToCtrl,
+                onChanged: (_) { if (_paidToError != null) setState(() => _paidToError = null); },
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.textPrimary),
                 decoration: InputDecoration(
+                  errorText: _paidToError,
                   hintText: 'Vendor / staff / payee name',
                   hintStyle: TextStyle(fontSize: 14, color: context.textHint, fontWeight: FontWeight.w500),
                   filled: true, fillColor: context.scaffoldBg,
@@ -348,8 +361,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               TextField(
                 controller: _purposeCtrl,
                 maxLines: 3,
+                onChanged: (_) { if (_purposeError != null) setState(() => _purposeError = null); },
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.textPrimary),
                 decoration: InputDecoration(
+                  errorText: _purposeError,
                   hintText: 'What is this payment for?',
                   hintStyle: TextStyle(fontSize: 14, color: context.textHint, fontWeight: FontWeight.w500),
                   filled: true, fillColor: context.scaffoldBg,
@@ -374,7 +389,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   ..._categories.map((c) {
                     final active = _categoryId == c.id;
                     return GestureDetector(
-                      onTap: () => setState(() => _categoryId = c.id),
+                      onTap: () => setState(() { _categoryId = c.id; _categoryError = null; }),
                       child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(color: active ? _orange.withValues(alpha: 0.12) : context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? _orange : context.border)),
                         child: Text(c.label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? _orange : context.textSub))),
@@ -394,6 +409,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                         ])),
                     ),
                 ]),
+              _fieldError(_categoryError),
             ])),
 
             const SizedBox(height: 12),
@@ -540,41 +556,93 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             ])),
 
             // ── Inline action buttons ──────────────────────────────
-            const SizedBox(height: 4),
-            Row(children: [
-              Expanded(child: OutlinedButton(
-                onPressed: () => context.go('/expenses'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF5A6B67),
-                  backgroundColor: Colors.white,
-                  side: const BorderSide(color: Color(0xFFD8E5E0), width: 1.5),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: const Text('Cancel', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-              )),
-              const SizedBox(width: 14),
-              Expanded(flex: 2, child: ElevatedButton(
-                onPressed: _saving ? null : _save,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _orange,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: _orange.withValues(alpha: 0.6),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  elevation: 0,
-                ),
-                child: _saving
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                  : const Text('Save Expense', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-              )),
-            ]),
+            // Right-aligned on wide screens, full-width pair on phones.
+            const SizedBox(height: 20),
+            Builder(builder: (context) {
+              final narrow = MediaQuery.sizeOf(context).width < 600;
+              final cancel = AppButton(
+                label: 'Cancel', variant: AppButtonVariant.secondary, expand: narrow,
+                onPressed: _saving ? null : () => context.go('/expenses'),
+              );
+              final save = AppButton(
+                label: 'Save Expense', busyLabel: 'Saving…', icon: Icons.check_rounded,
+                loading: _saving, expand: narrow, onPressed: _save,
+              );
+              return narrow
+                  ? Row(children: [Expanded(child: cancel), const SizedBox(width: 10), Expanded(flex: 2, child: save)])
+                  : Row(mainAxisAlignment: MainAxisAlignment.end, children: [cancel, const SizedBox(width: 8), save]);
+            }),
 
           ])),
         )),
       ]),
     );
   }
+}
+
+// Compact "New Category" dialog with an in-button loading state. Closes with
+// the created category, or stays open (keeping the typed name) on failure.
+class _NewCategoryDialog extends StatefulWidget {
+  const _NewCategoryDialog({required this.onSubmit});
+  final Future<({String id, String label})> Function(String label) onSubmit;
+  @override
+  State<_NewCategoryDialog> createState() => _NewCategoryDialogState();
+}
+
+class _NewCategoryDialogState extends State<_NewCategoryDialog> {
+  final _ctrl = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() { _ctrl.dispose(); super.dispose(); }
+
+  Future<void> _submit() async {
+    if (_busy) return;
+    final label = _ctrl.text.trim();
+    if (label.isEmpty) { setState(() => _error = 'Please enter a category name.'); return; }
+    setState(() { _busy = true; _error = null; });
+    try {
+      final created = await widget.onSubmit(label);
+      if (mounted) Navigator.pop(context, created);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      AppToast.error(context, 'Unable to add category', detail: 'Check your connection and try again.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Dialog(
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    insetPadding: const EdgeInsets.all(20),
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 400),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('New Category', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _ctrl,
+            autofocus: true,
+            enabled: !_busy,
+            textCapitalization: TextCapitalization.words,
+            onChanged: (_) { if (_error != null) setState(() => _error = null); },
+            decoration: InputDecoration(hintText: 'e.g. Fuel & Travel', errorText: _error),
+            onSubmitted: (_) => _submit(),
+          ),
+          const SizedBox(height: 18),
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            AppButton(label: 'Cancel', variant: AppButtonVariant.secondary,
+                onPressed: _busy ? null : () => Navigator.pop(context)),
+            const SizedBox(width: 8),
+            AppButton(label: 'Add', busyLabel: 'Adding…', loading: _busy, onPressed: _submit),
+          ]),
+        ]),
+      ),
+    ),
+  );
 }
 
 class _Card extends StatelessWidget {

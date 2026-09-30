@@ -21,6 +21,7 @@ import '../../../core/auth/role_auth.dart';
 import '../profile_store.dart';
 import '../../students/presentation/students_screen.dart' show demoCentres;
 import '../../students/student_lookups.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 // ── brand palette ────────────────────────────────────────────────
 const _brand600   = Color(0xFFFF9933);
@@ -53,24 +54,47 @@ final legalContentProvider = FutureProvider.family<Map<String, String>, String>(
 );
 
 // ── shared helpers ───────────────────────────────────────────────
-Widget _buildHeader(BuildContext ctx, String title, {String? sub}) =>
+// Compact page header: back, title + one-line subtitle, optional primary
+// action on the right (kept out of a floating button so toasts never cover it).
+Widget _buildHeader(BuildContext ctx, String title, {String? sub, Widget? action}) =>
   Container(
-    color: ctx.headerBg,
-    padding: EdgeInsets.fromLTRB(8, MediaQuery.of(ctx).padding.top + 10, 18, 14),
+    decoration: BoxDecoration(color: ctx.headerBg, border: Border(bottom: BorderSide(color: ctx.border))),
+    padding: EdgeInsets.fromLTRB(8, MediaQuery.of(ctx).padding.top + 10, 16, 10),
     child: Row(children: [
       IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+        tooltip: 'Back to Settings',
+        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
         onPressed: () => ctx.go('/settings'),
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(),
       ),
-      const SizedBox(width: 6),
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-        if (sub != null) Text(sub, style: TextStyle(fontSize: 12.5, color: ctx.textSub, fontWeight: FontWeight.w500)),
+      const SizedBox(width: 2),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.2)),
+        if (sub != null)
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 150),
+            child: Text(sub, key: ValueKey(sub), maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12.5, color: ctx.textSub, fontWeight: FontWeight.w500)),
+          ),
       ])),
+      if (action != null) ...[const SizedBox(width: 8), action],
     ]),
   );
+
+// Primary form action: right-aligned and compact on wide screens, full
+// width on phones.
+Widget _formAction(BuildContext ctx, {
+  required String label, required VoidCallback? onPressed,
+  String? busyLabel, bool loading = false, IconData? icon,
+  AppButtonVariant variant = AppButtonVariant.primary,
+}) {
+  final wide = isWideLayout(ctx);
+  return Align(
+    alignment: Alignment.centerRight,
+    child: AppButton(label: label, busyLabel: busyLabel, loading: loading, icon: icon,
+        variant: variant, expand: !wide, onPressed: onPressed),
+  );
+}
 
 Widget _buildCard(BuildContext ctx, {required Widget child}) => Container(
   margin: const EdgeInsets.symmetric(horizontal: 18),
@@ -107,13 +131,20 @@ Widget _buildSectionLabel(BuildContext ctx, String t) => Padding(
   child: Text(t.toUpperCase(),
     style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: ctx.textHint, letterSpacing: 0.8)));
 
-void _snack(BuildContext ctx, String msg) {
-  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-    content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
-    backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    duration: const Duration(seconds: 2),
-  ));
+// All feedback goes through the shared top-right toast. The tone is inferred
+// from the wording unless [error] is given explicitly.
+final _errorWords = RegExp(
+  r'\b(fail|failed|could not|couldn.t|unable|error|invalid|required|expired|denied|only|not allowed|check your connection)\b',
+  caseSensitive: false,
+);
+void _snack(BuildContext ctx, String msg, {bool? error}) {
+  final clean = msg.replaceFirst(RegExp(r'^✓\s*'), '');
+  final isError = error ?? _errorWords.hasMatch(clean);
+  if (isError) {
+    AppToast.error(ctx, clean);
+  } else {
+    AppToast.success(ctx, clean);
+  }
 }
 
 // Friendly message for a failed POST /users (team-member creation).
@@ -164,6 +195,7 @@ class _EditProfileState extends State<EditProfileScreen> {
   }
 
   void _save() async {
+    if (_saving) return;
     setState(() => _saving = true);
     await Future.delayed(const Duration(milliseconds: 400));
     var updated = adminProfile.value.copyWith(
@@ -179,14 +211,25 @@ class _EditProfileState extends State<EditProfileScreen> {
     updateProfile(updated);
     // Persist to the backend too — session restore re-reads the server's copy
     // on every reload, so a local-only edit used to silently revert.
+    var synced = true;
+    String syncError = '';
     try {
       await apiClient.patch('/users/me/profile', {
         'name': updated.name,
         'phone': updated.phone,
         if (_photoChanged) 'avatar': encodePhoto(_photo) ?? '',
       });
-    } catch (_) {}
-    if (mounted) { setState(() => _saving = false); _snack(context, 'Profile updated successfully'); }
+    } catch (e) {
+      synced = false;
+      syncError = ApiClient.errorMessage(e);
+    }
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (synced) {
+      AppToast.success(context, 'Profile updated');
+    } else {
+      AppToast.warning(context, 'Saved on this device only', detail: 'Could not sync to the server — $syncError');
+    }
   }
 
   @override
@@ -216,17 +259,8 @@ class _EditProfileState extends State<EditProfileScreen> {
             _field('Organisation',       _org,  Icons.business_outlined),
             _field('About',              _bio,  Icons.info_outline, maxLines: 3),
           ]))),
-          const SizedBox(height: 24),
-          SizedBox(width: double.infinity, child: ElevatedButton(
-            onPressed: _saving ? null : _save,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              padding: const EdgeInsets.symmetric(vertical: 15)),
-            child: _saving
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-              : const Text('Save Changes', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-          )),
+          const SizedBox(height: 20),
+          _formAction(context, label: 'Save Changes', busyLabel: 'Saving…', loading: _saving, onPressed: _save),
         ]),
       )),
     ]),
@@ -313,28 +347,18 @@ class _SecurityPinState extends State<SecurityPinScreen> {
 
   void _toggleBiometric(BuildContext context, bool enable) {
     if (enable) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          icon: const Icon(Icons.fingerprint, size: 48, color: _violet500),
-          title: const Text('Enable Biometric Login?', style: TextStyle(fontWeight: FontWeight.w800), textAlign: TextAlign.center),
-          content: const Text(
-            'Use your fingerprint or face ID to log in quickly.\n\nTouch the fingerprint sensor on your device to confirm.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13.5)),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                setState(() => _bioEnabled = true);
-                _snack(context, 'Biometric login enabled');
-              },
-              child: const Text('Enable', style: TextStyle(color: _brand600, fontWeight: FontWeight.w800))),
-          ],
-        ),
-      );
+      AppConfirm.show(
+        context,
+        title: 'Enable biometric login?',
+        message: 'Use your fingerprint or face ID to log in quickly. Touch the fingerprint sensor on your device to confirm.',
+        confirmLabel: 'Enable',
+        busyLabel: 'Enabling…',
+        destructive: false,
+      ).then((ok) {
+        if (!ok || !mounted) return;
+        setState(() => _bioEnabled = true);
+        _snack(this.context, 'Biometric login enabled');
+      });
     } else {
       setState(() => _bioEnabled = false);
       _snack(context, 'Biometric login disabled');
@@ -389,15 +413,14 @@ class _SecurityPinState extends State<SecurityPinScreen> {
       {'date': '14 Jun 2026, 08:50 AM', 'device': 'OPPO A9 2020',  'loc': 'Bengaluru, KA', 'ok': true},
       {'date': '12 Jun 2026, 02:15 PM', 'device': 'Unknown Device', 'loc': 'Chennai, TN',  'ok': false},
     ];
-    showModalBottomSheet(
+    showAppSheet(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
         constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.6),
         decoration: BoxDecoration(color: ctx.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(color: ctx.border, borderRadius: BorderRadius.circular(2)))),
+          Center(child: SheetHandle(margin: const EdgeInsets.symmetric(vertical: 12))),
           const Text('Login History', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
           Text('Last 5 login events', style: TextStyle(fontSize: 12.5, color: ctx.textHint, fontWeight: FontWeight.w500)),
           const SizedBox(height: 12),
@@ -440,23 +463,15 @@ class _SecurityPinState extends State<SecurityPinScreen> {
   }
 
   void _confirmRevoke(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Revoke All Sessions?', style: TextStyle(fontWeight: FontWeight.w800)),
-        content: const Text('This will sign you out from all devices, including this one. You will need to log in again.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _snack(context, 'All sessions revoked — please log in again');
-            },
-            child: const Text('Revoke All', style: TextStyle(color: _coral500, fontWeight: FontWeight.w800))),
-        ],
-      ),
-    );
+    AppConfirm.show(
+      context,
+      title: 'Revoke all sessions?',
+      message: 'This will sign you out from all devices, including this one. You will need to log in again.',
+      confirmLabel: 'Revoke All',
+      busyLabel: 'Revoking…',
+    ).then((ok) {
+      if (ok && mounted) _snack(this.context, 'All sessions revoked — please log in again');
+    });
   }
 }
 
@@ -523,15 +538,9 @@ class _LinkedDevicesState extends State<LinkedDevicesScreen> {
             );
           }).toList())),
           const SizedBox(height: 20),
-          SizedBox(width: double.infinity, child: OutlinedButton.icon(
-            onPressed: () { setState(() => _devices.removeWhere((d) => !(d['current'] as bool))); _snack(context, 'All other devices removed'); },
-            icon: const Icon(Icons.logout_rounded, size: 18, color: _coral500),
-            label: const Text('Sign Out All Other Devices', style: TextStyle(fontWeight: FontWeight.w700, color: _coral500)),
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: _coral500.withValues(alpha: 0.4)),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              padding: const EdgeInsets.symmetric(vertical: 14)),
-          )),
+          _formAction(context,
+            label: 'Sign Out All Other Devices', icon: Icons.logout_rounded, variant: AppButtonVariant.destructive,
+            onPressed: () { setState(() => _devices.removeWhere((d) => !(d['current'] as bool))); _snack(context, 'All other devices removed'); }),
         ]),
       )),
     ]),
@@ -667,8 +676,9 @@ class _TeamMembersState extends State<TeamMembersScreen> {
         : (roleOptions.isNotEmpty ? roleOptions.first : 'Field Officer');
     Map<String, String?> errors = {};
     bool obscurePass = true;
+    bool saving = false;
 
-    showModalBottomSheet(
+    showAppSheet(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent, useSafeArea: true,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
         Widget field(TextEditingController ctrl, String label, String hint, {bool required = true, TextInputType keyboard = TextInputType.text, bool obscure = false, VoidCallback? toggleObscure}) => Column(
@@ -679,13 +689,13 @@ class _TeamMembersState extends State<TeamMembersScreen> {
           ]),
           const SizedBox(height: 6),
           TextField(
-            controller: ctrl, keyboardType: keyboard, obscureText: obscure,
+            controller: ctrl, keyboardType: keyboard, obscureText: obscure, enabled: !saving,
             onChanged: (_) { if (errors[label] != null) setSheet(() => errors.remove(label)); },
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             decoration: InputDecoration(
               hintText: hint, hintStyle: TextStyle(color: ctx.textHint),
               filled: true, fillColor: ctx.surface2, errorText: errors[label],
-              suffixIcon: toggleObscure != null ? IconButton(icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: ctx.textHint), onPressed: toggleObscure) : null,
+              suffixIcon: toggleObscure != null ? IconButton(tooltip: obscure ? 'Show password' : 'Hide password', icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: ctx.textHint), onPressed: toggleObscure) : null,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
               focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
               errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _coral500, width: 1.5)),
@@ -697,9 +707,19 @@ class _TeamMembersState extends State<TeamMembersScreen> {
           decoration: BoxDecoration(color: ctx.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
           padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
           child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(color: ctx.border, borderRadius: BorderRadius.circular(2)))),
-            const Text('Create User', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            Center(child: SheetHandle(margin: const EdgeInsets.symmetric(vertical: 12))),
+            Row(children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Create User', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text('Give a team member their own login and role.', style: TextStyle(fontSize: 12.5, color: ctx.textSub)),
+              ])),
+              IconButton(
+                tooltip: 'Close',
+                icon: Icon(Icons.close_rounded, size: 20, color: ctx.textSub),
+                onPressed: saving ? null : () => Navigator.of(ctx).pop(),
+              ),
+            ]),
             const SizedBox(height: 16),
             field(nameCtrl, 'Full Name', 'e.g. Priya Sharma'),
             field(emailCtrl, 'Email', 'member@saksham.org', keyboard: TextInputType.emailAddress),
@@ -719,12 +739,20 @@ class _TeamMembersState extends State<TeamMembersScreen> {
                 borderRadius: BorderRadius.circular(12),
                 items: roleOptions.map((r) => DropdownMenuItem(value: r,
                   child: Text(r, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: ctx.textPrimary)))).toList(),
-                onChanged: (v) { if (v != null) setSheet(() => selectedRole = v); },
+                onChanged: saving ? null : (v) { if (v != null) setSheet(() => selectedRole = v); },
               )),
             ),
             const SizedBox(height: 20),
-            SizedBox(width: double.infinity, child: ElevatedButton(
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              AppButton(label: 'Cancel', variant: AppButtonVariant.secondary,
+                  onPressed: saving ? null : () => Navigator.of(ctx).pop()),
+              const SizedBox(width: 8),
+              AppButton(
+              label: 'Create User',
+              busyLabel: 'Creating…',
+              loading: saving,
               onPressed: () async {
+                if (saving) return;
                 final name     = nameCtrl.text.trim();
                 final email    = emailCtrl.text.trim();
                 final password = passwordCtrl.text;
@@ -735,7 +763,7 @@ class _TeamMembersState extends State<TeamMembersScreen> {
                 if (password.isEmpty) newErrors['Password'] = 'Password is required';
                 else if (password.length < 8) newErrors['Password'] = 'Min 8 characters';
                 if (newErrors.isNotEmpty) { setSheet(() => errors = newErrors); return; }
-                if (selectedRole.isEmpty) { if (mounted) _snack(context, 'Create a role in Manage Roles first'); return; }
+                if (selectedRole.isEmpty) { if (mounted) AppToast.warning(context, 'Create a role in Manage Roles first'); return; }
 
                 final modules = modulesForRoleName(selectedRole);
                 final backendRole = selectedRole.toLowerCase() == 'admin' ? 'ADMIN' : 'STAFF';
@@ -743,6 +771,7 @@ class _TeamMembersState extends State<TeamMembersScreen> {
                 // Create on the backend first so the account persists server-side
                 // and works on any device/browser.
                 String? backendUserId;
+                setSheet(() => saving = true);
                 try {
                   final res = await apiClient.post('/users', {
                     'name': name, 'email': email, 'password': password,
@@ -751,13 +780,14 @@ class _TeamMembersState extends State<TeamMembersScreen> {
                   // Non-Super-Admins: queued for approval — don't add the member yet.
                   if ((res['meta'] as Map?)?['pendingApproval'] == true) {
                     if (ctx.mounted) Navigator.pop(ctx);
-                    if (mounted) _snack(context, 'Submitted for Super Admin approval');
+                    if (mounted) _snack(context, 'Submitted for Super Admin approval', error: false);
                     _loadPendingMembers();
                     return;
                   }
                   backendUserId = ((res['data'] as Map?)?.cast<String, dynamic>())?['id'] as String?;
                 } catch (e) {
-                  if (mounted) _snack(context, _createUserErrorMsg(e));
+                  if (ctx.mounted) setSheet(() => saving = false);
+                  if (mounted) AppToast.error(context, 'Could not create user', detail: _createUserErrorMsg(e));
                   return;
                 }
 
@@ -770,14 +800,10 @@ class _TeamMembersState extends State<TeamMembersScreen> {
                   saveRoles();
                 }
                 if (ctx.mounted) Navigator.pop(ctx);
-                if (mounted) _snack(context, '$name created as $selectedRole');
+                if (mounted) _snack(context, '$name created as $selectedRole', error: false);
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                padding: const EdgeInsets.symmetric(vertical: 15)),
-              child: const Text('Create User', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-            )),
+            ),
+            ]),
           ])),
         );
       }),
@@ -799,7 +825,7 @@ class _TeamMembersState extends State<TeamMembersScreen> {
     final backendId = _memberBackendId(idx);
     if (backendId == null) return;
     final name = _members[idx]['name'] as String;
-    showModalBottomSheet(
+    showAppSheet(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent, useSafeArea: true,
       builder: (_) => _MemberDocumentsSheet(memberId: backendId, memberName: name),
     );
@@ -807,48 +833,45 @@ class _TeamMembersState extends State<TeamMembersScreen> {
 
   void _confirmRemove(int idx) {
     final name = _members[idx]['name'] as String;
-    showDialog(context: context, builder: (ctx) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Delete Member', style: TextStyle(fontWeight: FontWeight.w800)),
-      content: Text("Delete $name from the team?\n\nTheir login will be disabled immediately — they will not be able to sign in on any device."),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        TextButton(
-          onPressed: () async {
-            Navigator.pop(ctx);
-            // Row 0 is the admin owner; member rows map to _memberRoles[idx - 1].
-            final members = _memberRoles;
-            final ai = idx - 1;
-            if (ai >= 0 && ai < members.length) {
-              final removed = members[ai];
-              // Delete (deactivate) the backend account so they can't log in
-              // anywhere — deterministic, and revokes their refresh tokens.
-              if (removed.backendId != null) {
-                try {
-                  await apiClient.delete('/users/${removed.backendId}');
-                } catch (_) {
-                  // Fall back to the toggle endpoint if delete is unavailable.
-                  try { await apiClient.patch('/users/${removed.backendId}/toggle-active', {}); } catch (_) {}
-                }
-              }
-              // Remove locally so the offline fallback login also fails.
-              setState(() => appRoles.removeWhere((r) => r.email.toLowerCase() == removed.email.toLowerCase()));
-              saveRoles();
+    AppConfirm.show(
+      context,
+      title: 'Delete member?',
+      message: 'Delete $name from the team? Their login will be disabled immediately — they will not be able to sign in on any device.',
+      confirmLabel: 'Delete Member',
+      onConfirm: () async {
+        // Row 0 is the admin owner; member rows map to _memberRoles[idx - 1].
+        final members = _memberRoles;
+        final ai = idx - 1;
+        if (ai >= 0 && ai < members.length) {
+          final removed = members[ai];
+          // Delete (deactivate) the backend account so they can't log in
+          // anywhere — deterministic, and revokes their refresh tokens.
+          if (removed.backendId != null) {
+            try {
+              await apiClient.delete('/users/${removed.backendId}');
+            } catch (_) {
+              // Fall back to the toggle endpoint if delete is unavailable.
+              try { await apiClient.patch('/users/${removed.backendId}/toggle-active', {}); } catch (_) {}
             }
-            if (mounted) _snack(context, '$name deleted — login disabled');
-          },
-          child: const Text('Delete', style: TextStyle(color: _coral500, fontWeight: FontWeight.w800))),
-      ],
-    ));
+          }
+          // Remove locally so the offline fallback login also fails.
+          if (mounted) setState(() => appRoles.removeWhere((r) => r.email.toLowerCase() == removed.email.toLowerCase()));
+          saveRoles();
+        }
+      },
+    ).then((ok) {
+      if (ok && mounted) _snack(context, '$name deleted — login disabled', error: false);
+    });
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
     body: Column(children: [
-      _buildHeader(context, 'Team Members', sub: '${_members.length} members'),
+      _buildHeader(context, 'Team Members', sub: '${_members.length} member${_members.length == 1 ? '' : 's'}',
+        action: AppButton(label: 'Invite Member', icon: Icons.person_add_outlined, onPressed: _showInviteSheet)),
       Expanded(child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
+        padding: const EdgeInsets.fromLTRB(0, 16, 0, 32),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _buildCard(context, child: Column(children: _members.asMap().entries.map((e) {
           final i = e.key; final m = e.value;
@@ -880,18 +903,20 @@ class _TeamMembersState extends State<TeamMembersScreen> {
               if (!isSelf) ...[
                 if (_memberBackendId(i) != null) ...[
                   const SizedBox(width: 6),
-                  GestureDetector(
+                  Tooltip(message: 'Documents', child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
                     onTap: () => _showMemberDocuments(context, i),
                     child: Container(padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(8)),
-                      child: Icon(Icons.folder_outlined, size: 16, color: context.textSub))),
+                      child: Icon(Icons.folder_outlined, size: 16, color: context.textSub)))),
                 ],
                 const SizedBox(width: 6),
-                GestureDetector(
+                Tooltip(message: 'Delete member', child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
                   onTap: () => _confirmRemove(i),
                   child: Container(padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(color: _coral100, borderRadius: BorderRadius.circular(8)),
-                    child: const Icon(Icons.person_remove_outlined, size: 16, color: _coral500))),
+                    child: const Icon(Icons.person_remove_outlined, size: 16, color: _coral500)))),
               ],
             ]),
           );
@@ -936,12 +961,6 @@ class _TeamMembersState extends State<TeamMembersScreen> {
         ],
       ]))),
     ]),
-    floatingActionButton: FloatingActionButton.extended(
-      onPressed: _showInviteSheet,
-      backgroundColor: _brand600, foregroundColor: Colors.white,
-      icon: const Icon(Icons.person_add_outlined),
-      label: const Text('Invite Member', style: TextStyle(fontWeight: FontWeight.w700)),
-    ),
   );
 }
 
@@ -1000,6 +1019,8 @@ class _MemberDocumentsSheetState extends State<_MemberDocumentsSheet> {
         title: const Text('Document Name', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
         content: TextField(
           controller: nameCtrl, autofocus: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) { final v = nameCtrl.text.trim(); if (v.isNotEmpty) Navigator.pop(ctx, v); },
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
             hintText: 'Enter document name',
@@ -1010,12 +1031,8 @@ class _MemberDocumentsSheetState extends State<_MemberDocumentsSheet> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () { final v = nameCtrl.text.trim(); if (v.isNotEmpty) Navigator.pop(ctx, v); },
-            style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-            child: const Text('Next'),
-          ),
+          AppButton(label: 'Cancel', variant: AppButtonVariant.secondary, onPressed: () => Navigator.pop(ctx)),
+          AppButton(label: 'Next', onPressed: () { final v = nameCtrl.text.trim(); if (v.isNotEmpty) Navigator.pop(ctx, v); }),
         ],
       ),
     );
@@ -1030,10 +1047,10 @@ class _MemberDocumentsSheetState extends State<_MemberDocumentsSheet> {
           'category': category, 'fileName': fileName, 'mimeType': null, 'data': base64Encode(bytes),
         });
         await _load();
-        if (mounted) _snack(context, '$fileName uploaded successfully');
+        if (mounted) _snack(context, '$fileName uploaded successfully', error: false);
       }
-    } catch (_) {
-      if (mounted) _snack(context, 'Upload failed — check your connection and try again');
+    } catch (e) {
+      if (mounted) AppToast.error(context, 'Upload failed', detail: ApiClient.errorMessage(e, fallback: 'Check your connection and try again.'));
     }
     if (mounted) setState(() => _uploading = false);
   }
@@ -1052,25 +1069,26 @@ class _MemberDocumentsSheetState extends State<_MemberDocumentsSheet> {
   }
 
   void _confirmDelete(_MemberDoc d) {
-    showDialog(context: context, builder: (ctx) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Delete Document', style: TextStyle(fontWeight: FontWeight.w800)),
-      content: Text('Delete "${d.fileName}"? This cannot be undone.'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        TextButton(
-          onPressed: () { Navigator.pop(ctx); _delete(d); },
-          child: const Text('Delete', style: TextStyle(color: _coral500, fontWeight: FontWeight.w700)),
-        ),
-      ],
-    ));
+    if (_deletingId != null) return;
+    AppConfirm.show(
+      context,
+      title: 'Delete document?',
+      message: 'Delete “${d.fileName}”? This cannot be undone.',
+    ).then((ok) { if (ok && mounted) _delete(d); });
   }
 
   Future<void> _delete(_MemberDoc d) async {
     setState(() => _deletingId = d.id);
-    try { await apiClient.delete('/users/documents/${d.id}'); } catch (_) {}
+    var failed = false;
+    try { await apiClient.delete('/users/documents/${d.id}'); } catch (_) { failed = true; }
     await _load();
-    if (mounted) setState(() => _deletingId = null);
+    if (!mounted) return;
+    setState(() => _deletingId = null);
+    if (failed) {
+      AppToast.error(context, 'Could not delete the document');
+    } else {
+      AppToast.success(context, 'Document deleted');
+    }
   }
 
   Widget _row(_MemberDoc d) {
@@ -1085,20 +1103,22 @@ class _MemberDocumentsSheetState extends State<_MemberDocumentsSheet> {
         overflow: TextOverflow.ellipsis),
       subtitle: Text(d.category, style: TextStyle(fontSize: 12.5, color: context.textHint)),
       trailing: deleting
-        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _coral500))
+        ? const AppSpinner(size: 16, color: _coral500)
         : Row(mainAxisSize: MainAxisSize.min, children: [
             GestureDetector(
               onTap: viewing ? null : () => _view(d),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: viewing
-                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600))
+                  ? const AppSpinner(color: _brand600)
                   : const Text('View', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand600)),
               ),
             ),
-            GestureDetector(
-              onTap: () => _confirmDelete(d),
-              child: const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.delete_outline, size: 18, color: _coral500)),
+            IconButton(
+              tooltip: 'Delete document',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _confirmDelete(d),
+              icon: const Icon(Icons.delete_outline, size: 18, color: _coral500),
             ),
           ]),
     );
@@ -1110,37 +1130,23 @@ class _MemberDocumentsSheetState extends State<_MemberDocumentsSheet> {
     decoration: BoxDecoration(color: context.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
     padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(context).viewInsets.bottom + 24),
     child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(color: context.border, borderRadius: BorderRadius.circular(2)))),
+      Center(child: SheetHandle(margin: const EdgeInsets.symmetric(vertical: 12))),
       Row(children: [
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('Documents', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
           Text(widget.memberName, style: TextStyle(fontSize: 12.5, color: context.textHint, fontWeight: FontWeight.w500)),
         ])),
-        GestureDetector(
-          onTap: _uploading ? null : _upload,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(10)),
-            child: _uploading
-              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.upload_file_outlined, size: 16, color: Colors.white),
-                  SizedBox(width: 6),
-                  Text('Upload', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white)),
-                ]),
-          ),
+        AppButton(
+          label: 'Upload', busyLabel: 'Uploading…', icon: Icons.upload_file_outlined,
+          dense: true, loading: _uploading, onPressed: _upload,
         ),
       ]),
       const SizedBox(height: 8),
       Flexible(child: _loading
-        ? const Padding(padding: EdgeInsets.symmetric(vertical: 30),
-            child: Center(child: SizedBox(width: 22, height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600))))
+        ? const SkeletonList(rows: 3, rowHeight: 56)
         : _docs.isEmpty
-          ? Padding(padding: const EdgeInsets.symmetric(vertical: 30),
-              child: Center(child: Text('No documents uploaded yet',
-                style: TextStyle(fontSize: 13, color: context.textHint, fontWeight: FontWeight.w600))))
+          ? const EmptyStateLike(icon: Icons.folder_open_outlined, title: 'No documents yet',
+              message: 'Upload ID proofs or certificates for this member.')
           : ListView.separated(
               shrinkWrap: true,
               itemCount: _docs.length,
@@ -1154,34 +1160,27 @@ class _MemberDocumentsSheetState extends State<_MemberDocumentsSheet> {
 // ════════════════════════════════════════════════════════════════
 // 5. DONATION TYPES
 // ════════════════════════════════════════════════════════════════
-class DonationTypesScreen extends StatefulWidget {
-  const DonationTypesScreen({super.key});
-  @override
-  State<DonationTypesScreen> createState() => _DonationTypesState();
+// Donation Types and Expense Categories share one compact list screen (same
+// look as the Student master lists): header with the Add action, skeleton
+// loading, compact rows with an in-place toggle spinner, ⋮ menu, and a
+// compact add modal.
+class _TypeListConfig {
+  const _TypeListConfig({
+    required this.title, required this.noun, required this.plural,
+    required this.listPath, required this.createPath, required this.itemPath,
+    required this.style, required this.hint, required this.emptyIcon,
+    required this.emptyHelp, required this.appearsIn, this.hasDescription = false,
+  });
+  final String title, noun, plural, listPath, createPath, hint, emptyHelp, appearsIn;
+  final String Function(String id) itemPath;
+  final (IconData, Color) Function(String label) style;
+  final IconData emptyIcon;
+  final bool hasDescription;
+  String get nounTitle => noun.split(' ').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
 }
 
-class _DonationTypesState extends State<DonationTypesScreen> {
-  // Loaded live from the backend — the same table Add Donation reads, so a
-  // type added or toggled here shows up (or disappears) there immediately.
-  List<Map<String, dynamic>> _types = [];
-  bool _loading = true;
-  String? _error;
-
-  @override
-  void initState() { super.initState(); _load(); }
-
-  Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
-    try {
-      final r = await apiClient.get('/donations/types/all');
-      final list = (r['data'] as List? ?? []).cast<Map<String, dynamic>>();
-      if (!mounted) return;
-      setState(() { _types = list; _loading = false; });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() { _error = ApiClient.errorMessage(e, fallback: 'Could not load donation types.'); _loading = false; });
-    }
-  }
+class DonationTypesScreen extends StatelessWidget {
+  const DonationTypesScreen({super.key});
 
   // Visuals are keyed off the label so custom types still get a sensible icon.
   static (IconData, Color) _style(String label) {
@@ -1195,167 +1194,25 @@ class _DonationTypesState extends State<DonationTypesScreen> {
     return (Icons.volunteer_activism_outlined, _brand600);
   }
 
-  Future<void> _toggle(int i, bool v) async {
-    final t = _types[i];
-    setState(() => _types[i]['isActive'] = v);
-    try {
-      await apiClient.put('/donations/types/${t['id']}', {'isActive': v});
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _types[i]['isActive'] = !v);
-      _snack(context, ApiClient.errorMessage(e, fallback: 'Could not update the donation type.'));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    body: Column(children: [
-      _buildHeader(context, 'Donation Types', sub: _loading ? 'Loading…' : '${_types.length} categories'),
-      Expanded(child: _loading
-        ? const Center(child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600))
-        : _error != null
-          ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.cloud_off_outlined, size: 40, color: context.textHint),
-              const SizedBox(height: 10),
-              Text(_error!, textAlign: TextAlign.center, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textSub)),
-              const SizedBox(height: 14),
-              OutlinedButton(onPressed: _load, child: const Text('Retry', style: TextStyle(fontWeight: FontWeight.w700, color: _brand600))),
-            ])))
-          : RefreshIndicator(
-              onRefresh: _load,
-              color: _brand600,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
-                child: _types.isEmpty
-                  ? Padding(padding: const EdgeInsets.only(top: 60), child: Center(child: Text('No donation types yet — add one below.',
-                      style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textHint))))
-                  : _buildCard(context, child: Column(children: _types.asMap().entries.map((e) {
-          final i = e.key; final t = e.value;
-          final label = t['label'] as String? ?? '';
-          final (icon, c) = _style(label);
-          final active = t['isActive'] as bool? ?? true;
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: i < _types.length - 1 ? BoxDecoration(border: Border(bottom: BorderSide(color: context.border))) : null,
-            child: Row(children: [
-              Container(width: 40, height: 40,
-                decoration: BoxDecoration(color: c.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(11)),
-                child: Icon(icon, color: c, size: 20)),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
-                if ((t['description'] as String? ?? '').isNotEmpty)
-                  Text(t['description'] as String, style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w500)),
-              ])),
-              Switch(
-                value: active,
-                onChanged: (v) => _toggle(i, v),
-                activeColor: _brand600),
-            ]),
-          );
-        }).toList())),
-              ),
-            )),
-    ]),
-    floatingActionButton: FloatingActionButton.extended(
-      onPressed: () => _showAddTypeDialog(context),
-      backgroundColor: _brand600, foregroundColor: Colors.white,
-      icon: const Icon(Icons.add),
-      label: const Text('Add Type', style: TextStyle(fontWeight: FontWeight.w700)),
-    ),
+  // Loaded live from the backend — the same table Add Donation reads, so a
+  // type added or toggled here shows up (or disappears) there immediately.
+  static final _config = _TypeListConfig(
+    title: 'Donation Types',
+    noun: 'donation type',
+    plural: 'donation types',
+    listPath: '/donations/types/all',
+    createPath: '/donations/types',
+    itemPath: (id) => '/donations/types/$id',
+    style: _style,
+    hint: 'e.g. Healthcare, Scholarship…',
+    emptyIcon: Icons.volunteer_activism_outlined,
+    emptyHelp: 'Create a type like Education or Healthcare to categorise donations.',
+    appearsIn: 'Add Donation',
+    hasDescription: true,
   );
 
-  void _showAddTypeDialog(BuildContext context) {
-    final nameCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-    String? nameError;
-    bool saving = false;
-
-    showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
-        return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-            decoration: BoxDecoration(color: ctx.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: ctx.border, borderRadius: BorderRadius.circular(2)))),
-              const SizedBox(height: 16),
-              const Text('Add Donation Type', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 16),
-              Row(children: [
-                Text('Type Name', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: ctx.textSub)),
-                const Text(' *', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _coral500)),
-              ]),
-              const SizedBox(height: 6),
-              TextField(
-                controller: nameCtrl,
-                onChanged: (_) { if (nameError != null) setSheet(() => nameError = null); },
-                style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
-                decoration: InputDecoration(
-                  hintText: 'e.g. Healthcare, Scholarship…', hintStyle: TextStyle(color: ctx.textHint),
-                  filled: true, fillColor: ctx.surface2,
-                  errorText: nameError,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
-                  errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _coral500, width: 1.5)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12))),
-              const SizedBox(height: 12),
-              Text('Description (optional)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: ctx.textSub)),
-              const SizedBox(height: 6),
-              TextField(
-                controller: descCtrl,
-                style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
-                decoration: InputDecoration(
-                  hintText: 'Short description of this donation type', hintStyle: TextStyle(color: ctx.textHint),
-                  filled: true, fillColor: ctx.surface2,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12))),
-              const SizedBox(height: 20),
-              SizedBox(width: double.infinity, child: ElevatedButton(
-                onPressed: saving ? null : () async {
-                  final name = nameCtrl.text.trim();
-                  if (name.isEmpty) {
-                    setSheet(() => nameError = 'Type name is required');
-                    return;
-                  }
-                  setSheet(() => saving = true);
-                  try {
-                    await apiClient.post('/donations/types', {
-                      'label': name,
-                      if (descCtrl.text.trim().isNotEmpty) 'description': descCtrl.text.trim(),
-                    });
-                    // The type exists now — refresh the list even if the
-                    // sheet was dismissed while the request was in flight.
-                    if (ctx.mounted) Navigator.pop(ctx);
-                    if (!mounted) return;
-                    _snack(context, '"$name" added — it now appears in Add Donation');
-                    _load();
-                  } catch (e) {
-                    if (!ctx.mounted) return;
-                    setSheet(() {
-                      saving = false;
-                      nameError = ApiClient.errorMessage(e, fallback: 'Could not save the donation type.');
-                    });
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(vertical: 15)),
-                child: saving
-                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Text('Save Donation Type', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-              )),
-            ]),
-          ),
-        );
-      }),
-    );
-  }
+  @override
+  Widget build(BuildContext context) => _TypeListScreen(config: _config);
 }
 
 // 5b. STUDENT CATEGORIES / STATUS / EDUCATION LEVELS → student_masters_screen.dart
@@ -1363,34 +1220,8 @@ class _DonationTypesState extends State<DonationTypesScreen> {
 // ════════════════════════════════════════════════════════════════
 // 5c. EXPENSE CATEGORIES
 // ════════════════════════════════════════════════════════════════
-class ExpenseCategoriesScreen extends StatefulWidget {
+class ExpenseCategoriesScreen extends StatelessWidget {
   const ExpenseCategoriesScreen({super.key});
-  @override
-  State<ExpenseCategoriesScreen> createState() => _ExpenseCategoriesState();
-}
-
-class _ExpenseCategoriesState extends State<ExpenseCategoriesScreen> {
-  // Loaded live from the backend — the same table Add Expense reads, so a
-  // category added or toggled here shows up (or disappears) there immediately.
-  List<Map<String, dynamic>> _cats = [];
-  bool _loading = true;
-  String? _error;
-
-  @override
-  void initState() { super.initState(); _load(); }
-
-  Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
-    try {
-      final r = await apiClient.get('/expenses/categories/all');
-      final list = (r['data'] as List? ?? []).cast<Map<String, dynamic>>();
-      if (!mounted) return;
-      setState(() { _cats = list; _loading = false; });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() { _error = ApiClient.errorMessage(e, fallback: 'Could not load expense categories.'); _loading = false; });
-    }
-  }
 
   static (IconData, Color) _style(String label) {
     final l = label.toLowerCase();
@@ -1404,149 +1235,365 @@ class _ExpenseCategoriesState extends State<ExpenseCategoriesScreen> {
     return (Icons.account_balance_wallet_outlined, _brand600);
   }
 
-  Future<void> _toggle(int i, bool v) async {
-    final c = _cats[i];
-    setState(() => _cats[i]['isActive'] = v);
+  // Loaded live from the backend — the same table Add Expense reads, so a
+  // category added or toggled here shows up (or disappears) there immediately.
+  static final _config = _TypeListConfig(
+    title: 'Expense Categories',
+    noun: 'category',
+    plural: 'categories',
+    listPath: '/expenses/categories/all',
+    createPath: '/expenses/categories',
+    itemPath: (id) => '/expenses/categories/$id',
+    style: _style,
+    hint: 'e.g. Rent, Salaries, Transport…',
+    emptyIcon: Icons.receipt_long_outlined,
+    emptyHelp: 'Create categories like Rent or Salaries to organise expenses.',
+    appearsIn: 'Add Expense',
+  );
+
+  @override
+  Widget build(BuildContext context) => _TypeListScreen(config: _config);
+}
+
+class _TypeListScreen extends StatefulWidget {
+  const _TypeListScreen({required this.config});
+  final _TypeListConfig config;
+  @override
+  State<_TypeListScreen> createState() => _TypeListScreenState();
+}
+
+class _TypeListScreenState extends State<_TypeListScreen> {
+  List<Map<String, dynamic>> _items = [];
+  bool _loading = true;
+  String? _error;
+  // Rows with a toggle request in flight — the switch shows a spinner and
+  // ignores further taps until the server answers.
+  final Set<String> _toggling = {};
+
+  _TypeListConfig get _c => widget.config;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  // [quiet] refreshes in place (pull-to-refresh / after adding) without the
+  // skeleton flash.
+  Future<void> _load({bool quiet = false}) async {
+    if (!quiet) setState(() { _loading = true; _error = null; });
     try {
-      await apiClient.put('/expenses/categories/${c['id']}', {'isActive': v});
+      final r = await apiClient.get(_c.listPath);
+      final list = (r['data'] as List? ?? []).cast<Map<String, dynamic>>();
+      if (!mounted) return;
+      setState(() { _items = list; _loading = false; _error = null; });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _cats[i]['isActive'] = !v);
-      _snack(context, ApiClient.errorMessage(e, fallback: 'Could not update the category.'));
+      if (quiet && _items.isNotEmpty) {
+        AppToast.error(context, 'Couldn’t refresh the list', detail: ApiClient.errorMessage(e));
+        return;
+      }
+      setState(() { _error = ApiClient.errorMessage(e, fallback: 'Could not load ${_c.plural}.'); _loading = false; });
     }
   }
 
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    body: Column(children: [
-      _buildHeader(context, 'Expense Categories', sub: _loading ? 'Loading…' : '${_cats.length} categories'),
-      Expanded(child: _loading
-        ? const Center(child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600))
-        : _error != null
-          ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.cloud_off_outlined, size: 40, color: context.textHint),
-              const SizedBox(height: 10),
-              Text(_error!, textAlign: TextAlign.center, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textSub)),
-              const SizedBox(height: 14),
-              OutlinedButton(onPressed: _load, child: const Text('Retry', style: TextStyle(fontWeight: FontWeight.w700, color: _brand600))),
-            ])))
-          : RefreshIndicator(
-              onRefresh: _load,
-              color: _brand600,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
-                child: _cats.isEmpty
-                  ? Padding(padding: const EdgeInsets.only(top: 60), child: Center(child: Text('No expense categories yet — add one below.',
-                      style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textHint))))
-                  : _buildCard(context, child: Column(children: _cats.asMap().entries.map((e) {
-          final i = e.key; final t = e.value;
-          final label = t['label'] as String? ?? '';
-          final (icon, c) = _style(label);
-          final active = t['isActive'] as bool? ?? true;
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: i < _cats.length - 1 ? BoxDecoration(border: Border(bottom: BorderSide(color: context.border))) : null,
-            child: Row(children: [
-              Container(width: 40, height: 40,
-                decoration: BoxDecoration(color: c.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(11)),
-                child: Icon(icon, color: c, size: 20)),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
-                if ((t['description'] as String? ?? '').isNotEmpty)
-                  Text(t['description'] as String, style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w500)),
-              ])),
-              Switch(
-                value: active,
-                onChanged: (v) => _toggle(i, v),
-                activeColor: _brand600),
-            ]),
-          );
-        }).toList())),
-              ),
-            )),
-    ]),
-    floatingActionButton: FloatingActionButton.extended(
-      onPressed: () => _showAddCategoryDialog(context),
-      backgroundColor: _brand600, foregroundColor: Colors.white,
-      icon: const Icon(Icons.add),
-      label: const Text('Add Category', style: TextStyle(fontWeight: FontWeight.w700)),
+  Future<void> _toggle(Map<String, dynamic> item, bool v) async {
+    final id = '${item['id']}';
+    if (_toggling.contains(id)) return;
+    setState(() => _toggling.add(id));
+    try {
+      await apiClient.put(_c.itemPath(id), {'isActive': v});
+      if (!mounted) return;
+      // Only flip once the server has accepted it.
+      setState(() { item['isActive'] = v; _toggling.remove(id); });
+      AppToast.success(context, '“${item['label']}” ${v ? 'enabled' : 'disabled'}');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _toggling.remove(id));
+      AppToast.error(context, 'Unable to update ${_c.noun}', detail: ApiClient.errorMessage(e, fallback: 'Please try again.'));
+    }
+  }
+
+  Future<void> _showAdd() async {
+    final saved = await showAppSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _TypeAddForm(config: _c),
+    );
+    if (saved == null || !mounted) return;
+    AppToast.success(context, '${_c.nounTitle} added', detail: '“$saved” now appears in ${_c.appearsIn}');
+    _load(quiet: true);
+  }
+
+  Widget _row(Map<String, dynamic> t, bool last) {
+    final label = t['label'] as String? ?? '';
+    final desc = t['description'] as String? ?? '';
+    final active = t['isActive'] as bool? ?? true;
+    final busy = _toggling.contains('${t['id']}');
+    final (icon, color) = _c.style(label);
+    return _HoverRow(
+      last: last,
+      child: Row(children: [
+        Container(width: 34, height: 34,
+          decoration: BoxDecoration(color: color.withValues(alpha: active ? 0.12 : 0.06), borderRadius: BorderRadius.circular(9)),
+          child: Icon(icon, color: active ? color : context.textHint, size: 17)),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: active ? context.textPrimary : context.textHint)),
+          if (desc.isNotEmpty || !active) ...[
+            const SizedBox(height: 2),
+            Text([if (!active) 'Disabled', if (desc.isNotEmpty) desc].join('  ·  '), maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w500)),
+          ],
+        ])),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 48, height: 28,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 150),
+            child: busy
+                ? const Center(key: ValueKey('busy'), child: AppSpinner())
+                : Transform.scale(
+                    key: const ValueKey('sw'),
+                    scale: 0.78,
+                    child: Semantics(
+                      label: '${active ? 'Disable' : 'Enable'} $label',
+                      child: Switch(value: active, activeColor: _brand600, onChanged: (v) => _toggle(t, v)),
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        PopupMenuButton<String>(
+          tooltip: 'Actions for $label',
+          icon: Icon(Icons.more_horiz_rounded, color: context.textSub, size: 20),
+          position: PopupMenuPosition.under,
+          offset: const Offset(0, 4),
+          constraints: const BoxConstraints(minWidth: 150),
+          enabled: !busy,
+          onSelected: (v) { if (v == 'toggle') _toggle(t, !active); },
+          itemBuilder: (_) => [
+            PopupMenuItem(
+              value: 'toggle',
+              height: 36,
+              child: Row(children: [
+                Icon(active ? Icons.toggle_off_outlined : Icons.toggle_on_outlined, size: 17, color: context.textSub),
+                const SizedBox(width: 10),
+                Text(active ? 'Disable' : 'Enable',
+                    style: TextStyle(fontSize: 13.5, color: context.textPrimary, fontWeight: FontWeight.w500)),
+              ]),
+            ),
+          ],
+        ),
+      ]),
+    );
+  }
+
+  Widget _card(Widget child) => Container(
+    decoration: BoxDecoration(
+      color: context.cardBg, borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: context.border),
     ),
+    clipBehavior: Clip.antiAlias,
+    child: child,
   );
 
-  void _showAddCategoryDialog(BuildContext context) {
-    final nameCtrl = TextEditingController();
-    String? nameError;
-    bool saving = false;
+  @override
+  Widget build(BuildContext context) {
+    Widget content;
+    if (_loading) {
+      content = _card(const SkeletonList(rows: 4, rowHeight: 64));
+    } else if (_error != null) {
+      content = _card(ErrorState(message: _error!, onRetry: _load));
+    } else if (_items.isEmpty) {
+      content = _card(EmptyState(
+        icon: _c.emptyIcon,
+        title: 'No ${_c.plural} yet',
+        message: _c.emptyHelp,
+        actionLabel: 'Add ${_c.nounTitle}',
+        onAction: _showAdd,
+      ));
+    } else {
+      content = _card(Column(children: [
+        for (var i = 0; i < _items.length; i++) _row(_items[i], i == _items.length - 1),
+      ]));
+    }
 
-    showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
-        return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-            decoration: BoxDecoration(color: ctx.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: ctx.border, borderRadius: BorderRadius.circular(2)))),
-              const SizedBox(height: 16),
-              const Text('Add Expense Category', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 16),
-              Row(children: [
-                Text('Category Name', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: ctx.textSub)),
-                const Text(' *', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _coral500)),
-              ]),
-              const SizedBox(height: 6),
-              TextField(
-                controller: nameCtrl,
-                onChanged: (_) { if (nameError != null) setSheet(() => nameError = null); },
-                style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
-                decoration: InputDecoration(
-                  hintText: 'e.g. Rent, Salaries, Transport…', hintStyle: TextStyle(color: ctx.textHint),
-                  filled: true, fillColor: ctx.surface2,
-                  errorText: nameError,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
-                  errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _coral500, width: 1.5)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12))),
-              const SizedBox(height: 20),
-              SizedBox(width: double.infinity, child: ElevatedButton(
-                onPressed: saving ? null : () async {
-                  final name = nameCtrl.text.trim();
-                  if (name.isEmpty) {
-                    setSheet(() => nameError = 'Category name is required');
-                    return;
-                  }
-                  setSheet(() => saving = true);
-                  try {
-                    await apiClient.post('/expenses/categories', {'label': name});
-                    // The category exists now — refresh the list even if the
-                    // sheet was dismissed while the request was in flight.
-                    if (ctx.mounted) Navigator.pop(ctx);
-                    if (!mounted) return;
-                    _snack(context, '"$name" added — it now appears in Add Expense');
-                    _load();
-                  } catch (e) {
-                    if (!ctx.mounted) return;
-                    setSheet(() {
-                      saving = false;
-                      nameError = ApiClient.errorMessage(e, fallback: 'Could not save the category.');
-                    });
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(vertical: 15)),
-                child: saving
-                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Text('Save Category', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-              )),
-            ]),
+    return Scaffold(
+      body: Column(children: [
+        _buildHeader(context, _c.title,
+          sub: _loading ? 'Loading…' : '${_items.length} ${_items.length == 1 ? _c.noun : _c.plural} configured',
+          action: AppButton(label: 'Add ${_c.nounTitle}', icon: Icons.add, onPressed: _showAdd)),
+        Expanded(child: RefreshIndicator(
+          onRefresh: () => _load(quiet: true),
+          color: _brand600,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 880),
+                child: AnimatedSwitcher(duration: const Duration(milliseconds: 180), child: KeyedSubtree(
+                  key: ValueKey(_loading ? 'l' : _error != null ? 'e' : _items.isEmpty ? 'x' : 'd'),
+                  child: content,
+                )),
+              ),
+            ),
           ),
-        );
-      }),
+        )),
+      ]),
+    );
+  }
+}
+
+// Row with a subtle hover tint and a hairline divider.
+class _HoverRow extends StatefulWidget {
+  const _HoverRow({required this.child, required this.last});
+  final Widget child;
+  final bool last;
+  @override
+  State<_HoverRow> createState() => _HoverRowState();
+}
+
+class _HoverRowState extends State<_HoverRow> {
+  bool _hover = false;
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    onEnter: (_) => setState(() => _hover = true),
+    onExit: (_) => setState(() => _hover = false),
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
+      constraints: const BoxConstraints(minHeight: 64),
+      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      decoration: BoxDecoration(
+        color: _hover ? context.surface2.withValues(alpha: 0.6) : Colors.transparent,
+        border: widget.last ? null : Border(bottom: BorderSide(color: context.border.withValues(alpha: 0.7))),
+      ),
+      child: widget.child,
+    ),
+  );
+}
+
+// Compact add form. Validates on leaving the field and on submit, keeps what
+// was typed if the save fails, and can't be submitted twice. Pops with the
+// saved name.
+class _TypeAddForm extends StatefulWidget {
+  const _TypeAddForm({required this.config});
+  final _TypeListConfig config;
+  @override
+  State<_TypeAddForm> createState() => _TypeAddFormState();
+}
+
+class _TypeAddFormState extends State<_TypeAddForm> {
+  final _form = GlobalKey<FormState>();
+  final _name = TextEditingController();
+  final _desc = TextEditingController();
+  bool _saving = false;
+  String? _serverError;
+
+  _TypeListConfig get _c => widget.config;
+
+  @override
+  void dispose() { _name.dispose(); _desc.dispose(); super.dispose(); }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _serverError = null);
+    if (!_form.currentState!.validate()) return;
+    final name = _name.text.trim();
+    setState(() => _saving = true);
+    try {
+      await apiClient.post(_c.createPath, {
+        'label': name,
+        if (_c.hasDescription && _desc.text.trim().isNotEmpty) 'description': _desc.text.trim(),
+      });
+      if (mounted) Navigator.of(context).pop(name);
+    } catch (e) {
+      if (!mounted) return;
+      // A duplicate/validation answer belongs under the name field; anything
+      // else (network, server) is a toast.
+      final msg = ApiClient.errorMessage(e, fallback: 'Could not save the ${_c.noun}.');
+      final fieldLevel = msg.toLowerCase().contains('exist') || msg.toLowerCase().contains('name') || msg.toLowerCase().contains('label');
+      setState(() { _saving = false; if (fieldLevel) _serverError = msg; });
+      _form.currentState!.validate();
+      if (!fieldLevel) AppToast.error(context, 'Unable to add ${_c.noun}', detail: msg);
+    }
+  }
+
+  Widget _label(String t, {bool required = false}) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text.rich(TextSpan(children: [
+      TextSpan(text: t),
+      if (required) const TextSpan(text: ' *', style: TextStyle(color: _coral500)),
+    ]), style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textSub)),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: BoxDecoration(color: context.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(16))),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        child: Form(
+          key: _form,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const SheetHandle(margin: EdgeInsets.only(bottom: 10)),
+            Row(children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Add ${_c.noun}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text('It will appear in ${_c.appearsIn} straight away.',
+                    style: TextStyle(fontSize: 12.5, color: context.textSub)),
+              ])),
+              IconButton(
+                tooltip: 'Close',
+                icon: Icon(Icons.close_rounded, size: 20, color: context.textSub),
+                onPressed: _saving ? null : () => Navigator.of(context).pop(),
+              ),
+            ]),
+            const SizedBox(height: 16),
+            _label('Name', required: true),
+            TextFormField(
+              controller: _name,
+              autofocus: true,
+              enabled: !_saving,
+              textInputAction: _c.hasDescription ? TextInputAction.next : TextInputAction.done,
+              onFieldSubmitted: _c.hasDescription ? null : (_) => _save(),
+              onChanged: (_) { if (_serverError != null) setState(() => _serverError = null); },
+              validator: (v) {
+                if ((v ?? '').trim().isEmpty) return 'Please enter a name.';
+                return _serverError;
+              },
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              decoration: InputDecoration(hintText: _c.hint),
+            ),
+            if (_c.hasDescription) ...[
+              const SizedBox(height: 12),
+              _label('Description'),
+              TextFormField(
+                controller: _desc,
+                enabled: !_saving,
+                onFieldSubmitted: (_) => _save(),
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                decoration: const InputDecoration(hintText: 'Short description (optional)'),
+              ),
+            ],
+            const SizedBox(height: 18),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              AppButton(label: 'Cancel', variant: AppButtonVariant.secondary,
+                  onPressed: _saving ? null : () => Navigator.of(context).pop()),
+              const SizedBox(width: 8),
+              AppButton(
+                label: 'Add ${_c.nounTitle}',
+                busyLabel: 'Adding…',
+                loading: _saving,
+                onPressed: _save,
+              ),
+            ]),
+          ]),
+        ),
+      ),
     );
   }
 }
@@ -1810,6 +1857,7 @@ class _ExportDataState extends State<ExportDataScreen> {
   }
 
   Future<void> _export() async {
+    if (_exporting) return;
     setState(() => _exporting = true);
     try {
       final donors = _donors ? await _fetchList('/donors') : <Map<String, dynamic>>[];
@@ -1839,11 +1887,15 @@ class _ExportDataState extends State<ExportDataScreen> {
 
       if (!mounted) return;
       setState(() => _exporting = false);
-      _snack(context, ok ? '✓ Downloaded $filename' : 'Failed to save file');
+      if (ok) {
+        AppToast.success(context, 'Export downloaded', detail: filename);
+      } else {
+        AppToast.error(context, 'Could not save the file', detail: 'Please try again.');
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _exporting = false);
-        _snack(context, ApiClient.errorMessage(e, fallback: 'Export failed — check your connection and try again'));
+        AppToast.error(context, 'Export failed', detail: ApiClient.errorMessage(e, fallback: 'Check your connection and try again.'));
       }
     }
   }
@@ -1859,13 +1911,16 @@ class _ExportDataState extends State<ExportDataScreen> {
           _buildSectionLabel(context, 'Export Format'),
           _buildCard(context, child: Padding(padding: const EdgeInsets.all(14), child: Row(children: ['PDF', 'Excel', 'CSV'].map((f) {
             final active = _format == f;
-            return Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: GestureDetector(
-              onTap: () => setState(() => _format = f),
-              child: Container(
+            return Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Semantics(
+              button: true, selected: active, label: '$f format',
+              child: GestureDetector(
+              onTap: _exporting ? null : () => setState(() => _format = f),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(color: active ? _brand600 : context.surface2, borderRadius: BorderRadius.circular(10)),
-                child: Text(f, textAlign: TextAlign.center, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: active ? Colors.white : context.textSub))),
-            )));
+                child: Text(f, textAlign: TextAlign.center, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub))),
+            ))));
           }).toList()))),
           const SizedBox(height: 14),
           _buildSectionLabel(context, 'Date Range'),
@@ -1893,18 +1948,9 @@ class _ExportDataState extends State<ExportDataScreen> {
             _toggle(context, 'Students',  _students,  (v) => setState(() => _students = v),  Icons.school_outlined,                  _violet500),
             _toggle(context, 'Reports',   _reports,   (v) => setState(() => _reports = v),   Icons.bar_chart_rounded,                _sky500, last: true),
           ])),
-          const SizedBox(height: 24),
-          SizedBox(width: double.infinity, child: ElevatedButton.icon(
-            onPressed: _exporting ? null : _export,
-            icon: _exporting
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : const Icon(Icons.download_outlined, size: 20),
-            label: Text(_exporting ? 'Downloading...' : 'Download $_format', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              padding: const EdgeInsets.symmetric(vertical: 14)),
-          )),
+          const SizedBox(height: 20),
+          _formAction(context, label: 'Download $_format', busyLabel: 'Preparing export…',
+              icon: Icons.download_outlined, loading: _exporting, onPressed: _export),
         ]),
       )),
     ]),
@@ -1972,7 +2018,7 @@ class _BackupSyncState extends State<BackupSyncScreen> {
           _buildSectionLabel(context, 'Restore'),
           _buildCard(context, child: Column(children: [
             _buildRow(context, 'Restore from Backup', value: 'Revert to a previous data state', icon: Icons.restore, fg: _amber600,
-              onTap: () => _snack(context, 'Select a backup to restore')),
+              onTap: () => AppToast.info(context, 'Select a backup to restore')),
             _buildRow(context, 'Clear Local Cache', value: 'Free up device storage', icon: Icons.delete_sweep_outlined, fg: _coral500, last: true,
               onTap: () async {
                 final prefs = await SharedPreferences.getInstance();
@@ -1980,22 +2026,14 @@ class _BackupSyncState extends State<BackupSyncScreen> {
                 if (mounted) _snack(context, 'Cache cleared — app data reset');
               }),
           ])),
-          const SizedBox(height: 24),
-          SizedBox(width: double.infinity, child: ElevatedButton.icon(
-            onPressed: _syncing ? null : () async {
+          const SizedBox(height: 20),
+          _formAction(context, label: 'Sync Now', busyLabel: 'Syncing…', icon: Icons.sync, loading: _syncing,
+            onPressed: () async {
+              if (_syncing) return;
               setState(() => _syncing = true);
               await Future.delayed(const Duration(seconds: 1));
               if (mounted) { setState(() => _syncing = false); _snack(context, 'Sync complete — all data up to date'); }
-            },
-            icon: _syncing
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : const Icon(Icons.sync, size: 20),
-            label: Text(_syncing ? 'Syncing...' : 'Sync Now', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              padding: const EdgeInsets.symmetric(vertical: 14)),
-          )),
+            }),
         ]),
       )),
     ]),
@@ -2363,6 +2401,9 @@ class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
   bool _saving  = false;
   bool _obscureSecret  = true;
   bool _obscureWebhook = true;
+  bool _clearing = false;
+  String? _keyIdError;
+  String? _keySecretError;
   // Backend restricts GET/PATCH /settings/razorpay to SUPER_ADMIN — a plain
   // ADMIN (which also passes the app-side isAdmin check) gets a 403 here.
   bool _forbidden = false;
@@ -2401,44 +2442,50 @@ class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
     final keyId         = _keyIdCtrl.text.trim();
     final keySecret     = _keySecretCtrl.text.trim();
     final webhookSecret = _webhookSecretCtrl.text.trim();
+    if (_saving) return;
     if (keyId.isEmpty || keySecret.isEmpty) {
-      _snack(context, 'Both Key ID and Key Secret are required');
+      // Say exactly which field is missing, right under it.
+      setState(() {
+        _keyIdError = keyId.isEmpty ? 'Key ID is required' : null;
+        _keySecretError = keySecret.isEmpty ? 'Key Secret is required' : null;
+      });
       return;
     }
-    setState(() => _saving = true);
+    setState(() { _saving = true; _keyIdError = null; _keySecretError = null; });
     try {
       await apiClient.patch('/settings/razorpay', {
         'keyId': keyId, 'keySecret': keySecret, 'webhookSecret': webhookSecret,
       });
-      if (mounted) _snack(context, '✓ Razorpay credentials saved');
+      if (mounted) AppToast.success(context, 'Razorpay credentials saved');
     } on DioException catch (e) {
       if (mounted) {
-        _snack(context, e.response?.statusCode == 403
-          ? 'You do not have permission to update payment settings'
-          : 'Could not save — check your connection and try again');
+        AppToast.error(context, 'Could not save credentials', detail: e.response?.statusCode == 403
+          ? 'You do not have permission to update payment settings.'
+          : 'Check your connection and try again.');
       }
     } catch (_) {
-      if (mounted) _snack(context, 'Could not save — check your connection and try again');
+      if (mounted) AppToast.error(context, 'Could not save credentials', detail: 'Check your connection and try again.');
     }
     if (mounted) setState(() => _saving = false);
   }
 
   Future<void> _clear() async {
-    setState(() => _saving = true);
+    if (_saving || _clearing) return;
+    setState(() { _saving = true; _clearing = true; });
     try {
       await apiClient.patch('/settings/razorpay', {'keyId': '', 'keySecret': '', 'webhookSecret': ''});
       if (mounted) setState(() { _keyIdCtrl.clear(); _keySecretCtrl.clear(); _webhookSecretCtrl.clear(); });
-      if (mounted) _snack(context, 'Credentials cleared');
+      if (mounted) AppToast.success(context, 'Credentials cleared');
     } on DioException catch (e) {
       if (mounted) {
-        _snack(context, e.response?.statusCode == 403
-          ? 'You do not have permission to update payment settings'
-          : 'Could not clear — check your connection and try again');
+        AppToast.error(context, 'Could not clear credentials', detail: e.response?.statusCode == 403
+          ? 'You do not have permission to update payment settings.'
+          : 'Check your connection and try again.');
       }
     } catch (_) {
-      if (mounted) _snack(context, 'Could not clear — check your connection and try again');
+      if (mounted) AppToast.error(context, 'Could not clear credentials', detail: 'Check your connection and try again.');
     }
-    if (mounted) setState(() => _saving = false);
+    if (mounted) setState(() { _saving = false; _clearing = false; });
   }
 
   @override
@@ -2446,17 +2493,15 @@ class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
     body: Column(children: [
       _buildHeader(context, 'Razorpay Credentials', sub: 'Payment gateway configuration'),
       if (_loading)
-        const Expanded(child: Center(child: CircularProgressIndicator()))
+        Expanded(child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
+          child: _buildCard(context, child: const SkeletonList(rows: 3, rowHeight: 64)),
+        ))
       else if (_forbidden)
-        Expanded(child: Center(child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.lock_outline, size: 40, color: context.textHint),
-            const SizedBox(height: 12),
-            Text('You do not have permission to view payment settings',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.textSub)),
-          ]),
+        const Expanded(child: Center(child: EmptyStateLike(
+          icon: Icons.lock_outline,
+          title: 'No access',
+          message: 'You do not have permission to view payment settings. Only a Super Admin can change them.',
         )))
       else
         Expanded(child: SingleChildScrollView(
@@ -2485,9 +2530,13 @@ class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
               padding: const EdgeInsets.all(16),
               child: TextField(
                 controller: _keyIdCtrl,
+                enabled: !_saving,
+                textInputAction: TextInputAction.next,
+                onChanged: (_) { if (_keyIdError != null) setState(() => _keyIdError = null); },
                 style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.vpn_key_outlined, size: 18, color: _brand600),
+                  errorText: _keyIdError,
                   hintText: 'rzp_test_XXXXXXXXXXXXXXXXXX',
                   hintStyle: TextStyle(fontSize: 12, color: context.textHint),
                   filled: true, fillColor: context.surface2,
@@ -2504,13 +2553,18 @@ class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
               child: TextField(
                 controller: _keySecretCtrl,
                 obscureText: _obscureSecret,
+                enabled: !_saving,
+                textInputAction: TextInputAction.next,
+                onChanged: (_) { if (_keySecretError != null) setState(() => _keySecretError = null); },
                 style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.lock_outline, size: 18, color: _brand600),
+                  errorText: _keySecretError,
                   hintText: '••••••••••••••••••••',
                   hintStyle: TextStyle(fontSize: 12, color: context.textHint),
                   filled: true, fillColor: context.surface2,
                   suffixIcon: IconButton(
+                    tooltip: _obscureSecret ? 'Show secret' : 'Hide secret',
                     icon: Icon(_obscureSecret ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: context.textHint),
                     onPressed: () => setState(() => _obscureSecret = !_obscureSecret)),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
@@ -2526,6 +2580,8 @@ class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
               child: TextField(
                 controller: _webhookSecretCtrl,
                 obscureText: _obscureWebhook,
+                enabled: !_saving,
+                onSubmitted: (_) => _save(),
                 style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.webhook_outlined, size: 18, color: _brand600),
@@ -2533,6 +2589,7 @@ class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
                   hintStyle: TextStyle(fontSize: 12, color: context.textHint),
                   filled: true, fillColor: context.surface2,
                   suffixIcon: IconButton(
+                    tooltip: _obscureWebhook ? 'Show secret' : 'Hide secret',
                     icon: Icon(_obscureWebhook ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: context.textHint),
                     onPressed: () => setState(() => _obscureWebhook = !_obscureWebhook)),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
@@ -2541,30 +2598,19 @@ class _RazorpayCredentialsState extends State<RazorpayCredentialsScreen> {
               ),
             )),
 
-            const SizedBox(height: 24),
-            Row(children: [
-              Expanded(child: OutlinedButton.icon(
+            const SizedBox(height: 20),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              AppButton(
+                label: 'Clear', busyLabel: 'Clearing…', icon: Icons.delete_outline,
+                variant: AppButtonVariant.secondary, loading: _clearing,
                 onPressed: _saving ? null : _clear,
-                icon: const Icon(Icons.delete_outline, size: 16),
-                label: const Text('Clear'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _coral500,
-                  side: const BorderSide(color: _coral500),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              )),
-              const SizedBox(width: 12),
-              Expanded(flex: 2, child: ElevatedButton.icon(
+              ),
+              const SizedBox(width: 8),
+              AppButton(
+                label: 'Save Credentials', busyLabel: 'Saving…', icon: Icons.save_outlined,
+                loading: _saving && !_clearing,
                 onPressed: _saving ? null : _save,
-                icon: _saving
-                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.save_outlined, size: 16),
-                label: const Text('Save Credentials'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _brand600, foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              )),
+              ),
             ]),
           ]),
         )),
@@ -2632,6 +2678,7 @@ class _WhatsappSettingsState extends State<WhatsappSettingsScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     setState(() => _saving = true);
     try {
       final r = await apiClient.patch('/settings/whatsapp', {
@@ -2644,9 +2691,9 @@ class _WhatsappSettingsState extends State<WhatsappSettingsScreen> {
         'businessId':    _businessIdCtrl.text.trim(),
       });
       final d = (r['data'] as Map?)?.cast<String, dynamic>() ?? {};
-      if (mounted) { setState(() => _apply(d)); _snack(context, '✓ WhatsApp settings saved'); }
+      if (mounted) { setState(() => _apply(d)); AppToast.success(context, 'WhatsApp settings saved'); }
     } catch (e) {
-      if (mounted) _snack(context, 'Could not save — check your connection and try again');
+      if (mounted) AppToast.error(context, 'Could not save WhatsApp settings', detail: ApiClient.errorMessage(e, fallback: 'Check your connection and try again.'));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -2660,6 +2707,7 @@ class _WhatsappSettingsState extends State<WhatsappSettingsScreen> {
         child: TextField(
           controller: ctrl,
           obscureText: obscure,
+          enabled: !_saving,
           style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
           decoration: InputDecoration(
             prefixIcon: icon != null ? Icon(icon, size: 18, color: _brand600) : null,
@@ -2680,7 +2728,10 @@ class _WhatsappSettingsState extends State<WhatsappSettingsScreen> {
     body: Column(children: [
       _buildHeader(context, 'WhatsApp Business API', sub: 'Donation & receipt messaging via BotSyncWA'),
       if (_loading)
-        const Expanded(child: Center(child: CircularProgressIndicator()))
+        Expanded(child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
+          child: _buildCard(context, child: const SkeletonList(rows: 3, rowHeight: 64)),
+        ))
       else
         Expanded(child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
@@ -2707,6 +2758,7 @@ class _WhatsappSettingsState extends State<WhatsappSettingsScreen> {
             _field('Phone Number ID', _phoneNumberIdCtrl, hint: '1129335896919323', icon: Icons.tag_outlined),
             _field('API Token', _apiTokenCtrl, hint: '••••••••••••••••', obscure: _obscureToken, icon: Icons.vpn_key_outlined,
               suffix: IconButton(
+                tooltip: _obscureToken ? 'Show token' : 'Hide token',
                 icon: Icon(_obscureToken ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: context.textHint),
                 onPressed: () => setState(() => _obscureToken = !_obscureToken))),
             _field('API URL (optional override)', _apiUrlCtrl, hint: 'https://crmapp.botsyncwa.com/api/v1/messages', icon: Icons.link),
@@ -2717,205 +2769,8 @@ class _WhatsappSettingsState extends State<WhatsappSettingsScreen> {
             ],
 
             Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child:
-              ElevatedButton.icon(
-                onPressed: _saving ? null : _save,
-                icon: _saving
-                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.save_outlined, size: 16),
-                label: const Text('Save Changes'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _brand600, foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(48),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              )),
-          ]),
-        )),
-    ]),
-  );
-}
-
-// ════════════════════════════════════════════════════════════════
-// Server URL Screen — update backend URL without rebuilding APK
-// ════════════════════════════════════════════════════════════════
-class ServerUrlScreen extends StatefulWidget {
-  const ServerUrlScreen({super.key});
-  @override
-  State<ServerUrlScreen> createState() => _ServerUrlScreenState();
-}
-
-class _ServerUrlScreenState extends State<ServerUrlScreen> {
-  final _ctrl = TextEditingController();
-  bool _loading = true;
-  bool _saving = false;
-  String _activeUrl = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString(ApiClient.serverUrlKey) ?? '';
-    setState(() {
-      _activeUrl = saved.isNotEmpty ? saved : ApiClient.defaultBaseUrl;
-      _ctrl.text = _activeUrl;
-      _loading = false;
-    });
-  }
-
-  Future<void> _save() async {
-    final url = _ctrl.text.trim();
-    if (url.isEmpty) return;
-    setState(() => _saving = true);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(ApiClient.serverUrlKey, url);
-    setState(() { _saving = false; _activeUrl = url; });
-    if (mounted) _snack(context, '✓ Server URL saved — no rebuild needed!');
-  }
-
-  Future<void> _reset() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(ApiClient.serverUrlKey);
-    setState(() {
-      _activeUrl = ApiClient.defaultBaseUrl;
-      _ctrl.text = _activeUrl;
-    });
-    if (mounted) _snack(context, 'Reset to built-in default URL');
-  }
-
-  Future<void> _testConnection() async {
-    final url = _ctrl.text.trim();
-    if (url.isEmpty) return;
-    setState(() => _saving = true);
-    try {
-      // Any HTTP response (even a 404 JSON error) proves the server is
-      // reachable — there is no /auth/health route, so only transport-level
-      // failures should count as "connection failed".
-      final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 8),
-        validateStatus: (_) => true,
-      ));
-      await dio.get('$url/auth/login');
-      if (mounted) _snack(context, '✓ Connection successful!');
-    } catch (e) {
-      final msg = e.toString();
-      if (mounted) _snack(context, 'Connection failed: ${msg.length > 60 ? msg.substring(0, 60) : msg}');
-    }
-    if (mounted) setState(() => _saving = false);
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    body: Column(children: [
-      _buildHeader(context, 'Server URL', sub: 'Change backend without rebuilding'),
-      if (_loading)
-        const Expanded(child: Center(child: CircularProgressIndicator()))
-      else
-        Expanded(child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(18, 20, 18, 40),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // Info banner
-            Container(
-              padding: const EdgeInsets.all(14),
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(
-                color: _brand100, borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _brand600.withValues(alpha: 0.3)),
-              ),
-              child: const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Icon(Icons.info_outline, color: _brand600, size: 18),
-                SizedBox(width: 10),
-                Expanded(child: Text(
-                  'When Serveo restarts, update the URL here and tap Save — no APK rebuild needed.',
-                  style: TextStyle(fontSize: 12.5, color: _brand600, fontWeight: FontWeight.w600, height: 1.4),
-                )),
-              ]),
-            ),
-
-            _buildSectionLabel(context, 'Backend URL (include /api/v1)'),
-            _buildCard(context, child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                TextField(
-                  controller: _ctrl,
-                  keyboardType: TextInputType.url,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.link, size: 18, color: _brand600),
-                    hintText: 'https://xxxxxxxxxxxxxxxx.serveousercontent.com/api/v1',
-                    hintStyle: TextStyle(fontSize: 12, color: context.textHint),
-                    filled: true, fillColor: context.surface2,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text('Example: https://abc123.serveousercontent.com/api/v1',
-                  style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w500)),
-              ]),
-            )),
-
-            const SizedBox(height: 20),
-
-            Row(children: [
-              Expanded(child: OutlinedButton.icon(
-                onPressed: _saving ? null : _testConnection,
-                icon: const Icon(Icons.wifi_find, size: 16),
-                label: const Text('Test'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _brand600,
-                  side: const BorderSide(color: _brand600),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              )),
-              const SizedBox(width: 12),
-              Expanded(flex: 2, child: ElevatedButton.icon(
-                onPressed: _saving ? null : _save,
-                icon: _saving
-                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.save_outlined, size: 16),
-                label: const Text('Save URL'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _brand600,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              )),
-            ]),
-
-            const SizedBox(height: 24),
-
-            _buildSectionLabel(context, 'Active URL'),
-            _buildCard(context, child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(_activeUrl,
-                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, fontFamily: 'monospace')),
-                const SizedBox(height: 10),
-                GestureDetector(
-                  onTap: _reset,
-                  child: const Row(children: [
-                    Icon(Icons.restore, size: 15, color: _coral500),
-                    SizedBox(width: 6),
-                    Text('Reset to built-in default', style: TextStyle(fontSize: 12.5, color: _coral500, fontWeight: FontWeight.w700)),
-                  ]),
-                ),
-              ]),
-            )),
+              _formAction(context, label: 'Save Changes', busyLabel: 'Saving…', icon: Icons.save_outlined,
+                loading: _saving, onPressed: _save)),
           ]),
         )),
     ]),
@@ -2970,6 +2825,7 @@ class _ManageRolesState extends State<ManageRolesScreen> {
     final isNew    = role == null;
     final nameCtrl = TextEditingController(text: isNew ? '' : role['name'] as String);
     final descCtrl = TextEditingController(text: isNew ? '' : role['desc'] as String);
+    String? nameError;
 
     Map<String, bool> initPerm(String mod, List<String> keys) {
       final src = (role?['perms'] as Map?)?[mod];
@@ -2990,7 +2846,7 @@ class _ManageRolesState extends State<ManageRolesScreen> {
       'settings':        initPerm('settings',        ['access']),
     };
 
-    showModalBottomSheet(
+    showAppSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -3004,14 +2860,16 @@ class _ManageRolesState extends State<ManageRolesScreen> {
           padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
           child: Column(children: [
             // handle + title bar
-            Padding(padding: const EdgeInsets.fromLTRB(20, 14, 8, 0), child: Row(children: [
-              Center(child: Container(width: 36, height: 4,
-                decoration: BoxDecoration(color: context.border, borderRadius: BorderRadius.circular(2)))),
-              const Spacer(),
-              Text(isNew ? 'Create Role' : 'Edit Role',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-              const Spacer(),
-              IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+            const SheetHandle(margin: EdgeInsets.only(top: 10)),
+            Padding(padding: const EdgeInsets.fromLTRB(20, 10, 8, 0), child: Row(children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(isNew ? 'Create Role' : 'Edit Role',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text('Choose what members with this role can see and do.',
+                  style: TextStyle(fontSize: 12.5, color: context.textSub)),
+              ])),
+              IconButton(tooltip: 'Close', icon: Icon(Icons.close_rounded, size: 20, color: context.textSub), onPressed: () => Navigator.pop(ctx)),
             ])),
             const SizedBox(height: 4),
             Expanded(child: SingleChildScrollView(
@@ -3022,8 +2880,12 @@ class _ManageRolesState extends State<ManageRolesScreen> {
                 const SizedBox(height: 6),
                 TextField(
                   controller: nameCtrl,
+                  autofocus: isNew,
+                  textInputAction: TextInputAction.next,
+                  onChanged: (_) { if (nameError != null) setSt(() => nameError = null); },
                   style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
                   decoration: InputDecoration(
+                    errorText: nameError,
                     hintText: 'e.g. Programme Officer, Accountant',
                     hintStyle: TextStyle(color: context.textHint),
                     filled: true, fillColor: context.surface2,
@@ -3176,11 +3038,17 @@ class _ManageRolesState extends State<ManageRolesScreen> {
                 ),
               ]),
             )),
-            Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 28), child:
-              SizedBox(width: double.infinity, child: ElevatedButton(
+            Container(
+              decoration: BoxDecoration(border: Border(top: BorderSide(color: context.border))),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+              child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              AppButton(label: 'Cancel', variant: AppButtonVariant.secondary, onPressed: () => Navigator.pop(ctx)),
+              const SizedBox(width: 8),
+              AppButton(
+                label: isNew ? 'Create Role' : 'Save Changes',
                 onPressed: () {
                   final name = nameCtrl.text.trim();
-                  if (name.isEmpty) { _snack(ctx, 'Role name is required'); return; }
+                  if (name.isEmpty) { setSt(() => nameError = 'Please enter a role name.'); return; }
                   if (isNew) {
                     setState(() => _roles.add({
                       'name': name, 'desc': descCtrl.text.trim(),
@@ -3188,7 +3056,7 @@ class _ManageRolesState extends State<ManageRolesScreen> {
                     }));
                     saveRoleTemplates();
                     applyTemplateToMembers(name);
-                    _snack(context, '"$name" role created');
+                    _snack(context, '"$name" role created', error: false);
                   } else {
                     final oldName = role!['name'] as String;
                     final idx = _roles.indexOf(role);
@@ -3206,18 +3074,12 @@ class _ManageRolesState extends State<ManageRolesScreen> {
                     }
                     saveRoleTemplates();
                     applyTemplateToMembers(name);
-                    _snack(context, '"$name" role updated');
+                    _snack(context, '"$name" role updated', error: false);
                   }
                   Navigator.pop(ctx);
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(vertical: 15)),
-                child: Text(isNew ? 'Create Role' : 'Save Changes',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-              )),
-            ),
+              ),
+            ])),
           ]),
         );
       }),
@@ -3226,67 +3088,32 @@ class _ManageRolesState extends State<ManageRolesScreen> {
 
   void _confirmDelete(BuildContext context, int idx) {
     final roleName = _roles[idx]['name'] as String;
-    showModalBottomSheet(context: context, backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(color: context.cardBg,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: 36, height: 4, margin: const EdgeInsets.only(bottom: 20),
-            decoration: BoxDecoration(color: context.border, borderRadius: BorderRadius.circular(2))),
-          Container(width: 56, height: 56,
-            decoration: BoxDecoration(color: _coral100, borderRadius: BorderRadius.circular(16)),
-            child: const Icon(Icons.delete_outline, color: _coral500, size: 26)),
-          const SizedBox(height: 14),
-          Text('Delete "$roleName" Role?',
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          Text('Members with this role will lose access. This cannot be undone.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 20),
-          Row(children: [
-            Expanded(child: OutlinedButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: context.border),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(vertical: 13)),
-              child: Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700, color: context.textSub)),
-            )),
-            const SizedBox(width: 12),
-            Expanded(child: ElevatedButton(
-              onPressed: () {
-                setState(() => _roles.removeAt(idx));
-                // Members that used this role keep their current access but are
-                // no longer linked to a template.
-                for (final mbr in appRoles) {
-                  if (mbr.roleName.toLowerCase() == roleName.toLowerCase()) mbr.roleName = '';
-                }
-                saveRoleTemplates();
-                saveRoles();
-                Navigator.pop(ctx);
-                _snack(context, '"$roleName" role deleted');
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _coral500, foregroundColor: Colors.white, elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(vertical: 13)),
-              child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.w800)),
-            )),
-          ]),
-          const SizedBox(height: 8),
-        ]),
-      ),
-    );
+    AppConfirm.show(
+      context,
+      title: 'Delete role?',
+      message: 'Delete the “$roleName” role? Members with this role will lose access. This cannot be undone.',
+      confirmLabel: 'Delete Role',
+    ).then((ok) {
+      if (!ok || !mounted) return;
+      setState(() => _roles.removeAt(idx));
+      // Members that used this role keep their current access but are
+      // no longer linked to a template.
+      for (final mbr in appRoles) {
+        if (mbr.roleName.toLowerCase() == roleName.toLowerCase()) mbr.roleName = '';
+      }
+      saveRoleTemplates();
+      saveRoles();
+      _snack(this.context, '"$roleName" role deleted', error: false);
+    });
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
     body: Column(children: [
-      _buildHeader(context, 'Manage Roles', sub: 'Control what each staff member can access'),
+      _buildHeader(context, 'Manage Roles', sub: 'Control what each staff member can access',
+        action: AppButton(label: 'New Role', icon: Icons.add, onPressed: () => _showRoleSheet(context))),
       Expanded(child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
         physics: const BouncingScrollPhysics(),
         itemCount: _roles.length,
         itemBuilder: (ctx, i) {
@@ -3342,6 +3169,8 @@ class _ManageRolesState extends State<ManageRolesScreen> {
                     style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w500)),
                 ])),
                 if (!isSystem) PopupMenuButton<String>(
+                  tooltip: 'Actions for ${r['name']}',
+                  position: PopupMenuPosition.under,
                   onSelected: (v) {
                     if (v == 'edit')   _showRoleSheet(context, role: r);
                     if (v == 'delete') _confirmDelete(context, i);
@@ -3359,12 +3188,6 @@ class _ManageRolesState extends State<ManageRolesScreen> {
         },
       )),
     ]),
-    floatingActionButton: FloatingActionButton.extended(
-      onPressed: () => _showRoleSheet(context),
-      backgroundColor: _brand600, foregroundColor: Colors.white,
-      icon: const Icon(Icons.add),
-      label: const Text('New Role', style: TextStyle(fontWeight: FontWeight.w700)),
-    ),
   );
 }
 
@@ -3580,7 +3403,6 @@ class _AdminPanelState extends State<AdminPanelScreen> {
                   {'icon': Icons.receipt_long_outlined,    'color': _brand600,  'bg': _brand100,            'label': 'Expense Categories', 'route': '/settings/expense-categories'},
                   {'icon': Icons.download_outlined,        'color': _sky500,    'bg': _sky100,              'label': 'Export Data',      'route': '/settings/export-data'},
                   {'icon': Icons.cloud_sync_outlined,      'color': _sky500,    'bg': _sky100,              'label': 'Backup & Sync',    'route': '/settings/backup-sync'},
-                  {'icon': Icons.router_outlined,          'color': const Color(0xFF64748B), 'bg': const Color(0xFFF1F5F9), 'label': 'Server URL', 'route': '/settings/server-url'},
                 ];
                 final spacing = 10.0;
                 final w = (box.maxWidth - (cols - 1) * spacing) / cols;
@@ -3769,6 +3591,8 @@ class ManageCentresScreen extends StatefulWidget {
 }
 
 class _ManageCentresScreenState extends State<ManageCentresScreen> {
+  bool _loading = true;
+
   @override
   void initState() {
     super.initState();
@@ -3790,137 +3614,213 @@ class _ManageCentresScreenState extends State<ManageCentresScreen> {
         setState(() { demoCentres..clear()..addAll(centres); });
       }
     } catch (_) {/* keep existing list if backend unreachable */}
+    if (mounted && _loading) setState(() => _loading = false);
   }
 
-  void _openSheet({({String id, String name})? editing}) {
-    final nameCtrl = TextEditingController(text: editing?.name ?? '');
-    showDialog(
+  Future<void> _openSheet({({String id, String name})? editing}) async {
+    final saved = await showAppSheet<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(editing == null ? 'Add Centre' : 'Edit Centre',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-        content: TextField(
-          controller: nameCtrl, autofocus: true,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-          decoration: InputDecoration(
-            hintText: 'Centre name',
-            filled: true, fillColor: ctx.surface2,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              final n = nameCtrl.text.trim();
-              if (n.isEmpty) return;
-              try {
-                if (editing == null) {
-                  await apiClient.post('/students/centers', {'name': n});
-                } else {
-                  await apiClient.patch('/students/centers/${editing.id}', {'name': n});
-                }
-                await _loadCentres();
-                if (ctx.mounted) Navigator.pop(ctx);
-              } catch (e) {
-                if (ctx.mounted) {
-                  Navigator.pop(ctx);
-                  _snack(context, 'Could not save centre — log in as admin and try again');
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-            child: Text(editing == null ? 'Add' : 'Save'),
-          ),
-        ],
-      ),
+      backgroundColor: Colors.transparent,
+      builder: (_) => _CentreEditor(editing: editing, onSaved: _loadCentres),
     );
+    if (saved == null || !mounted) return;
+    AppToast.success(context, editing == null ? 'Centre added' : 'Changes saved', detail: '“$saved”');
   }
 
   void _delete(({String id, String name}) c) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Delete Centre', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-        content: Text('Remove "${c.name}"? Students assigned here will be unaffected.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await apiClient.delete('/students/centers/${c.id}');
-                await _loadCentres();
-              } catch (_) {
-                if (mounted) setState(() => demoCentres.remove(c));
-              }
-              if (ctx.mounted) Navigator.pop(ctx);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: _coral500, foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
+    AppConfirm.show(
+      context,
+      title: 'Delete centre?',
+      message: 'Remove “${c.name}”? Students assigned here will be unaffected.',
+      confirmLabel: 'Delete Centre',
+      onConfirm: () async {
+        try {
+          await apiClient.delete('/students/centers/${c.id}');
+          await _loadCentres();
+        } catch (_) {
+          if (mounted) setState(() => demoCentres.remove(c));
+        }
+      },
+    ).then((ok) {
+      if (ok && mounted) AppToast.success(context, 'Centre deleted');
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final Widget content;
+    if (_loading && demoCentres.isEmpty) {
+      content = const SkeletonList(rows: 3, rowHeight: 64);
+    } else if (demoCentres.isEmpty) {
+      content = EmptyState(
+        icon: Icons.location_city_outlined,
+        title: 'No centres yet',
+        message: 'Add the centres your students attend — they appear in Add Student.',
+        actionLabel: 'Add Centre',
+        onAction: () => _openSheet(),
+      );
+    } else {
+      content = Column(children: [
+        for (var i = 0; i < demoCentres.length; i++)
+          _HoverRow(
+            last: i == demoCentres.length - 1,
+            child: Row(children: [
+              Container(
+                width: 34, height: 34,
+                decoration: BoxDecoration(color: _brand600.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(9)),
+                child: const Icon(Icons.location_city_outlined, color: _brand600, size: 17)),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                Text(demoCentres[i].name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text('ID: ${demoCentres[i].id}', maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: context.textHint, fontWeight: FontWeight.w500)),
+              ])),
+              IconButton(
+                tooltip: 'Edit ${demoCentres[i].name}',
+                icon: Icon(Icons.edit_outlined, size: 18, color: context.textSub),
+                onPressed: () => _openSheet(editing: demoCentres[i])),
+              IconButton(
+                tooltip: 'Delete ${demoCentres[i].name}',
+                icon: const Icon(Icons.delete_outline, size: 18, color: _coral500),
+                onPressed: () => _delete(demoCentres[i])),
+            ]),
+          ),
+      ]);
+    }
     return Scaffold(
       body: Column(children: [
-        _buildHeader(context, 'Manage Centres', sub: '${demoCentres.length} centres'),
-        Expanded(child: demoCentres.isEmpty
-          ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.location_city_outlined, size: 48, color: context.textHint),
-              const SizedBox(height: 12),
-              Text('No centres yet', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.textSub)),
-              const SizedBox(height: 6),
-              Text('Tap + to add a centre', style: TextStyle(fontSize: 13, color: context.textHint)),
-            ]))
-          : ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-              itemCount: demoCentres.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (_, i) {
-                final c = demoCentres[i];
-                return Container(
+        _buildHeader(context, 'Manage Centres',
+          sub: _loading && demoCentres.isEmpty ? 'Loading…' : '${demoCentres.length} centre${demoCentres.length == 1 ? '' : 's'}',
+          action: AppButton(label: 'Add Centre', icon: Icons.add, onPressed: () => _openSheet())),
+        Expanded(child: RefreshIndicator(
+          onRefresh: _loadCentres,
+          color: _brand600,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 880),
+                child: Container(
                   decoration: BoxDecoration(
-                    color: context.cardBg, borderRadius: BorderRadius.circular(16),
+                    color: context.cardBg, borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: context.border),
-                    boxShadow: const [BoxShadow(color: Color(0x060D2822), blurRadius: 4, offset: Offset(0, 2))],
                   ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                    leading: Container(
-                      width: 42, height: 42,
-                      decoration: const BoxDecoration(color: _brand100, shape: BoxShape.circle),
-                      child: const Icon(Icons.location_city_outlined, color: _brand600, size: 20)),
-                    title: Text(c.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                    subtitle: Text('ID: ${c.id}', style: TextStyle(fontSize: 12, color: context.textHint)),
-                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                      IconButton(
-                        icon: Icon(Icons.edit_outlined, size: 19, color: context.textSub),
-                        onPressed: () => _openSheet(editing: c)),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 19, color: _coral500),
-                        onPressed: () => _delete(c)),
-                    ]),
-                  ),
-                );
-              },
+                  clipBehavior: Clip.antiAlias,
+                  child: AnimatedSwitcher(duration: const Duration(milliseconds: 180), child: KeyedSubtree(
+                    key: ValueKey(_loading && demoCentres.isEmpty ? 'l' : demoCentres.isEmpty ? 'x' : 'd'),
+                    child: content,
+                  )),
+                ),
+              ),
             ),
-        ),
+          ),
+        )),
       ]),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openSheet(),
-        backgroundColor: _brand600, foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('Add Centre', style: TextStyle(fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+// Compact add/edit form for a centre. Keeps the typed name if the save fails
+// and can't be submitted twice. Pops with the saved name.
+class _CentreEditor extends StatefulWidget {
+  const _CentreEditor({this.editing, required this.onSaved});
+  final ({String id, String name})? editing;
+  final Future<void> Function() onSaved;
+  @override
+  State<_CentreEditor> createState() => _CentreEditorState();
+}
+
+class _CentreEditorState extends State<_CentreEditor> {
+  final _form = GlobalKey<FormState>();
+  late final _name = TextEditingController(text: widget.editing?.name ?? '');
+  bool _saving = false;
+
+  bool get _editing => widget.editing != null;
+
+  @override
+  void dispose() { _name.dispose(); super.dispose(); }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    if (!_form.currentState!.validate()) return;
+    final n = _name.text.trim();
+    setState(() => _saving = true);
+    try {
+      if (!_editing) {
+        await apiClient.post('/students/centers', {'name': n});
+      } else {
+        await apiClient.patch('/students/centers/${widget.editing!.id}', {'name': n});
+      }
+      await widget.onSaved();
+      if (mounted) Navigator.of(context).pop(n);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      AppToast.error(context, 'Could not save centre', detail: 'Log in as admin and try again.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: BoxDecoration(color: context.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(16))),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        child: Form(
+          key: _form,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const SheetHandle(margin: EdgeInsets.only(bottom: 10)),
+            Row(children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(_editing ? 'Edit centre' : 'Add centre', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(_editing ? 'Rename this centre.' : 'Centres appear in Add Student.',
+                    style: TextStyle(fontSize: 12.5, color: context.textSub)),
+              ])),
+              IconButton(
+                tooltip: 'Close',
+                icon: Icon(Icons.close_rounded, size: 20, color: context.textSub),
+                onPressed: _saving ? null : () => Navigator.of(context).pop(),
+              ),
+            ]),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text.rich(const TextSpan(children: [
+                TextSpan(text: 'Name'),
+                TextSpan(text: ' *', style: TextStyle(color: _coral500)),
+              ]), style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textSub)),
+            ),
+            TextFormField(
+              controller: _name,
+              autofocus: true,
+              enabled: !_saving,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _save(),
+              validator: (v) => (v ?? '').trim().isEmpty ? 'Please enter a centre name.' : null,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              decoration: const InputDecoration(hintText: 'Centre name'),
+            ),
+            const SizedBox(height: 18),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              AppButton(label: 'Cancel', variant: AppButtonVariant.secondary,
+                  onPressed: _saving ? null : () => Navigator.of(context).pop()),
+              const SizedBox(width: 8),
+              AppButton(
+                label: _editing ? 'Save Changes' : 'Add Centre',
+                busyLabel: _editing ? 'Saving…' : 'Adding…',
+                loading: _saving,
+                onPressed: _save,
+              ),
+            ]),
+          ]),
+        ),
       ),
     );
   }

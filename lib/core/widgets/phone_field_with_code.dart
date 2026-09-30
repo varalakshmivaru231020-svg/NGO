@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 const _brand600 = Color(0xFFFF9933);
 const _brand100 = Color(0xFFFFE8CC);
@@ -147,7 +148,7 @@ class _PhoneFieldWithCodeState extends State<PhoneFieldWithCode> {
 
   void _openPicker() {
     final search = TextEditingController();
-    showModalBottomSheet(
+    showAppSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -167,7 +168,7 @@ class _PhoneFieldWithCodeState extends State<PhoneFieldWithCode> {
             ),
             child: Column(children: [
               const SizedBox(height: 12),
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(2))),
+              const SheetHandle(),
               const SizedBox(height: 14),
               const Text('Select Country Code', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
               const SizedBox(height: 12),

@@ -4,6 +4,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/auth/role_auth.dart';
 import '../approval_store.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 const _brand600 = Color(0xFFFF9933);
 const _brand100 = Color(0xFFFFE8CC);
@@ -39,6 +40,12 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
   // state at all, so clicking again before the first request's round trip
   // (server + DB) resolved fired duplicate requests. Guards against that.
   final Set<String> _actioning = {};
+  // Which of the in-flight ids are rejections (so the right button says so).
+  final Set<String> _rejecting = {};
+  bool _refreshing = false;
+  bool _bulkBusy = false;
+  String? _loadError;
+  String? _diffLoadingId;
 
   // Lookups so the ids stored in a request payload (donorId, typeId, centerId)
   // render as human-readable names in the diff view and the card subject.
@@ -59,8 +66,10 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
   @override
   void dispose() { _tab.dispose(); super.dispose(); }
 
-  Future<void> _load() async {
-    if (mounted) setState(() => _loading = true);
+  // [quiet] refreshes in place (after an action / pull-to-refresh / the
+  // refresh button) instead of replacing the list with a loading state.
+  Future<void> _load({bool quiet = false}) async {
+    if (mounted) setState(() { if (quiet) { _refreshing = true; } else { _loading = true; _loadError = null; } });
     try {
       final res = await apiClient.get('/approvals');
       final list = (res['data'] as List?) ?? const [];
@@ -75,10 +84,18 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
       // Keep the sidebar badge in sync with what this screen just fetched.
       pendingApprovalsCount.value = _stats['pending']!;
       await _loadLookups();
-    } catch (_) {
-      // leave existing data; a toast on actions will surface errors
+      _loadError = null;
+    } catch (e) {
+      // Leave existing data; say that the refresh failed.
+      if (mounted) {
+        if (_all.isEmpty) {
+          _loadError = ApiClient.errorMessage(e, fallback: 'Could not load approval requests.');
+        } else {
+          AppToast.error(context, 'Couldn’t refresh approvals', detail: ApiClient.errorMessage(e));
+        }
+      }
     }
-    if (mounted) setState(() => _loading = false);
+    if (mounted) setState(() { _loading = false; _refreshing = false; });
   }
 
   // Best-effort id → name maps used to humanise donation/student payloads.
@@ -131,13 +148,12 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
 
   void _toast(String msg, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
-    backgroundColor: error ? _coral500 : _brand600, behavior: SnackBarBehavior.floating,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    // Errors carry the backend's real reason — give people time to read it.
-    duration: Duration(seconds: error ? 6 : 2),
-  ));
+    // Errors carry the backend's real reason — error toasts stay longer.
+    if (error) {
+      AppToast.error(context, msg);
+    } else {
+      AppToast.success(context, msg);
+    }
   }
 
   Future<void> _approve(String id) async {
@@ -146,32 +162,34 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
     try {
       await apiClient.post('/approvals/$id/approve', {});
       _toast('Approved & applied');
-      await _load();
+      await _load(quiet: true);
     } catch (e) {
       _toast(_errMsg(e), error: true);
       // A failed execution is saved onto the row (error column) — refresh so
       // the card's failure banner shows it.
-      await _load();
+      await _load(quiet: true);
     }
     if (mounted) setState(() => _actioning.remove(id));
   }
 
   Future<void> _reject(String id, String reason) async {
     if (_actioning.contains(id)) return;
-    setState(() => _actioning.add(id));
+    setState(() { _actioning.add(id); _rejecting.add(id); });
     try {
       await apiClient.post('/approvals/$id/reject', {'reason': reason});
       _toast('Request rejected');
-      await _load();
+      await _load(quiet: true);
     } catch (e) {
       _toast(_errMsg(e), error: true);
     }
-    if (mounted) setState(() => _actioning.remove(id));
+    if (mounted) setState(() { _actioning.remove(id); _rejecting.remove(id); });
   }
 
   // Bulk endpoints return 200 with per-item results — report the real counts,
   // not a blanket success.
   Future<void> _bulkApprove(List<String> ids) async {
+    if (_bulkBusy) return;
+    setState(() => _bulkBusy = true);
     try {
       final res = await apiClient.post('/approvals/bulk-approve', {'ids': ids});
       final d = (res['data'] as Map?)?.cast<String, dynamic>() ?? {};
@@ -179,11 +197,14 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
       final failed = (d['failed'] as int?) ?? 0;
       _toast(failed == 0 ? '$ok approved' : '$ok approved · $failed failed — see the card for the reason', error: failed > 0);
       setState(() => _selected.clear());
-      await _load();
+      await _load(quiet: true);
     } catch (e) { _toast(_errMsg(e), error: true); }
+    if (mounted) setState(() => _bulkBusy = false);
   }
 
   Future<void> _bulkReject(List<String> ids, String reason) async {
+    if (_bulkBusy) return;
+    setState(() => _bulkBusy = true);
     try {
       final res = await apiClient.post('/approvals/bulk-reject', {'ids': ids, 'reason': reason});
       final d = (res['data'] as Map?)?.cast<String, dynamic>() ?? {};
@@ -191,8 +212,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
       final failed = (d['failed'] as int?) ?? 0;
       _toast(failed == 0 ? '$ok rejected' : '$ok rejected · $failed failed', error: failed > 0);
       setState(() => _selected.clear());
-      await _load();
+      await _load(quiet: true);
     } catch (e) { _toast(_errMsg(e), error: true); }
+    if (mounted) setState(() => _bulkBusy = false);
   }
 
   String _errMsg(Object e) => ApiClient.errorMessage(e, fallback: 'Action failed. Please try again.');
@@ -208,6 +230,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
         const SizedBox(height: 12),
         TextField(
           controller: ctrl, autofocus: true, maxLines: 3,
+          onChanged: (_) { if (err != null) ss(() => err = null); },
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
             hintText: 'e.g. Duplicate entry / incorrect details',
@@ -219,16 +242,16 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
         ),
       ]),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        ElevatedButton(
+        AppButton(label: 'Cancel', variant: AppButtonVariant.secondary, onPressed: () => Navigator.pop(ctx)),
+        AppButton(
+          label: ids != null ? 'Reject ${ids.length}' : 'Reject',
+          variant: AppButtonVariant.destructive,
           onPressed: () {
             final r = ctrl.text.trim();
-            if (r.length < 3) { ss(() => err = 'Please enter a reason'); return; }
+            if (r.length < 3) { ss(() => err = 'Please enter a reason (at least 3 characters).'); return; }
             Navigator.pop(ctx);
             if (ids != null) { _bulkReject(ids, r); } else if (id != null) { _reject(id, r); }
           },
-          style: ElevatedButton.styleFrom(backgroundColor: _coral500, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-          child: const Text('Reject', style: TextStyle(fontWeight: FontWeight.w800)),
         ),
       ],
     )));
@@ -239,11 +262,14 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
     // fetch this one request's full record for the diff.
     var full = req;
     if (req['payload'] == null && req['previousData'] == null) {
+      if (_diffLoadingId != null) return;
+      setState(() => _diffLoadingId = req['id'] as String?);
       try {
         final r = await apiClient.get('/approvals/${req['id']}');
         full = (r['data'] as Map?)?.cast<String, dynamic>() ?? req;
       } catch (_) {}
       if (!mounted) return;
+      setState(() => _diffLoadingId = null);
     }
     final action = (full['action'] as String?) ?? '';
     final payload = (full['payload'] as Map?)?.cast<String, dynamic>() ?? {};
@@ -273,7 +299,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Padding(padding: const EdgeInsets.fromLTRB(20, 18, 12, 8), child: Row(children: [
             Expanded(child: Text('$action  ·  ${req['module']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
-            IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close_rounded)),
+            IconButton(tooltip: 'Close', onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close_rounded)),
           ])),
           const Divider(height: 1, color: _border),
           Flexible(child: rows.isEmpty
@@ -335,22 +361,31 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
         // Header + stats
         Container(
           color: context.headerBg,
-          padding: EdgeInsets.fromLTRB(18, top + 14, 18, 12),
+          padding: EdgeInsets.fromLTRB(8, top + 10, 12, 10),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20), onPressed: () => context.go('/dashboard'), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
-              const SizedBox(width: 10),
-              Expanded(child: Text('Approvals', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: context.textPrimary))),
-              IconButton(onPressed: _load, icon: const Icon(Icons.refresh_rounded, size: 22)),
+              IconButton(tooltip: 'Back to Dashboard', icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18), onPressed: () => context.go('/dashboard')),
+              const SizedBox(width: 2),
+              Expanded(child: Text('Approvals', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.2, color: context.textPrimary))),
+              IconButton(
+                tooltip: _refreshing ? 'Refreshing…' : 'Refresh',
+                onPressed: (_loading || _refreshing) ? null : () => _load(quiet: true),
+                icon: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 150),
+                  child: (_loading || _refreshing)
+                      ? const AppSpinner(key: ValueKey('spin'), size: 16, color: _brand600)
+                      : const Icon(Icons.refresh_rounded, key: ValueKey('icon'), size: 20),
+                ),
+              ),
             ]),
-            const SizedBox(height: 6),
-            Row(children: [
+            const SizedBox(height: 4),
+            Padding(padding: const EdgeInsets.only(left: 10), child: Row(children: [
               _statChip('Pending', _stats['pending'] ?? 0, _amber600, _amber100, 0),
               const SizedBox(width: 8),
               _statChip('Approved', _stats['approved'] ?? 0, _brand600, _brand100, 1),
               const SizedBox(width: 8),
               _statChip('Rejected', _stats['rejected'] ?? 0, _coral500, _coral100, 2),
-            ]),
+            ])),
           ]),
         ),
         // Search + module filter
@@ -391,12 +426,16 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
             controller: _tab,
             indicatorColor: _brand600, indicatorWeight: 2.5,
             labelColor: _brand600, unselectedLabelColor: _onSurface3,
-            labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-            tabs: const [Tab(text: 'Pending'), Tab(text: 'Approved'), Tab(text: 'Rejected')],
+            dividerColor: context.border,
+            labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            tabs: const [Tab(text: 'Pending', height: 42), Tab(text: 'Approved', height: 42), Tab(text: 'Rejected', height: 42)],
           ),
         ),
         Expanded(child: _loading
-          ? const Center(child: CircularProgressIndicator(color: _brand600))
+          ? const SingleChildScrollView(padding: EdgeInsets.fromLTRB(16, 14, 16, 24), child: SkeletonList(rows: 4, rowHeight: 110))
+          : _loadError != null && _all.isEmpty
+          ? Center(child: ErrorState(message: _loadError!, onRetry: _load))
           : TabBarView(
               controller: _tab,
               children: _statuses.map((s) => _list(s)).toList(),
@@ -410,16 +449,15 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
             child: Row(children: [
               Text('${_selected.length} selected', style: const TextStyle(fontWeight: FontWeight.w800)),
               const Spacer(),
-              OutlinedButton(
-                onPressed: () => _confirmReject(ids: _selected.toList()),
-                style: OutlinedButton.styleFrom(foregroundColor: _coral500, side: const BorderSide(color: _coral500)),
-                child: const Text('Reject', style: TextStyle(fontWeight: FontWeight.w800)),
+              AppButton(
+                label: 'Reject', icon: Icons.close_rounded, variant: AppButtonVariant.secondary,
+                onPressed: _bulkBusy ? null : () => _confirmReject(ids: _selected.toList()),
               ),
-              const SizedBox(width: 10),
-              ElevatedButton(
+              const SizedBox(width: 8),
+              AppButton(
+                label: 'Approve ${_selected.length}', busyLabel: 'Working…', icon: Icons.check_rounded,
+                loading: _bulkBusy,
                 onPressed: () => _bulkApprove(_selected.toList()),
-                style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white),
-                child: const Text('Approve', style: TextStyle(fontWeight: FontWeight.w800)),
               ),
             ]),
           ))
@@ -429,10 +467,13 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
 
   Widget _statChip(String label, int n, Color fg, Color bg, int index) {
     final active = _tab.index == index;
-    return GestureDetector(
+    return Semantics(
+      button: true, selected: active, label: '$n $label',
+      child: GestureDetector(
       onTap: () { _tab.animateTo(index); setState(() {}); },
       behavior: HitTestBehavior.opaque,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
           color: bg, borderRadius: BorderRadius.circular(12),
@@ -444,21 +485,26 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
           Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: fg)),
         ]),
       ),
-    );
+    ));
   }
 
   Widget _list(String status) {
     final items = _forStatus(status);
     if (items.isEmpty) {
-      return RefreshIndicator(onRefresh: _load, color: _brand600, child: ListView(children: [
-        const SizedBox(height: 120),
-        Icon(status == 'PENDING' ? Icons.inbox_outlined : Icons.check_circle_outline, size: 48, color: _onSurface3),
-        const SizedBox(height: 12),
-        Center(child: Text('No ${status.toLowerCase()} requests', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: _onSurface2))),
+      final filtered = _search.isNotEmpty || _moduleFilter != 'All';
+      return RefreshIndicator(onRefresh: () => _load(quiet: true), color: _brand600, child: ListView(children: [
+        const SizedBox(height: 80),
+        EmptyStateLike(
+          icon: filtered ? Icons.search_off_rounded : (status == 'PENDING' ? Icons.inbox_outlined : Icons.check_circle_outline),
+          title: 'No ${status.toLowerCase()} requests',
+          message: filtered
+              ? 'Nothing matches the current search or module filter.'
+              : (status == 'PENDING' ? 'You’re all caught up.' : null),
+        ),
       ]));
     }
     return RefreshIndicator(
-      onRefresh: _load, color: _brand600,
+      onRefresh: () => _load(quiet: true), color: _brand600,
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 90),
@@ -494,7 +540,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           if (status == 'PENDING')
-            GestureDetector(
+            Semantics(
+              checked: selected, label: 'Select request',
+              child: GestureDetector(
               onTap: () => setState(() => selected ? _selected.remove(id) : _selected.add(id)),
               child: Container(
                 width: 22, height: 22, margin: const EdgeInsets.only(right: 10),
@@ -504,7 +552,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
                   border: Border.all(color: selected ? _brand600 : _onSurface3, width: 1.5)),
                 child: selected ? const Icon(Icons.check, size: 15, color: Colors.white) : null,
               ),
-            ),
+            )),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
             decoration: BoxDecoration(color: aBg, borderRadius: BorderRadius.circular(8)),
@@ -533,8 +581,10 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
             Text('${r['requesterRole']}${(r['department'] != null) ? '  ·  ${r['department']}' : ''}', style: const TextStyle(fontSize: 11.5, color: _onSurface3, fontWeight: FontWeight.w500)),
           ])),
           TextButton.icon(
-            onPressed: () => _showDiff(r),
-            icon: const Icon(Icons.difference_outlined, size: 16),
+            onPressed: _diffLoadingId == id ? null : () => _showDiff(r),
+            icon: _diffLoadingId == id
+                ? const AppSpinner(size: 14, color: _sky500)
+                : const Icon(Icons.difference_outlined, size: 16),
             label: const Text('View changes', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
             style: TextButton.styleFrom(foregroundColor: _sky500, padding: const EdgeInsets.symmetric(horizontal: 6)),
           ),
@@ -559,20 +609,23 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SingleTickerProv
           const SizedBox(height: 12),
           Builder(builder: (_) {
             final busy = _actioning.contains(id);
+            final rejecting = _rejecting.contains(id);
             return Row(children: [
             Expanded(child: OutlinedButton.icon(
               onPressed: busy ? null : () => _confirmReject(id: id),
-              icon: const Icon(Icons.close_rounded, size: 17),
-              label: const Text('Reject', style: TextStyle(fontWeight: FontWeight.w800)),
+              icon: rejecting
+                  ? const AppSpinner(size: 15, color: _coral500)
+                  : const Icon(Icons.close_rounded, size: 17),
+              label: Text(rejecting ? 'Rejecting…' : 'Reject', style: const TextStyle(fontWeight: FontWeight.w800)),
               style: OutlinedButton.styleFrom(foregroundColor: _coral500, side: const BorderSide(color: _coral500), padding: const EdgeInsets.symmetric(vertical: 11)),
             )),
             const SizedBox(width: 10),
             Expanded(child: ElevatedButton.icon(
               onPressed: busy ? null : () => _approve(id),
-              icon: busy
-                  ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              icon: busy && !rejecting
+                  ? const AppSpinner(size: 15, color: Colors.white)
                   : const Icon(Icons.check_rounded, size: 17),
-              label: Text(busy ? 'Approving…' : 'Approve', style: const TextStyle(fontWeight: FontWeight.w800)),
+              label: Text(busy && !rejecting ? 'Approving…' : 'Approve', style: const TextStyle(fontWeight: FontWeight.w800)),
               style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0, padding: const EdgeInsets.symmetric(vertical: 11)),
             )),
           ]);

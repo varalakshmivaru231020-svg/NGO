@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/network/api_client.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 const _brand600 = Color(0xFFFF9933);
 const _brand100 = Color(0xFFFFE8CC);
@@ -137,18 +138,28 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
     return list.where((r) => (order[_rangeOf(r)] ?? 99) <= max).toList();
   }
 
-  static Future<void> _call(String mobile) async {
+  // Same launch behaviour as before; the only change is that a missing
+  // number or an app that can't be opened now says so instead of doing nothing.
+  Future<void> _call(String mobile) async {
     final digits = mobile.replaceAll(RegExp(r'[^\d+]'), '');
-    if (digits.isEmpty) return;
+    if (digits.isEmpty) { AppToast.warning(context, 'No mobile number on file'); return; }
     final uri = Uri.parse('tel:$digits');
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else if (mounted) {
+      AppToast.error(context, 'Could not start a call on this device');
+    }
   }
 
-  static Future<void> _whatsapp(String mobile) async {
+  Future<void> _whatsapp(String mobile) async {
     final digits = mobile.replaceAll(RegExp(r'[^\d]'), '');
-    if (digits.isEmpty) return;
+    if (digits.isEmpty) { AppToast.warning(context, 'No mobile number on file'); return; }
     final uri = Uri.parse('https://wa.me/$digits');
-    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else if (mounted) {
+      AppToast.error(context, 'Could not open WhatsApp');
+    }
   }
 
   @override
@@ -165,18 +176,27 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
         // header
         Container(
           color: context.headerBg,
-          padding: EdgeInsets.fromLTRB(18, top + 14, 18, 0),
+          padding: EdgeInsets.fromLTRB(8, top + 10, 12, 0),
           child: Column(children: [
             Row(children: [
-              IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20), onPressed: () => context.go('/more'), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
-              const SizedBox(width: 10),
+              IconButton(tooltip: 'Back', icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18), onPressed: () => context.go('/more')),
+              const SizedBox(width: 2),
               const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Reminders', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-                Text('Birthdays & anniversaries', style: TextStyle(fontSize: 13, color: _onSurface2, fontWeight: FontWeight.w600)),
+                Text('Reminders', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.2)),
+                Text('Birthdays & anniversaries', style: TextStyle(fontSize: 12.5, color: _onSurface2, fontWeight: FontWeight.w500)),
               ])),
-              IconButton(icon: const Icon(Icons.refresh_rounded, size: 20), onPressed: _loading ? null : _load, padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+              IconButton(
+                tooltip: _loading ? 'Refreshing…' : 'Refresh',
+                onPressed: _loading ? null : _load,
+                icon: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 150),
+                  child: _loading
+                      ? const AppSpinner(key: ValueKey('spin'), size: 16, color: _brand600)
+                      : const Icon(Icons.refresh_rounded, key: ValueKey('icon'), size: 20),
+                ),
+              ),
             ]),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             // celebration banner
             Container(
               padding: const EdgeInsets.all(14),
@@ -203,8 +223,9 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
               indicatorWeight: 3,
               labelColor: _brand600,
               unselectedLabelColor: _onSurface3,
-              labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              dividerColor: Colors.transparent,
+              labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
               tabs: const [Tab(text: '🎂  Birthdays'), Tab(text: '💍  Anniversaries')],
             ),
           ]),
@@ -225,10 +246,13 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
                 final bdayCount = isBdayTab ? _birthdays.where((b) => (order[_rangeOf(b)] ?? 99) <= max).length : 0;
                 final annivCount = isBdayTab ? 0 : _anniversaries.where((a) => (order[_rangeOf(a)] ?? 99) <= max).length;
                 final total = bdayCount + annivCount;
-                return Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(
+                return Padding(padding: const EdgeInsets.only(right: 8), child: Semantics(
+                  button: true, selected: active, label: '$r, $total',
+                  child: GestureDetector(
                   onTap: () => setState(() => _range = r),
                   behavior: HitTestBehavior.opaque,
-                  child: Container(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(color: active ? _brand600 : Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: active ? _brand600 : _border, width: 1.5)),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -246,7 +270,7 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
                       ],
                     ]),
                   ),
-                ));
+                )));
               }).toList(),
             )),
             const SizedBox(height: 8),
@@ -255,15 +279,12 @@ class _RemindersScreenState extends State<RemindersScreen> with SingleTickerProv
 
         // tab views
         Expanded(child: _loading
-          ? const Center(child: CircularProgressIndicator(color: _brand600))
+          ? const SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(16, 14, 16, 24),
+              child: SkeletonList(rows: 4, rowHeight: 84),
+            )
           : _error
-            ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.error_outline, color: _coral500, size: 40),
-                const SizedBox(height: 10),
-                Text('Failed to load reminders', style: TextStyle(fontWeight: FontWeight.w700, color: context.textPrimary)),
-                const SizedBox(height: 8),
-                TextButton(onPressed: _load, child: const Text('Retry', style: TextStyle(color: _brand600, fontWeight: FontWeight.w700))),
-              ]))
+            ? Center(child: ErrorState(message: 'Failed to load reminders. Check your connection and try again.', onRetry: _load))
             : TabBarView(
                 controller: _tabs,
                 children: [
@@ -284,14 +305,14 @@ class _ReminderList extends StatelessWidget {
   final Future<void> Function(String) onWhatsApp;
   @override
   Widget build(BuildContext context) => items.isEmpty
-    ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Text(isBday ? '🎂' : '💍', style: const TextStyle(fontSize: 42)),
-        const SizedBox(height: 12),
-        const Text('Nothing in this range', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _onSurface3)),
-      ]))
+    ? Center(child: EmptyStateLike(
+        icon: isBday ? Icons.cake_outlined : Icons.favorite_border_rounded,
+        title: isBday ? 'No birthdays in this range' : 'No anniversaries in this range',
+        message: 'Try a wider range above.',
+      ))
     : SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(18, 14, 18, 100),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
         child: Center(child: ConstrainedBox(
           constraints: const BoxConstraints(),
           child: Column(children: items.asMap().entries.map((e) => Padding(
@@ -361,13 +382,16 @@ class _ActionBtn extends StatelessWidget {
   const _ActionBtn({required this.icon, required this.label, required this.color, required this.onTap});
   final IconData icon; final String label; final Color color; final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => Expanded(child: GestureDetector(
+  Widget build(BuildContext context) => Expanded(child: Semantics(
+    button: true,
+    label: label,
+    child: InkWell(
     onTap: onTap,
-    behavior: HitTestBehavior.opaque,
+    borderRadius: BorderRadius.circular(12),
     child: Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withValues(alpha: 0.2))),
       child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, size: 15, color: color), const SizedBox(width: 5), Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color))]),
     ),
-  ));
+  )));
 }

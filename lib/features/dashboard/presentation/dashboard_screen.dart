@@ -12,6 +12,7 @@ import '../../settings/profile_store.dart';
 import '../../donors/presentation/donors_screen.dart' show demoLocalDonors;
 import '../../donations/presentation/donations_screen.dart' show demoLocalDonations;
 import '../../students/presentation/students_screen.dart' show demoLocalStudents;
+import 'package:saksham_app/core/ui/ui.dart';
 
 // ── colours ───────────────────────────────────────────────────────────
 const _brand700 = Color(0xFFE07C1F);
@@ -133,6 +134,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   int _totalDonationsAmount = 0;
   int? _birthdaysToday;
   int? _pendingApprovals;
+  // False until the first load finishes — distinguishes "still loading"
+  // from "failed / none" so the page doesn't claim "No donations yet"
+  // while data is on its way.
+  bool _loaded = false;
 
   @override
   void initState() {
@@ -367,6 +372,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         _dynamicTrend7M = donationStats['trend7M'] as List<MapEntry<String, double>>;
         _dynamicTrend1Y = donationStats['trend1Y'] as List<MapEntry<String, double>>;
         _totalDonationsAmount = donationStats['totalAmt'] as int;
+        _loaded = true;
       });
     }
   }
@@ -444,9 +450,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       final wide = constraints.maxWidth >= 800;
       // Each card is tagged with the module it belongs to; a card only shows if
       // the logged-in user can access that module (admins see everything).
-      String n(int? v) => v?.toString() ?? '—';
+      // '…' while the first load is in flight; '—' means unavailable.
+      String n(int? v) => v?.toString() ?? (_loaded ? '—' : '…');
       final all = <({String module, _KPICard card})>[
-        (module: 'donations', card: _KPICard(label: 'Total Raised',      value: _raised != null ? _inr(_raised!, compact: true) : '—', icon: Icons.account_balance_wallet_outlined, fg: _amber600,  bg: _amber100,  onTap: () => ctx.go('/donations'), emphasis: true)),
+        (module: 'donations', card: _KPICard(label: 'Total Raised',      value: _raised != null ? _inr(_raised!, compact: true) : (_loaded ? '—' : '…'), icon: Icons.account_balance_wallet_outlined, fg: _amber600,  bg: _amber100,  onTap: () => ctx.go('/donations'), emphasis: true)),
         (module: 'donors',    card: _KPICard(label: 'Total Donors',      value: n(_donors),   icon: Icons.people_outlined,                 fg: _brand600,  bg: _brand100,  onTap: () => ctx.go('/donors'),    emphasis: true)),
         (module: 'students',  card: _KPICard(label: 'Total Students',    value: n(_students), icon: Icons.school_outlined,                 fg: _violet500, bg: _violet100, onTap: () => ctx.go('/students'))),
         (module: 'offices',   card: _KPICard(label: 'Total Offices',     value: n(_offices),  icon: Icons.business_outlined,               fg: _sky500,    bg: _sky100,    onTap: () => ctx.go('/offices'))),
@@ -560,11 +567,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 18),
         child: _card(
           ctx: ctx,
-          child: recentList.isEmpty
-            ? const Padding(
-                padding: EdgeInsets.symmetric(vertical: 26, horizontal: 16),
-                child: Center(child: Text('No donations yet.', style: TextStyle(fontSize: 13.5, color: Color(0xFF5A6B67), fontWeight: FontWeight.w500))),
-              )
+          child: !_loaded
+            ? const SkeletonList(rows: 3, rowHeight: 64)
+            : recentList.isEmpty
+            ? const Center(child: EmptyState(
+                icon: Icons.volunteer_activism_outlined,
+                title: 'No donations yet',
+                message: 'Recent donations will appear here.',
+              ))
             : Column(
                 children: recentList.asMap().entries.map((e) {
                   final i = e.key; final d = e.value;

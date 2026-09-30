@@ -7,6 +7,7 @@ import '../../../core/utils/app_launcher.dart';
 import '../../../core/utils/native_file_saver.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 const _brand700 = Color(0xFFE07C1F);
 const _brand600 = Color(0xFFFF9933);
@@ -76,12 +77,58 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
 
   List<_DItem> _all = [];
   bool _loading = true;
+  String? _loadError;
+  bool _exporting = false;
 
   @override
   void initState() { super.initState(); _load(); }
 
+  // Builds the same Excel sheet as before from the filtered rows; the button
+  // shows "Exporting…" and ignores taps while it runs.
+  Future<void> _export() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      final rows = _filtered;
+      final excel = xl.Excel.createExcel();
+      final sheet = excel['Donations'];
+      // header style
+      final hStyle = xl.CellStyle(
+        bold: true, fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
+        backgroundColorHex: xl.ExcelColor.fromHexString('#FF9933'),
+        horizontalAlign: xl.HorizontalAlign.Center,
+      );
+      final headers = ['Donor Name', 'Phone', 'Donation Type', 'Donation Amount (₹)', 'Category', 'Payment Mode', 'Receipt No.', 'Date'];
+      for (var c = 0; c < headers.length; c++) {
+        final cell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0));
+        cell.value = xl.TextCellValue(headers[c]);
+        cell.cellStyle = hStyle;
+      }
+      for (var r = 0; r < rows.length; r++) {
+        final d = rows[r];
+        final rowData = [d.donor, d.phone, d.donationType, d.amount.toString(), d.category, d.method, d.receipt, d.date];
+        for (var c = 0; c < rowData.length; c++) {
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r + 1)).value = xl.TextCellValue(rowData[c]);
+        }
+      }
+      final rawBytes = excel.encode();
+      final filename = 'SKET_Tracker_${DateFormat('ddMMyyyy').format(DateTime.now())}.xlsx';
+      final ok = rawBytes != null && await NativeFileSaver.saveBytes(filename, Uint8List.fromList(rawBytes), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      if (!mounted) return;
+      if (ok) {
+        AppToast.success(context, '${rows.length} record${rows.length == 1 ? '' : 's'} exported', detail: filename);
+      } else {
+        AppToast.error(context, 'Unable to export', detail: 'Please try again.');
+      }
+    } catch (_) {
+      if (mounted) AppToast.error(context, 'Unable to export', detail: 'Please try again.');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   Future<void> _load() async {
-    if (mounted) setState(() => _loading = true);
+    if (mounted) setState(() { _loading = true; _loadError = null; });
     try {
       final r = await apiClient.get('/donations', params: {'limit': '100', 'page': '1'});
       final inner = r['data'];
@@ -114,8 +161,14 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
         ));
       }
       if (mounted) setState(() { _all = items; _loading = false; });
-    } catch (_) {
-      if (mounted) setState(() { _all = []; _loading = false; });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _all = [];
+          _loading = false;
+          _loadError = ApiClient.errorMessage(e, fallback: 'Could not load donations.');
+        });
+      }
     }
   }
 
@@ -182,44 +235,13 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
               const Text('Donation Tracker', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
               Text('Track & follow up', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
             ])),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () async {
-                final rows = _filtered;
-                final excel = xl.Excel.createExcel();
-                final sheet = excel['Donations'];
-                // header style
-                final hStyle = xl.CellStyle(
-                  bold: true, fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
-                  backgroundColorHex: xl.ExcelColor.fromHexString('#FF9933'),
-                  horizontalAlign: xl.HorizontalAlign.Center,
-                );
-                final headers = ['Donor Name', 'Phone', 'Donation Type', 'Donation Amount (₹)', 'Category', 'Payment Mode', 'Receipt No.', 'Date'];
-                for (var c = 0; c < headers.length; c++) {
-                  final cell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0));
-                  cell.value = xl.TextCellValue(headers[c]);
-                  cell.cellStyle = hStyle;
-                }
-                for (var r = 0; r < rows.length; r++) {
-                  final d = rows[r];
-                  final rowData = [d.donor, d.phone, d.donationType, d.amount.toString(), d.category, d.method, d.receipt, d.date];
-                  for (var c = 0; c < rowData.length; c++) {
-                    sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r + 1)).value = xl.TextCellValue(rowData[c]);
-                  }
-                }
-                final rawBytes = excel.encode();
-                final filename = 'SKET_Tracker_${DateFormat('ddMMyyyy').format(DateTime.now())}.xlsx';
-                final ok = rawBytes != null && await NativeFileSaver.saveBytes(filename, Uint8List.fromList(rawBytes), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(ok ? '✓ ${rows.length} records exported to $filename' : 'Export failed', style: const TextStyle(fontWeight: FontWeight.w700)),
-                    backgroundColor: ok ? _brand600 : Colors.red, behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
-                }
-              },
-              child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(12)),
-                child: const Row(children: [Icon(Icons.download_outlined, color: Colors.white, size: 16), SizedBox(width: 4), Text('Export Excel', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white))])),
+            AppButton(
+              label: 'Export Excel',
+              busyLabel: 'Exporting…',
+              icon: Icons.download_outlined,
+              dense: true,
+              loading: _exporting,
+              onPressed: _export,
             ),
           ])),
 
@@ -286,13 +308,15 @@ class _DonationTrackerScreenState extends State<DonationTrackerScreen> {
 
             // grouped list
             if (_loading)
-              const Padding(padding: EdgeInsets.all(48), child: Center(child: CircularProgressIndicator(color: _brand600)))
+              const Padding(padding: EdgeInsets.symmetric(horizontal: 4), child: SkeletonList(rows: 5, rowHeight: 72))
+            else if (_loadError != null)
+              ErrorState(message: _loadError!, onRetry: _load)
             else if (items.isEmpty)
-              Padding(padding: const EdgeInsets.all(40), child: Center(child: Column(children: [
-                Icon(Icons.receipt_long_outlined, size: 48, color: context.textHint),
-                const SizedBox(height: 12),
-                Text('No donations in this range', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: context.textHint)),
-              ])))
+              Center(child: EmptyState(
+                icon: Icons.receipt_long_outlined,
+                title: _all.isEmpty ? 'No donations yet' : 'No donations in this range',
+                message: _all.isEmpty ? 'Recorded donations will appear here.' : 'Try a different period or type.',
+              ))
             else
               ...grouped.entries.map((e) => Padding(padding: const EdgeInsets.fromLTRB(18, 0, 18, 14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [

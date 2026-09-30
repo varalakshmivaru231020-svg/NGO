@@ -15,18 +15,287 @@ import '../../dashboard/presentation/dashboard_screen.dart' show dashboardRefres
 import '../../donors/presentation/donors_screen.dart' show demoLocalDonors, mockDonorData;
 import '../student_lookups.dart';
 import 'students_screen.dart' show demoLocalStudents, demoCentres;
+import 'package:saksham_app/core/ui/ui.dart';
 
 // ── colours ───────────────────────────────────────────────────────────
 const _brand600 = Color(0xFFFF9933);
 const _brand100 = Color(0xFFFFE8CC);
 const _amber600 = Color(0xFFE0921A);
-const _coral500 = Color(0xFFF2685E);
-const _onSurface1 = Color(0xFF15211E);
-const _onSurface2 = Color(0xFF5A6B67);
-const _onSurface3 = Color(0xFF93A29F);
-const _border = Color(0xFFE5EBE9);
-const _surface2 = Color(0xFFF4F7F6);
-const _errorColor = Color(0xFFF2685E);
+const _danger = Color(0xFFE5484D);
+
+// ══════════════════════════════════════════════════════════════════════
+// STUDENT DOCUMENTS — shared by Add Child (held until the child is saved)
+// and the child's Documents tab (uploaded straight away). Any number of
+// documents, each with a free-text name.
+// ══════════════════════════════════════════════════════════════════════
+
+// Quick picks for the document name; any other name can be typed.
+const kStudentDocSuggestions = [
+  'Aadhaar Card', 'Birth Certificate', 'Transfer Certificate', 'Medical Report',
+  'Report Card', 'Family Photo', "Parents' Aadhaar", 'Other',
+];
+
+// Files above this size still go through, but the user is warned first.
+const kStudentDocWarnBytes = 10 * 1024 * 1024;
+
+typedef PickedStudentDoc = ({String name, String fileName, Uint8List bytes});
+
+String studentDocMime(String fileName) {
+  final ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase() : '';
+  return switch (ext) {
+    'pdf' => 'application/pdf',
+    'jpg' || 'jpeg' => 'image/jpeg',
+    'png' => 'image/png',
+    'webp' => 'image/webp',
+    'gif' => 'image/gif',
+    'heic' => 'image/heic',
+    'doc' => 'application/msword',
+    'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xls' => 'application/vnd.ms-excel',
+    'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'txt' => 'text/plain',
+    _ => 'application/octet-stream',
+  };
+}
+
+IconData studentDocIcon(String fileName) {
+  final m = studentDocMime(fileName);
+  if (m.startsWith('image/')) return Icons.image_outlined;
+  if (m == 'application/pdf') return Icons.picture_as_pdf_outlined;
+  return Icons.insert_drive_file_outlined;
+}
+
+String studentDocSize(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
+  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+}
+
+// "+ Add document" modal: choose a file, name it, confirm. With [onUpload]
+// the sheet uploads the file itself (showing "Uploading…", staying open with
+// everything kept if it fails); without it the pick is simply returned.
+class StudentDocumentSheet extends StatefulWidget {
+  const StudentDocumentSheet({super.key, this.onUpload});
+  final Future<void> Function(PickedStudentDoc doc)? onUpload;
+  @override
+  State<StudentDocumentSheet> createState() => _StudentDocumentSheetState();
+}
+
+class _StudentDocumentSheetState extends State<StudentDocumentSheet> {
+  final _form = GlobalKey<FormState>();
+  final _name = TextEditingController();
+  final _nameFocus = FocusNode();
+  String? _fileName;
+  Uint8List? _bytes;
+  bool _picking = false;
+  bool _busy = false;
+  bool _submitted = false;
+  String? _serverError;
+
+  @override
+  void dispose() { _name.dispose(); _nameFocus.dispose(); super.dispose(); }
+
+  Future<void> _pick() async {
+    if (_picking || _busy) return;
+    setState(() => _picking = true);
+    try {
+      final r = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
+      final f = r?.files.single;
+      if (f != null && f.bytes != null && mounted) {
+        setState(() { _fileName = f.name; _bytes = f.bytes; });
+      }
+    } catch (e) {
+      if (mounted) AppToast.error(context, 'Couldn’t open the file', detail: e.toString());
+    }
+    if (mounted) setState(() => _picking = false);
+  }
+
+  Future<void> _submit() async {
+    if (_busy) return;
+    setState(() { _submitted = true; _serverError = null; });
+    final okForm = _form.currentState!.validate();
+    if (!okForm || _bytes == null) return;
+    final doc = (name: _name.text.trim(), fileName: _fileName!, bytes: _bytes!);
+    if (widget.onUpload == null) { Navigator.of(context).pop(doc); return; }
+    setState(() => _busy = true);
+    try {
+      await widget.onUpload!(doc);
+      if (mounted) Navigator.of(context).pop(doc);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _busy = false; _serverError = ApiClient.errorMessage(e, fallback: 'Upload failed. Please try again.'); });
+    }
+  }
+
+  Widget _label(String t, {bool required = false}) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text.rich(TextSpan(children: [
+      TextSpan(text: t),
+      if (required) const TextSpan(text: ' *', style: TextStyle(color: _danger)),
+    ]), style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textSub)),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final uploadMode = widget.onUpload != null;
+    final big = (_bytes?.length ?? 0) > kStudentDocWarnBytes;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: BoxDecoration(color: context.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(16))),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        child: Form(
+          key: _form,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const SheetHandle(margin: EdgeInsets.only(bottom: 10)),
+            Row(children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Add document', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text('Choose a file and give it a name.', style: TextStyle(fontSize: 12.5, color: context.textSub)),
+              ])),
+              IconButton(
+                tooltip: 'Close',
+                icon: Icon(Icons.close_rounded, size: 20, color: context.textSub),
+                onPressed: _busy ? null : () => Navigator.of(context).pop(),
+              ),
+            ]),
+            const SizedBox(height: 14),
+            _label('File', required: true),
+            // File row: empty state is a compact drop-zone style button.
+            InkWell(
+              onTap: _busy ? null : _pick,
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 48),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: context.surface2,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _submitted && _bytes == null ? _danger : context.border),
+                ),
+                child: Row(children: [
+                  if (_picking) const AppSpinner(size: 16)
+                  else Icon(_fileName == null ? Icons.upload_file_outlined : studentDocIcon(_fileName!),
+                      size: 18, color: _fileName == null ? context.textHint : _brand600),
+                  const SizedBox(width: 10),
+                  Expanded(child: _fileName == null
+                    ? Text('Choose a file (PDF, image, document)', style: TextStyle(fontSize: 13.5, color: context.textHint))
+                    : Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                        Text(_fileName!, maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textPrimary)),
+                        Text(studentDocSize(_bytes!.length), style: TextStyle(fontSize: 11.5, color: context.textHint)),
+                      ])),
+                  Text(_fileName == null ? 'Browse' : 'Change',
+                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand600)),
+                ]),
+              ),
+            ),
+            if (_submitted && _bytes == null)
+              const Padding(padding: EdgeInsets.only(top: 5, left: 2),
+                child: Text('Please choose a file.', style: TextStyle(fontSize: 12, color: Color(0xFFD13438)))),
+            if (big)
+              Padding(padding: const EdgeInsets.only(top: 6, left: 2), child: Row(children: [
+                const Icon(Icons.warning_amber_rounded, size: 14, color: _amber600),
+                const SizedBox(width: 5),
+                Expanded(child: Text('Large file (${studentDocSize(_bytes!.length)}). Files over 10 MB may upload slowly or fail.',
+                    style: const TextStyle(fontSize: 12, color: _amber600, fontWeight: FontWeight.w500))),
+              ])),
+            const SizedBox(height: 14),
+            _label('Document name', required: true),
+            TextFormField(
+              controller: _name,
+              focusNode: _nameFocus,
+              enabled: !_busy,
+              textCapitalization: TextCapitalization.words,
+              onFieldSubmitted: (_) => _submit(),
+              validator: (v) {
+                final t = (v ?? '').trim();
+                if (t.isEmpty) return 'Please enter a document name.';
+                if (t.length > 80) return 'Keep the name under 80 characters.';
+                return null;
+              },
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              decoration: const InputDecoration(hintText: 'e.g. Birth Certificate'),
+            ),
+            const SizedBox(height: 8),
+            Wrap(spacing: 6, runSpacing: 6, children: [
+              for (final s in kStudentDocSuggestions)
+                _SuggestionChip(
+                  label: s,
+                  selected: _name.text.trim() == s,
+                  onTap: _busy ? null : () {
+                    setState(() {
+                      if (s == 'Other') { _name.clear(); } else { _name.text = s; }
+                    });
+                    if (s == 'Other') _nameFocus.requestFocus();
+                    _form.currentState?.validate();
+                  },
+                ),
+            ]),
+            if (_serverError != null) ...[
+              const SizedBox(height: 12),
+              _InlineError(_serverError!),
+            ],
+            const SizedBox(height: 18),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              AppButton(label: 'Cancel', variant: AppButtonVariant.secondary,
+                  onPressed: _busy ? null : () => Navigator.of(context).pop()),
+              const SizedBox(width: 8),
+              AppButton(
+                label: uploadMode ? 'Upload' : 'Add document',
+                icon: uploadMode ? Icons.cloud_upload_outlined : Icons.add,
+                busyLabel: 'Uploading…',
+                loading: _busy,
+                onPressed: _submit,
+              ),
+            ]),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _SuggestionChip extends StatelessWidget {
+  const _SuggestionChip({required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(8),
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: selected ? _brand100 : context.surface2,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: selected ? _brand600.withValues(alpha: 0.5) : context.border),
+      ),
+      child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: selected ? _brand600 : context.textSub)),
+    ),
+  );
+}
+
+class _InlineError extends StatelessWidget {
+  const _InlineError(this.message);
+  final String message;
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+    decoration: BoxDecoration(color: _danger.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _danger.withValues(alpha: 0.25))),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Icon(Icons.error_outline_rounded, size: 16, color: _danger),
+      const SizedBox(width: 8),
+      Expanded(child: Text(message, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: _danger))),
+    ]),
+  );
+}
 
 // ══════════════════════════════════════════════════════════════════════
 class AddStudentScreen extends StatefulWidget {
@@ -91,13 +360,15 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   String? _sponsorName;
 
   bool _saving = false;
+  // Set on the first Enrol attempt so non-text fields (date of birth, centre)
+  // show their message inline instead of a toast.
+  bool _submitted = false;
   Uint8List? _photoBytes;
 
-  // Documents picked before the student exists — nothing to upload to yet, so
-  // these are held here and pushed to /students/:id/documents right after
-  // creation succeeds (mirrors the growth-record seeding below).
-  final Map<String, ({String filename, Uint8List bytes})> _pendingDocs = {};
-  final Map<String, List<({String filename, Uint8List bytes})>> _pendingMultiDocs = {};
+  // Documents picked before the student exists. They're bundled into the
+  // POST /students body so they're created with the real student id (and
+  // survive the approval queue verbatim).
+  final List<PickedStudentDoc> _docs = [];
 
   // loaded from API
   List<({String id, String name})> _centres = [];
@@ -167,7 +438,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       final cRaw = await apiClient.get('/students/centers');
 
       final cData = cRaw['data'];
-      final cList = cData is List ? cData as List<dynamic> : <dynamic>[];
+      final cList = cData is List ? cData : <dynamic>[];
       final centres = cList.map<({String id, String name})>((c) {
         final m = c as Map<String, dynamic>;
         return (id: m['id'] as String, name: m['name'] as String);
@@ -233,11 +504,11 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   void _showSponsorPicker() {
     final searchCtrl = TextEditingController();
     String query = '';
-    showModalBottomSheet(
+    showAppSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: context.cardBg,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (_) => StatefulBuilder(builder: (ctx, setSheet) {
         final q = query.trim().toLowerCase();
         final qDigits = q.replaceAll(RegExp(r'[^0-9]'), '');
@@ -252,55 +523,59 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         return Padding(
           padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
           child: SizedBox(
-            height: MediaQuery.of(ctx).size.height * 0.7,
+            height: MediaQuery.of(ctx).size.height * 0.62,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const SizedBox(height: 8),
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: context.border, borderRadius: BorderRadius.circular(2))),
-              const SizedBox(height: 14),
-              const Text('Link a Donor as Sponsor', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 12),
+              const SheetHandle(margin: EdgeInsets.only(top: 10)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
+                child: Row(children: [
+                  const Expanded(child: Text('Link a donor as sponsor', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+                  IconButton(tooltip: 'Close', icon: Icon(Icons.close_rounded, size: 20, color: context.textSub),
+                      onPressed: () => Navigator.pop(ctx)),
+                ]),
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: TextField(
                   controller: searchCtrl,
-                  autofocus: false,
                   onChanged: (v) => setSheet(() => query = v),
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                   decoration: InputDecoration(
                     hintText: 'Search by name or mobile number',
-                    hintStyle: TextStyle(color: context.textHint, fontWeight: FontWeight.w400),
-                    prefixIcon: Icon(Icons.search, color: context.textHint, size: 20),
+                    prefixIcon: Icon(Icons.search, color: context.textHint, size: 18),
                     suffixIcon: query.isEmpty ? null : IconButton(
-                      icon: Icon(Icons.close, color: context.textHint, size: 18),
+                      icon: Icon(Icons.close, color: context.textHint, size: 16),
                       onPressed: () { searchCtrl.clear(); setSheet(() => query = ''); },
                     ),
-                    filled: true, fillColor: _surface2,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Expanded(
                 child: filtered.isEmpty
-                    ? Center(child: Text(_apiDonors.isEmpty ? 'No donors available' : 'No donors match your search',
-                        style: const TextStyle(color: _onSurface3, fontWeight: FontWeight.w600)))
-                    : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+                    ? Center(child: EmptyState(
+                        icon: Icons.person_search_outlined,
+                        title: _apiDonors.isEmpty ? 'No donors yet' : 'No donors match your search',
+                        message: _apiDonors.isEmpty ? 'Add a donor first, then link them here.' : null,
+                      ))
+                    : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
                         itemCount: filtered.length,
-                        separatorBuilder: (_, __) => Divider(height: 1, color: context.border),
                         itemBuilder: (_, i) {
                           final d = filtered[i];
                           return ListTile(
-                            leading: CircleAvatar(backgroundColor: _brand100, child: Text(d.name.isNotEmpty ? d.name[0].toUpperCase() : '?', style: const TextStyle(color: _brand600, fontWeight: FontWeight.w800))),
-                            title: Text(d.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            dense: true,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            leading: CircleAvatar(radius: 17, backgroundColor: _brand100,
+                                child: Text(d.name.isNotEmpty ? d.name[0].toUpperCase() : '?',
+                                    style: const TextStyle(color: _brand600, fontWeight: FontWeight.w700, fontSize: 13))),
+                            title: Text(d.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                             subtitle: Text([d.city, d.phone].where((s) => s.isNotEmpty).join('  ·  '),
-                                style: TextStyle(color: context.textHint, fontWeight: FontWeight.w500)),
-                            trailing: Icon(Icons.chevron_right, color: context.textHint),
+                                style: TextStyle(color: context.textHint, fontSize: 12)),
+                            trailing: Icon(Icons.chevron_right, size: 18, color: context.textHint),
                             onTap: () {
                               setState(() { _sponsorId = d.id; _sponsorName = d.name; });
-                              Navigator.pop(context);
+                              Navigator.pop(ctx);
                             },
                           );
                         },
@@ -320,41 +595,28 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
     return '${parts[2]}-${parts[1].padLeft(2,'0')}-${parts[0].padLeft(2,'0')}';
   }
 
-  void _setPendingDoc(String category, String? filename, Uint8List? bytes) {
-    if (filename != null && bytes != null) {
-      _pendingDocs[category] = (filename: filename, bytes: bytes);
-    } else {
-      _pendingDocs.remove(category);
-    }
-  }
-
-  void _setPendingMultiDocs(String category, List<({String filename, Uint8List bytes})> files) {
-    _pendingMultiDocs[category] = files;
+  Future<void> _addDocument() async {
+    final doc = await showAppSheet<PickedStudentDoc>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const StudentDocumentSheet(),
+    );
+    if (doc == null || !mounted) return;
+    setState(() => _docs.add(doc));
   }
 
   Future<void> _save() async {
-    if (!_form.currentState!.validate()) return;
-    if (_dob.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Please select Date of Birth', style: TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: _coral500, behavior: SnackBarBehavior.floating,
-      ));
-      return;
-    }
-    if (_centreId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Please select a centre', style: TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: _coral500, behavior: SnackBarBehavior.floating,
-      ));
-      return;
-    }
+    if (_saving) return;
+    setState(() => _submitted = true);
+    final formOk = _form.currentState!.validate();
     // The sponsorship is only created with an amount (backend requires it).
     final sponsorAmount = int.tryParse(_sponsorAmt.text.trim());
-    if (_sponsored && _sponsorId != null && (sponsorAmount == null || sponsorAmount < 1)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Enter the annual sponsorship amount', style: TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: _coral500, behavior: SnackBarBehavior.floating,
-      ));
+    if (!formOk || _dob.isEmpty || _centreId.isEmpty) {
+      final missing = [
+        if (_dob.isEmpty) 'Date of birth is required.',
+        if (_centreId.isEmpty) 'Select a centre.',
+      ].join(' ');
+      AppToast.error(context, 'Please fix the highlighted fields', detail: missing.isEmpty ? null : missing);
       return;
     }
     setState(() => _saving = true);
@@ -366,10 +628,11 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         if (_schoolAddr.text.trim().isNotEmpty) 'Institution address: ${_schoolAddr.text.trim()}',
       ].join('\n');
       final photoB64 = _photoBytes != null ? base64Encode(_photoBytes!) : null;
+      final genderKey = switch (_gender) { 'Female' => 'FEMALE', 'Other' => 'OTHER', _ => 'MALE' };
       final body = <String, dynamic>{
         'name':       _name.text.trim(),
         'dob':        _toIso(_dob),
-        'gender':     _gender == 'Male' ? 'MALE' : 'FEMALE',
+        'gender':     genderKey,
         'centerId':   _centreId,
         'status':     _status,
         if (_categoryId != null) 'categoryId': _categoryId,
@@ -404,25 +667,18 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         if (_incomeCertRdNo.text.trim().isNotEmpty) 'incomeCertificateRdNumber': _incomeCertRdNo.text.trim(),
       };
 
-      // Bundle any documents picked before the student exists into this same
-      // request (rather than a separate follow-up call) — so they're created
-      // together with the real new student id, and survive verbatim if this
-      // whole request gets queued for Super Admin approval instead of
-      // executing immediately (see CreateStudentDto.documents on the backend).
+      // Bundle the documents into this same request (rather than a separate
+      // follow-up call) — so they're created together with the real new
+      // student id, and survive verbatim if this whole request gets queued
+      // for Super Admin approval (see CreateStudentDto.documents).
       final documents = <Map<String, dynamic>>[
-        for (final entry in _pendingDocs.entries)
+        for (final d in _docs)
           {
-            'category': entry.key,
-            'fileName': entry.value.filename,
-            'data': base64Encode(entry.value.bytes),
+            'category': d.name,
+            'fileName': d.fileName,
+            'mimeType': studentDocMime(d.fileName),
+            'data': base64Encode(d.bytes),
           },
-        for (final entry in _pendingMultiDocs.entries)
-          for (final file in entry.value)
-            {
-              'category': entry.key,
-              'fileName': file.filename,
-              'data': base64Encode(file.bytes),
-            },
       ];
       if (documents.isNotEmpty) body['documents'] = documents;
 
@@ -437,16 +693,12 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
             (e.type == DioExceptionType.receiveTimeout || e.type == DioExceptionType.sendTimeout);
         if (mounted) {
           setState(() => _saving = false);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(
-                timedOut
-                    ? 'The server took too long to answer. Check the Students list before trying again, the child may already be saved.'
-                    : ApiClient.errorMessage(e, fallback: 'Could not save the child.'),
-                style: const TextStyle(fontWeight: FontWeight.w700)),
-            backgroundColor: _coral500, behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 6),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ));
+          if (timedOut) {
+            AppToast.warning(context, 'The server took too long to answer',
+                detail: 'Check the Children list before trying again — the child may already be saved.');
+          } else {
+            AppToast.error(context, 'Couldn’t enrol the child', detail: ApiClient.errorMessage(e, fallback: 'Could not save the child.'));
+          }
         }
         return;
       }
@@ -457,20 +709,8 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       if (pending) {
         if (mounted) {
           setState(() => _saving = false);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.hourglass_top_rounded, color: Colors.white, size: 18),
-              const SizedBox(width: 8),
-              Flexible(child: Text(
-                documents.isNotEmpty
-                    ? 'Submitted for Super Admin approval, documents included'
-                    : 'Submitted for Super Admin approval',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              )),
-            ]),
-            backgroundColor: _amber600, behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ));
+          AppToast.warning(context, 'Submitted for Super Admin approval',
+              detail: documents.isNotEmpty ? 'Documents are included with the request.' : null);
           context.go('/students');
         }
         return;
@@ -500,13 +740,14 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         'id':          studentId,
         'childId':     created?['childId'] ?? 'SKT-C-new',
         'name':        _name.text.trim(),
-        'gender':      _gender == 'Male' ? 'MALE' : 'FEMALE',
+        'gender':      genderKey,
         'dob':         _toIso(_dob),
         'status':      _status,
         'educationLevel': _eduLevel,
         'class':       _classGrade.text.trim(),
         'school':      _schoolName.text.trim(),
-        'center':      {'name': _centreName},
+        'center':      {'id': _centreId, 'name': _centreName},
+        'centerId':    _centreId,
         // Same nested shape the backend returns, so the detail screen and
         // list card show the category before the next server refresh.
         if (_categoryId != null)
@@ -561,19 +802,11 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Row(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
-            const SizedBox(width: 8),
-            Flexible(child: Text(
-              sponsorWarning == null ? 'Child enrolled successfully!' : 'Child enrolled, but: $sponsorWarning',
-              style: const TextStyle(fontWeight: FontWeight.w700))),
-          ]),
-          backgroundColor: sponsorWarning == null ? _brand600 : _amber600,
-          behavior: SnackBarBehavior.floating,
-          width: sponsorWarning == null ? 280 : null,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ));
+        if (sponsorWarning == null) {
+          AppToast.success(context, 'Child enrolled', detail: _name.text.trim());
+        } else {
+          AppToast.warning(context, 'Child enrolled, but the sponsor wasn’t linked', detail: sponsorWarning);
+        }
         ProviderScope.containerOf(context).read(dashboardRefreshProvider.notifier).state++;
         context.go('/students/$studentId');
       }
@@ -581,34 +814,153 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       // Anything unexpected must still end the spinner and say what happened.
       if (mounted) {
         setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(ApiClient.errorMessage(e, fallback: 'Could not save the child.'),
-              style: const TextStyle(fontWeight: FontWeight.w700)),
-          backgroundColor: _coral500, behavior: SnackBarBehavior.floating,
-        ));
+        AppToast.error(context, 'Couldn’t enrol the child', detail: ApiClient.errorMessage(e, fallback: 'Could not save the child.'));
       }
     }
+  }
+
+  // Two short fields side by side on wider screens, stacked on phones.
+  Widget _pair(Widget a, Widget b) => LayoutBuilder(builder: (_, c) {
+    if (c.maxWidth < 420) return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [a, const SizedBox(height: 12), b]);
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(child: a), const SizedBox(width: 12), Expanded(child: b),
+    ]);
+  });
+
+  Widget _field(String label, TextEditingController ctrl, {String hint = '', bool required = false, TextInputType? keyboardType,
+      int maxLines = 1, List<TextInputFormatter>? inputFormatters, String? Function(String?)? validator,
+      TextCapitalization cap = TextCapitalization.words}) =>
+    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _FieldLabel(label, required: required),
+      _textField(context, ctrl, hint: hint, keyboardType: keyboardType, maxLines: maxLines,
+          inputFormatters: inputFormatters, validator: validator, textCapitalization: cap, enabled: !_saving),
+    ]);
+
+  Widget _optionChips({required List<({String key, String label})> options, required String? value,
+      required ValueChanged<String?> onChanged, bool allowClear = true}) =>
+    Wrap(spacing: 6, runSpacing: 6, children: options.map((o) {
+      final active = value == o.key;
+      return InkWell(
+        borderRadius: BorderRadius.circular(8),
+        // Tapping the selected chip clears it — these stay optional.
+        onTap: () => onChanged(active && allowClear ? null : o.key),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: active ? _brand100 : context.surface2,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: active ? _brand600.withValues(alpha: 0.6) : context.border),
+          ),
+          child: Text(o.label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600,
+            color: active ? _brand600 : context.textSub)),
+        ),
+      );
+    }).toList());
+
+  Widget _documentsSection() => _SectionCard(
+    title: 'Documents',
+    trailing: AppButton(label: 'Add document', icon: Icons.add, dense: true, variant: AppButtonVariant.secondary,
+        onPressed: _saving ? null : _addDocument),
+    children: [
+      if (_docs.isEmpty)
+        InkWell(
+          onTap: _saving ? null : _addDocument,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
+            decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: context.border)),
+            child: Column(children: [
+              Icon(Icons.upload_file_outlined, size: 22, color: context.textHint),
+              const SizedBox(height: 6),
+              Text('No documents added', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.textSub)),
+              const SizedBox(height: 2),
+              Text('Aadhaar, birth certificate, TC, medical reports, family photo…',
+                  textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: context.textHint)),
+            ]),
+          ),
+        )
+      else
+        Container(
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), border: Border.all(color: context.border)),
+          clipBehavior: Clip.antiAlias,
+          child: Column(children: [
+            for (var i = 0; i < _docs.length; i++) _pendingDocRow(i),
+          ]),
+        ),
+      if (_docs.isNotEmpty) ...[
+        const SizedBox(height: 6),
+        Text('Uploaded together with the child when you enrol.',
+            style: TextStyle(fontSize: 11.5, color: context.textHint)),
+      ],
+    ],
+  );
+
+  Widget _pendingDocRow(int i) {
+    final d = _docs[i];
+    final big = d.bytes.length > kStudentDocWarnBytes;
+    return Container(
+      constraints: const BoxConstraints(minHeight: 56),
+      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+      decoration: BoxDecoration(border: i == _docs.length - 1 ? null : Border(bottom: BorderSide(color: context.border))),
+      child: Row(children: [
+        Container(width: 32, height: 32,
+          decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8)),
+          child: Icon(studentDocIcon(d.fileName), size: 16, color: _brand600)),
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          Text(d.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textPrimary)),
+          const SizedBox(height: 2),
+          Text('${d.fileName}  ·  ${studentDocSize(d.bytes.length)}', maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: big ? _amber600 : context.textHint)),
+        ])),
+        IconButton(
+          tooltip: 'View',
+          visualDensity: VisualDensity.compact,
+          icon: Icon(Icons.visibility_outlined, size: 18, color: context.textSub),
+          onPressed: () => openBytesInBrowser(d.bytes, d.fileName),
+        ),
+        IconButton(
+          tooltip: 'Remove',
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.close_rounded, size: 18, color: _danger),
+          onPressed: _saving ? null : () => setState(() => _docs.removeAt(i)),
+        ),
+      ]),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
+    final wide = MediaQuery.sizeOf(context).width >= 700;
+    final dobMissing = _submitted && _dob.isEmpty;
     return Scaffold(
       body: Column(children: [
-        // ── Compact header (back + title only) ────────────────────
+        // ── Compact header: back, title, primary action ───────────
         Container(
-          padding: EdgeInsets.fromLTRB(4, top + 6, 16, 10),
-          decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Color(0xFFE5EBE9)))),
+          padding: EdgeInsets.fromLTRB(8, top + 10, 16, 10),
+          decoration: BoxDecoration(color: context.headerBg, border: Border(bottom: BorderSide(color: context.border))),
           child: Row(children: [
-            IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: Color(0xFF15211E)), onPressed: () => context.go('/students')),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Add Child', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF15211E))),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(6)),
-                child: const Text('ID  ·  SKT-C-auto', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: _brand600)),
-              ),
-            ]),
+            IconButton(
+              tooltip: 'Back to Children',
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+              onPressed: _saving ? null : () => context.go('/students'),
+            ),
+            const SizedBox(width: 2),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              const Text('Add Child', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.2)),
+              Text('Child ID is generated automatically', style: TextStyle(fontSize: 12.5, color: context.textSub, fontWeight: FontWeight.w500)),
+            ])),
+            if (wide) ...[
+              AppButton(label: 'Cancel', variant: AppButtonVariant.secondary,
+                  onPressed: _saving ? null : () => context.go('/students')),
+              const SizedBox(width: 8),
+            ],
+            AppButton(label: 'Enrol Child', icon: Icons.check_rounded, busyLabel: 'Saving…', loading: _saving, onPressed: _save),
           ]),
         ),
 
@@ -616,41 +968,38 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         Expanded(
           child: Form(
             key: _form,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-              child: Center(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              child: Align(
+                alignment: Alignment.topCenter,
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(),
+                  constraints: const BoxConstraints(maxWidth: 880),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-
-                // ── Profile Photo ─────────────────────────────────────
-                Center(child: PhotoPickerCircle(
-                  label: 'Child Photo', size: 88,
-                  onImageChanged: (b) => setState(() => _photoBytes = b),
-                )),
-                const SizedBox(height: 16),
 
                 // ── Basic Profile ────────────────────────────────────
                 _SectionCard(title: 'Basic Profile', children: [
-                  _FieldLabel('Centre'),
+                  Center(child: PhotoPickerCircle(
+                    label: 'Child Photo', size: 76,
+                    onImageChanged: (b) => setState(() => _photoBytes = b),
+                  )),
+                  const SizedBox(height: 12),
+                  const _FieldLabel('Centre', required: true),
                   if (_loadingForm)
-                    const Padding(padding: EdgeInsets.symmetric(vertical: 4),
-                      child: Text('Loading centres…', style: TextStyle(color: _onSurface3, fontSize: 13)))
+                    const Padding(padding: EdgeInsets.symmetric(vertical: 4), child: Skeleton(height: 40, radius: 10))
                   else if (_centres.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(children: [
-                        const Expanded(child: Text('No centres yet — add one first.', style: TextStyle(color: _onSurface3, fontSize: 13))),
-                        TextButton(
-                          onPressed: () async {
-                            await context.push('/centres');
-                            if (mounted) _loadFormData();
-                          },
-                          child: const Text('Add Centre', style: TextStyle(fontWeight: FontWeight.w700)),
-                        ),
-                      ]),
-                    )
+                    Row(children: [
+                      Expanded(child: Text('No centres yet — add one first.',
+                          style: TextStyle(color: _submitted ? const Color(0xFFD13438) : context.textHint, fontSize: 13))),
+                      AppButton(
+                        label: 'Add Centre', icon: Icons.add, dense: true, variant: AppButtonVariant.secondary,
+                        onPressed: () async {
+                          await context.push('/centres');
+                          if (mounted) _loadFormData();
+                        },
+                      ),
+                    ])
                   else
                     _SegmentedToggle(
                       options: _centres.map((c) => c.name).toList(),
@@ -660,324 +1009,192 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                         _centreId = _centres.firstWhere((c) => c.name == v, orElse: () => _centres.first).id;
                       }),
                     ),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Full Name'),
-                  _textField(context, _name, hint: "Child's full name", validator: (v) => v!.isEmpty ? 'Required' : null),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Date of Birth'),
-                  _DateTapField(value: _dob, hint: 'DD / MM / YYYY', onTap: () => _pickDate((v) => setState(() => _dob = v))),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Gender'),
-                  _SegmentedToggle(options: const ['Male', 'Female'], value: _gender, onChanged: (v) => setState(() => _gender = v)),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Aadhaar Number'),
-                  _textField(context, _aadhaar, hint: '0000 0000 0000', keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(12)]),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Date of Admission'),
-                  _DateTapField(value: _admDate, hint: 'DD / MM / YYYY', onTap: () => _pickDate((v) => setState(() => _admDate = v))),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Current Status'),
+                  const SizedBox(height: 12),
+                  _field('Full Name', _name, hint: "Child's full name", required: true,
+                    validator: (v) => (v ?? '').trim().isEmpty ? 'Please enter the child’s name.' : null),
+                  const SizedBox(height: 12),
+                  _pair(
+                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const _FieldLabel('Date of Birth', required: true),
+                      _DateTapField(value: _dob, hint: 'DD / MM / YYYY', error: dobMissing,
+                          onTap: _saving ? null : () => _pickDate((v) => setState(() => _dob = v))),
+                      if (dobMissing)
+                        const Padding(padding: EdgeInsets.only(top: 5, left: 2),
+                          child: Text('Please select the date of birth.', style: TextStyle(fontSize: 12, color: Color(0xFFD13438)))),
+                    ]),
+                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const _FieldLabel('Date of Admission'),
+                      _DateTapField(value: _admDate, hint: 'DD / MM / YYYY',
+                          onTap: _saving ? null : () => _pickDate((v) => setState(() => _admDate = v))),
+                    ]),
+                  ),
+                  const SizedBox(height: 12),
+                  const _FieldLabel('Gender'),
+                  _SegmentedToggle(options: const ['Male', 'Female', 'Other'], value: _gender, onChanged: (v) => setState(() => _gender = v)),
+                  const SizedBox(height: 12),
+                  _field('Aadhaar Number', _aadhaar, hint: '12-digit number', keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(12)],
+                    validator: (v) => (v ?? '').isNotEmpty && v!.length != 12 ? 'Aadhaar number must be 12 digits.' : null),
+                  const SizedBox(height: 12),
+                  const _FieldLabel('Current Status'),
                   _StatusChips(value: _status, onChanged: (v) => setState(() => _status = v)),
                   if (_categories.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-                    _FieldLabel('Support Category (optional)'),
-                    Wrap(spacing: 8, runSpacing: 8, children: _categories.map((c) {
-                      final active = _categoryId == c.id;
-                      return GestureDetector(
-                        // Tapping the selected chip clears it — category stays optional.
-                        onTap: () => setState(() => _categoryId = active ? null : c.id),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: active ? _brand100 : context.scaffoldBg,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: active ? _brand600 : context.border),
-                          ),
-                          child: Text(c.label, style: TextStyle(
-                            fontSize: 12.5, fontWeight: FontWeight.w700,
-                            color: active ? _brand600 : context.textSub)),
-                        ),
-                      );
-                    }).toList()),
+                    const SizedBox(height: 12),
+                    const _FieldLabel('Support Category (optional)'),
+                    _optionChips(
+                      options: [for (final c in _categories) (key: c.id, label: c.label)],
+                      value: _categoryId,
+                      onChanged: (v) => setState(() => _categoryId = v),
+                    ),
                   ],
                 ]),
                 const SizedBox(height: 14),
 
                 // ── Family Details ───────────────────────────────────
                 _SectionCard(title: 'Family Details', children: [
-                  _FieldLabel("Father's Name"),
-                  _textField(context, _fatherName, hint: "Father's name"),
-                  const SizedBox(height: 14),
-                  _FieldLabel("Mother's Name"),
-                  _textField(context, _motherName, hint: "Mother's name"),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Guardian'),
-                  _textField(context, _guardian, hint: 'Guardian name'),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Relationship'),
-                  _textField(context, _relation, hint: 'e.g. Mother'),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Mobile Number'),
+                  _pair(_field("Father's Name", _fatherName, hint: "Father's name"),
+                        _field("Mother's Name", _motherName, hint: "Mother's name")),
+                  const SizedBox(height: 12),
+                  _pair(_field('Guardian', _guardian, hint: 'Guardian name'),
+                        _field('Relationship', _relation, hint: 'e.g. Mother')),
+                  const SizedBox(height: 12),
+                  const _FieldLabel('Mobile Number', required: true),
                   PhoneFieldWithCode(ctrl: _mobile, required: true),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Address'),
-                  _textField(context, _address, hint: 'Residential address', maxLines: 2),
-                  const SizedBox(height: 14),
-                  _FieldLabel('SAT Number'),
-                  _textField(context, _satNo, hint: 'SAT-0000'),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Family Photo'),
-                  _UploadBox(label: 'Upload family photo', icon: Icons.family_restroom_outlined,
-                    onFilesChanged: (f) => _setPendingMultiDocs('Family Photo', f)),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Family Background Notes'),
-                  _textField(context, _familyNotes, hint: 'Context about the family…', maxLines: 3),
-                  const SizedBox(height: 14),
-                  _FieldLabel("Parents' Aadhaar Photo"),
-                  _UploadBox(label: "Upload parents' Aadhaar", icon: Icons.badge_outlined,
-                    onFilesChanged: (f) => _setPendingMultiDocs("Parents' Aadhaar Photo", f)),
+                  const SizedBox(height: 12),
+                  _field('Address', _address, hint: 'Residential address', maxLines: 2),
+                  const SizedBox(height: 12),
+                  _pair(_field('SAT Number', _satNo, hint: 'SAT-0000'),
+                        _field('Sibling Name(s)', _siblingNames, hint: 'If any, comma-separated')),
+                  const SizedBox(height: 12),
+                  _field('Family Background Notes', _familyNotes, hint: 'Context about the family…', maxLines: 3,
+                      cap: TextCapitalization.sentences),
                 ]),
                 const SizedBox(height: 14),
 
                 // ── Identity & Government IDs ────────────────────────
                 _SectionCard(title: 'Identity & Government IDs', children: [
-                  _FieldLabel('PEN Number'),
-                  _textField(context, _penNo, hint: 'Permanent Enrolment Number'),
-                  const SizedBox(height: 14),
-                  _FieldLabel('CWC Number'),
-                  _textField(context, _cwcNo, hint: 'Child Welfare Committee number'),
-                  const SizedBox(height: 14),
-                  _FieldLabel('ABHA Card Number'),
-                  _textField(context, _abhaNo, hint: 'Ayushman Bharat Health Account'),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Ration Card Number'),
-                  _textField(context, _rationCardNo, hint: 'Ration card number'),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Mission Vatsalya Number'),
-                  _textField(context, _missionVatsalyaNo, hint: 'Mission Vatsalya scheme number'),
-                  const SizedBox(height: 14),
-                  Row(children: [
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _FieldLabel('Caste'),
-                      _textField(context, _caste, hint: 'Caste'),
-                    ])),
-                    const SizedBox(width: 12),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _FieldLabel('Sub-caste'),
-                      _textField(context, _subCaste, hint: 'Sub-caste'),
-                    ])),
-                  ]),
+                  _pair(_field('PEN Number', _penNo, hint: 'Permanent Enrolment Number'),
+                        _field('CWC Number', _cwcNo, hint: 'Child Welfare Committee number')),
+                  const SizedBox(height: 12),
+                  _pair(_field('ABHA Card Number', _abhaNo, hint: 'Ayushman Bharat Health Account'),
+                        _field('Ration Card Number', _rationCardNo, hint: 'Ration card number')),
+                  const SizedBox(height: 12),
+                  _field('Mission Vatsalya Number', _missionVatsalyaNo, hint: 'Mission Vatsalya scheme number'),
+                  const SizedBox(height: 12),
+                  _pair(_field('Caste', _caste, hint: 'Caste'), _field('Sub-caste', _subCaste, hint: 'Sub-caste')),
                 ]),
                 const SizedBox(height: 14),
 
                 // ── Financial & Welfare Details ──────────────────────
                 _SectionCard(title: 'Financial & Welfare Details', children: [
-                  _FieldLabel('Sibling Name(s)'),
-                  _textField(context, _siblingNames, hint: 'If any, comma-separated'),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Bank Account Details'),
-                  _textField(context, _bankDetails, hint: 'Account no., IFSC, bank name', maxLines: 2),
-                  const SizedBox(height: 14),
-                  Row(children: [
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _FieldLabel('Income Certificate Amount'),
-                      _textField(context, _incomeCertAmt, hint: '₹ amount', keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
-                    ])),
-                    const SizedBox(width: 12),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _FieldLabel('Income Cert. RD Number'),
-                      _textField(context, _incomeCertRdNo, hint: 'RD number'),
-                    ])),
-                  ]),
+                  _field('Bank Account Details', _bankDetails, hint: 'Account no., IFSC, bank name', maxLines: 2,
+                      cap: TextCapitalization.none),
+                  const SizedBox(height: 12),
+                  _pair(
+                    _field('Income Certificate Amount', _incomeCertAmt, hint: '₹ amount', keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+                    _field('Income Cert. RD Number', _incomeCertRdNo, hint: 'RD number'),
+                  ),
                 ]),
                 const SizedBox(height: 14),
 
                 // ── Educational Details ──────────────────────────────
                 _SectionCard(title: 'Educational Details', children: [
-                  _FieldLabel('Education Level (optional)'),
+                  const _FieldLabel('Education Level (optional)'),
                   if (StudentLookups.educationLevels.isEmpty)
                     Text('No education levels yet. Add them in Settings → Education Levels.',
                         style: TextStyle(fontSize: 12.5, color: context.textHint, fontWeight: FontWeight.w500))
                   else
-                    Wrap(spacing: 8, runSpacing: 8, children: StudentLookups.educationLevels.map((o) {
-                      final active = _eduLevel == o.key;
-                      return GestureDetector(
-                        // Tapping the selected level clears it — it stays optional.
-                        onTap: () => setState(() => _eduLevel = active ? null : o.key),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: active ? _brand100 : context.scaffoldBg,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: active ? _brand600 : context.border),
-                          ),
-                          child: Text(o.label, style: TextStyle(
-                            fontSize: 12.5, fontWeight: FontWeight.w700,
-                            color: active ? _brand600 : context.textSub)),
-                        ),
-                      );
-                    }).toList()),
-                  const SizedBox(height: 14),
-                  _FieldLabel('School / College Name'),
-                  _textField(context, _schoolName, hint: 'Institution name'),
-                  const SizedBox(height: 14),
-                  Row(children: [
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _FieldLabel('Class / Grade'),
-                      _textField(context, _classGrade, hint: 'e.g. Class 6'),
-                    ])),
-                    const SizedBox(width: 12),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _FieldLabel('Admission No.'),
-                      _textField(context, _admissionNo, hint: 'Number'),
-                    ])),
-                  ]),
-                  const SizedBox(height: 14),
-                  Row(children: [
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _FieldLabel('Academic Year'),
-                      _textField(context, _acadYear, hint: '2025-26'),
-                    ])),
-                    const SizedBox(width: 12),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _FieldLabel('Performance'),
-                      _textField(context, _performance, hint: 'e.g. Above Average'),
-                    ])),
-                  ]),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Address'),
-                  _textField(context, _schoolAddr, hint: 'School / college address', maxLines: 2),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Educational Documents'),
-                  _UploadBox(label: 'Upload report card / TC / certificates', icon: Icons.description_outlined,
-                    onFilesChanged: (f) => _setPendingMultiDocs('Educational Documents', f)),
+                    _optionChips(
+                      options: [for (final o in StudentLookups.educationLevels) (key: o.key, label: o.label)],
+                      value: _eduLevel,
+                      onChanged: (v) => setState(() => _eduLevel = v),
+                    ),
+                  const SizedBox(height: 12),
+                  _field('School / College Name', _schoolName, hint: 'Institution name'),
+                  const SizedBox(height: 12),
+                  _pair(_field('Class / Grade', _classGrade, hint: 'e.g. Class 6'),
+                        _field('Admission No.', _admissionNo, hint: 'Number')),
+                  const SizedBox(height: 12),
+                  _pair(_field('Academic Year', _acadYear, hint: '2025-26'),
+                        _field('Performance', _performance, hint: 'e.g. Above Average')),
+                  const SizedBox(height: 12),
+                  _field('Institution Address', _schoolAddr, hint: 'School / college address', maxLines: 2),
                 ]),
                 const SizedBox(height: 14),
 
                 // ── Health & Medical ─────────────────────────────────
                 _SectionCard(title: 'Health & Medical', children: [
-                  Row(children: [
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _FieldLabel('Height (cm)'),
-                      _textField(context, _height, hint: 'e.g. 132', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-                    ])),
-                    const SizedBox(width: 12),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      _FieldLabel('Weight (kg)'),
-                      _textField(context, _weight, hint: 'e.g. 28', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-                    ])),
-                  ]),
+                  _pair(
+                    _field('Height (cm)', _height, hint: 'e.g. 132', keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      validator: (v) => (v ?? '').trim().isNotEmpty && double.tryParse(v!.trim()) == null ? 'Enter a number.' : null),
+                    _field('Weight (kg)', _weight, hint: 'e.g. 28', keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      validator: (v) => (v ?? '').trim().isNotEmpty && double.tryParse(v!.trim()) == null ? 'Enter a number.' : null),
+                  ),
                   Padding(padding: const EdgeInsets.only(top: 6), child: Text(
                     'Saved as the first dated entry in Growth History (see the Progress tab).',
                     style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w500))),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Medical History'),
-                  _textField(context, _medHistory, hint: 'Allergies, conditions, notes…', maxLines: 3),
-                  const SizedBox(height: 14),
-                  _FieldLabel('Medical Documents'),
-                  _UploadBox(label: 'Upload medical reports / prescriptions', icon: Icons.medical_services_outlined,
-                    onFilesChanged: (f) => _setPendingMultiDocs('Medical Documents', f)),
+                  const SizedBox(height: 12),
+                  _field('Medical History', _medHistory, hint: 'Allergies, conditions, notes…', maxLines: 3,
+                      cap: TextCapitalization.sentences),
                 ]),
                 const SizedBox(height: 14),
 
                 // ── Sponsorship ──────────────────────────────────────
                 _SectionCard(title: 'Sponsorship', children: [
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Sponsored Child?', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.textPrimary)),
+                  Row(children: [
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Sponsored child?', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textPrimary)),
                       const SizedBox(height: 2),
-                      Text('Link a donor as sponsor', style: TextStyle(fontSize: 12.5, color: context.textHint, fontWeight: FontWeight.w500)),
-                    ]),
-                    Switch(value: _sponsored, onChanged: (v) { setState(() { _sponsored = v; if (!v) { _sponsorId = null; _sponsorName = null; } else { _showSponsorPicker(); } }); }, activeColor: _brand600),
+                      Text('Link a donor as sponsor', style: TextStyle(fontSize: 12, color: context.textHint)),
+                    ])),
+                    Transform.scale(scale: 0.8, child: Switch(
+                      value: _sponsored,
+                      onChanged: (v) { setState(() { _sponsored = v; if (!v) { _sponsorId = null; _sponsorName = null; } }); if (v) _showSponsorPicker(); },
+                    )),
                   ]),
                   if (_sponsored && _sponsorName != null) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     Container(
-                      padding: const EdgeInsets.all(13),
-                      decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(14)),
+                      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                      decoration: BoxDecoration(color: _brand100.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(10)),
                       child: Row(children: [
-                        CircleAvatar(radius: 20, backgroundColor: _brand600, child: Text(_sponsorName![0], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800))),
-                        const SizedBox(width: 12),
+                        CircleAvatar(radius: 16, backgroundColor: _brand600,
+                            child: Text(_sponsorName!.isNotEmpty ? _sponsorName![0] : '?',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13))),
+                        const SizedBox(width: 10),
                         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(_sponsorName!, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                          Text('Sponsor ID · $_sponsorId', style: TextStyle(fontSize: 12, color: context.textSub, fontWeight: FontWeight.w500)),
+                          Text(_sponsorName!, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
+                          Text('Sponsor ID · $_sponsorId', maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 11.5, color: context.textSub)),
                         ])),
-                        GestureDetector(
-                          onTap: _showSponsorPicker,
-                          child: const Text('Change', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _brand600)),
-                        ),
+                        AppButton(label: 'Change', variant: AppButtonVariant.ghost, dense: true, onPressed: _showSponsorPicker),
                       ]),
                     ),
                     const SizedBox(height: 12),
-                    _FieldLabel('Annual Sponsorship Amount (₹)'),
-                    _textField(context, _sponsorAmt, hint: 'e.g. 24000', keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+                    _field('Annual Sponsorship Amount (₹)', _sponsorAmt, hint: 'e.g. 24000', keyboardType: TextInputType.number,
+                      required: true,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      validator: (v) => (int.tryParse((v ?? '').trim()) ?? 0) < 1 ? 'Enter the annual sponsorship amount.' : null),
                   ] else if (_sponsored) ...[
-                    const SizedBox(height: 12),
-                    GestureDetector(
-                      onTap: _showSponsorPicker,
-                      child: Container(
-                        width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(14), border: Border.all(color: _brand600, width: 1.5)),
-                        child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                          Icon(Icons.link, color: _brand600, size: 18),
-                          SizedBox(width: 8),
-                          Text('Link a donor as sponsor', style: TextStyle(fontWeight: FontWeight.w700, color: _brand600)),
-                        ]),
-                      ),
-                    ),
+                    const SizedBox(height: 10),
+                    AppButton(label: 'Link a donor as sponsor', icon: Icons.link, variant: AppButtonVariant.secondary,
+                        onPressed: _showSponsorPicker),
                   ],
                 ]),
                 const SizedBox(height: 14),
 
-                // ── Documents ────────────────────────────────────────
-                _SectionCard(title: 'Documents', children: [
-                  _DocUploadRow(icon: Icons.credit_card_outlined,   label: 'Aadhaar Card',
-                    onChanged: (fn, bytes) => _setPendingDoc('Aadhaar Card', fn, bytes)),
-                  const SizedBox(height: 10),
-                  _DocUploadRow(icon: Icons.article_outlined,        label: 'Birth Certificate',
-                    onChanged: (fn, bytes) => _setPendingDoc('Birth Certificate', fn, bytes)),
-                  const SizedBox(height: 10),
-                  _DocUploadRow(icon: Icons.transfer_within_a_station_outlined, label: 'Transfer Certificate',
-                    onChanged: (fn, bytes) => _setPendingDoc('Transfer Certificate', fn, bytes)),
-                  const SizedBox(height: 10),
-                  _DocUploadRow(icon: Icons.medical_services_outlined, label: 'Medical Reports',
-                    onChanged: (fn, bytes) => _setPendingDoc('Medical Reports', fn, bytes)),
-                ]),
-                const SizedBox(height: 20),
+                // ── Documents (any number, custom names) ────────────
+                _documentsSection(),
+                const SizedBox(height: 18),
 
-                // ── Inline action buttons ──────────────────────────
-                Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  GestureDetector(
-                    onTap: () => context.go('/students'),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 13),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFD8E5E0), width: 1.5),
-                      ),
-                      child: const Text('Cancel', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF5A6B67))),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: _saving ? null : _save,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 13),
-                      decoration: BoxDecoration(
-                        color: _saving ? const Color(0xFFFF9933).withValues(alpha: 0.6) : _brand600,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: _saving
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                        : const Text('Enrol Child', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
-                    ),
-                  ),
-                ])),
-                const SizedBox(height: 24),
+                // ── Actions ─────────────────────────────────────────
+                Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  AppButton(label: 'Cancel', variant: AppButtonVariant.secondary,
+                      onPressed: _saving ? null : () => context.go('/students')),
+                  const SizedBox(width: 8),
+                  AppButton(label: 'Enrol Child', icon: Icons.check_rounded, busyLabel: 'Saving…', loading: _saving, onPressed: _save),
+                ]),
               ]),
                 ),
               ),
@@ -991,62 +1208,74 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
 
 // ── widgets ───────────────────────────────────────────────────────────
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.children});
+  const _SectionCard({required this.title, required this.children, this.trailing});
   final String title;
   final List<Widget> children;
+  final Widget? trailing;
   @override
-  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    Padding(padding: const EdgeInsets.only(left: 2, bottom: 8),
-      child: Text(title, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: context.textSub, letterSpacing: 0.5))),
-    Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(20), border: Border.all(color: context.border),
-        boxShadow: const [BoxShadow(color: Color(0x080D2822), blurRadius: 6, offset: Offset(0, 2))]),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
-    ),
-  ]);
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.border)),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(
+        padding: EdgeInsets.fromLTRB(16, trailing == null ? 12 : 8, trailing == null ? 16 : 10, trailing == null ? 12 : 8),
+        child: Row(children: [
+          Expanded(child: Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.textPrimary))),
+          if (trailing != null) trailing!,
+        ]),
+      ),
+      Divider(height: 1, color: context.border),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+      ),
+    ]),
+  );
 }
 
 class _FieldLabel extends StatelessWidget {
-  const _FieldLabel(this.text);
+  const _FieldLabel(this.text, {this.required = false});
   final String text;
+  final bool required;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 6),
-    child: Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.textPrimary)),
+    child: Text.rich(TextSpan(children: [
+      TextSpan(text: text),
+      if (required) const TextSpan(text: ' *', style: TextStyle(color: _danger)),
+    ]), style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textSub)),
   );
 }
 
 Widget _textField(BuildContext ctx, TextEditingController ctrl, {String hint='', TextInputType? keyboardType, int maxLines=1,
-  TextCapitalization textCapitalization = TextCapitalization.words, List<TextInputFormatter>? inputFormatters, String? Function(String?)? validator}) =>
+  TextCapitalization textCapitalization = TextCapitalization.words, List<TextInputFormatter>? inputFormatters,
+  String? Function(String?)? validator, bool enabled = true}) =>
   TextFormField(
-    controller: ctrl, keyboardType: maxLines > 1 ? TextInputType.multiline : keyboardType,
+    controller: ctrl, keyboardType: maxLines > 1 ? TextInputType.multiline : keyboardType, enabled: enabled,
     textCapitalization: textCapitalization, maxLines: maxLines, inputFormatters: inputFormatters, validator: validator,
-    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: ctx.textPrimary),
-    decoration: InputDecoration(
-      hintText: hint, hintStyle: TextStyle(color: ctx.textHint, fontWeight: FontWeight.w500, fontSize: 14),
-      filled: true, fillColor: ctx.scaffoldBg, contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13), isDense: true,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: ctx.border)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: ctx.border)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
-      errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _errorColor)),
-    ),
+    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: ctx.textPrimary),
+    decoration: InputDecoration(hintText: hint),
   );
 
 class _DateTapField extends StatelessWidget {
-  const _DateTapField({required this.value, required this.hint, required this.onTap});
+  const _DateTapField({required this.value, required this.hint, required this.onTap, this.error = false});
   final String value, hint;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool error;
   @override
-  Widget build(BuildContext context) => GestureDetector(
+  Widget build(BuildContext context) => InkWell(
     onTap: onTap,
+    borderRadius: BorderRadius.circular(10),
     child: Container(
-      height: 48, padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.border)),
+      height: 42, padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).inputDecorationTheme.fillColor ?? context.cardBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: error ? _danger : context.border),
+      ),
       child: Row(children: [
         Expanded(child: Text(value.isEmpty ? hint : value,
-          style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: value.isEmpty ? context.textHint : context.textPrimary))),
-        Icon(Icons.calendar_today_outlined, size: 18, color: context.textHint),
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: value.isEmpty ? context.textHint : context.textPrimary))),
+        Icon(Icons.calendar_today_outlined, size: 16, color: context.textHint),
       ]),
     ),
   );
@@ -1058,23 +1287,35 @@ class _SegmentedToggle extends StatelessWidget {
   final String value;
   final ValueChanged<String> onChanged;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(3),
-    decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.border)),
-    child: Row(children: options.map((o) {
+  Widget build(BuildContext context) {
+    Widget seg(String o) {
       final active = value == o;
-      return Expanded(child: GestureDetector(
+      return InkWell(
+        borderRadius: BorderRadius.circular(8),
         onTap: () => onChanged(o),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(color: active ? _brand600 : Colors.transparent, borderRadius: BorderRadius.circular(10)),
-          child: Text(o, textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub)),
+          duration: const Duration(milliseconds: 150),
+          height: 32,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(color: active ? _brand600 : Colors.transparent, borderRadius: BorderRadius.circular(8)),
+          child: Text(o, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: active ? Colors.white : context.textSub)),
         ),
-      ));
-    }).toList()),
-  );
+      );
+    }
+    return LayoutBuilder(builder: (_, c) {
+      // Many centres don't fit in one row — scroll instead of squashing.
+      final fits = options.length * 96.0 <= c.maxWidth;
+      return Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(10), border: Border.all(color: context.border)),
+        child: fits
+          ? Row(children: [for (final o in options) Expanded(child: seg(o))])
+          : SizedBox(height: 32, child: ListView(scrollDirection: Axis.horizontal, children: [for (final o in options) seg(o)])),
+      );
+    });
+  }
 }
 
 class _StatusChips extends StatelessWidget {
@@ -1083,174 +1324,23 @@ class _StatusChips extends StatelessWidget {
   final ValueChanged<String> onChanged;
   @override
   Widget build(BuildContext context) {
-    return Wrap(spacing: 8, runSpacing: 8, children: StudentLookups.statuses.map((o) {
+    return Wrap(spacing: 6, runSpacing: 6, children: StudentLookups.statuses.map((o) {
       final active = value == o.key;
       final c = StudentLookups.statusColor(o.key);
-      return GestureDetector(
+      return InkWell(
+        borderRadius: BorderRadius.circular(8),
         onTap: () => onChanged(o.key),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            color: active ? c : context.cardBg,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: active ? c : context.border, width: 1.5),
+            color: active ? c.withValues(alpha: 0.12) : context.surface2,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: active ? c : context.border),
           ),
-          child: Text(o.label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub)),
+          child: Text(o.label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: active ? c : context.textSub)),
         ),
       );
     }).toList());
   }
-}
-
-class _UploadBox extends StatefulWidget {
-  const _UploadBox({required this.label, required this.icon, required this.onFilesChanged});
-  final String label;
-  final IconData icon;
-  final void Function(List<({String filename, Uint8List bytes})> files) onFilesChanged;
-  @override
-  State<_UploadBox> createState() => _UploadBoxState();
-}
-
-class _UploadBoxState extends State<_UploadBox> {
-  final List<({String filename, Uint8List bytes})> _files = [];
-  bool _loading = false;
-
-  Future<void> _pickFile() async {
-    setState(() => _loading = true);
-    try {
-      final result = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
-      final bytes = result?.files.single.bytes;
-      if (result != null && bytes != null && mounted) {
-        setState(() => _files.add((filename: result.files.single.name, bytes: bytes)));
-        widget.onFilesChanged(_files);
-      }
-    } catch (_) {}
-    if (mounted) setState(() => _loading = false);
-  }
-
-  @override
-  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    GestureDetector(
-      onTap: _loading ? null : _pickFile,
-      child: Container(
-        width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(color: context.scaffoldBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: context.border, width: 1.5)),
-        child: Column(children: [
-          _loading
-            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600))
-            : Icon(widget.icon, size: 26, color: context.textHint),
-          const SizedBox(height: 6),
-          Text(widget.label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textHint)),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 7),
-            decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: context.border)),
-            child: Text('Select File', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.textSub)),
-          ),
-        ]),
-      ),
-    ),
-    if (_files.isNotEmpty) ...[
-      const SizedBox(height: 8),
-      Wrap(spacing: 8, runSpacing: 6, children: _files.asMap().entries.map((e) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.insert_drive_file_outlined, size: 14, color: _brand600),
-          const SizedBox(width: 5),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 180),
-            child: Text(e.value.filename, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _brand600), overflow: TextOverflow.ellipsis)),
-          const SizedBox(width: 6),
-          GestureDetector(onTap: () {
-            setState(() => _files.removeAt(e.key));
-            widget.onFilesChanged(_files);
-          }, child: const Icon(Icons.close, size: 13, color: _brand600)),
-        ]),
-      )).toList()),
-    ],
-  ]);
-}
-
-class _DocUploadRow extends StatefulWidget {
-  const _DocUploadRow({required this.icon, required this.label, required this.onChanged});
-  final IconData icon;
-  final String label;
-  final void Function(String? filename, Uint8List? bytes) onChanged;
-  @override
-  State<_DocUploadRow> createState() => _DocUploadRowState();
-}
-
-class _DocUploadRowState extends State<_DocUploadRow> {
-  String? _filename;
-  Uint8List? _bytes;
-  bool _loading = false;
-
-  Future<void> _pickFile() async {
-    setState(() => _loading = true);
-    try {
-      final result = await FilePicker.platform.pickFiles(allowMultiple: false, withData: true);
-      if (result != null && result.files.isNotEmpty && mounted) {
-        setState(() {
-          _filename = result.files.single.name;
-          _bytes = result.files.single.bytes;
-        });
-        widget.onChanged(_filename, _bytes);
-      }
-    } catch (_) {}
-    if (mounted) setState(() => _loading = false);
-  }
-
-  void _view() {
-    if (_bytes == null) return;
-    openBytesInBrowser(_bytes!, _filename ?? 'document');
-  }
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: _loading ? null : _pickFile,
-    child: Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        color: _filename != null ? _brand100 : context.scaffoldBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _filename != null ? _brand600.withValues(alpha: 0.4) : context.border),
-      ),
-      child: Row(children: [
-        Container(width: 38, height: 38,
-          decoration: BoxDecoration(color: _filename != null ? _brand600 : context.cardBg, borderRadius: BorderRadius.circular(10)),
-          child: _loading
-            ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600)))
-            : Icon(widget.icon, size: 20, color: _filename != null ? Colors.white : context.textSub)),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(widget.label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.textPrimary)),
-          if (_filename != null) Text(_filename!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _brand600), overflow: TextOverflow.ellipsis),
-        ])),
-        if (_filename != null) ...[
-          GestureDetector(
-            onTap: _view,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              margin: const EdgeInsets.only(left: 6),
-              decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(8)),
-              child: const Text('View', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
-            ),
-          ),
-          GestureDetector(
-            onTap: () {
-              setState(() { _filename = null; _bytes = null; });
-              widget.onChanged(null, null);
-            },
-            child: const Padding(padding: EdgeInsets.only(left: 8), child: Icon(Icons.close, size: 18, color: _coral500)),
-          ),
-        ] else
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: context.border)),
-            child: Text('Select', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: context.textSub)),
-          ),
-      ]),
-    ),
-  );
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/api_client.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 // ── palette ──────────────────────────────────────────────────────────
 const _brand600   = Color(0xFFFF9933);
@@ -109,14 +110,18 @@ class _CategoriesNotifier extends StateNotifier<List<DonorCategory>> {
     state = [...state]; // trigger listeners even if the list itself is unchanged
   }
 
+  // Set when the last add() was queued for approval (UI reporting only).
+  bool lastAddPending = false;
+
   // Returns false for a queued (pending-approval) write too — the caller's
   // "added" toast would otherwise claim success while the list stays unchanged.
   Future<bool> add(DonorCategory cat) async {
+    lastAddPending = false;
     try {
       final res = await apiClient.post('/categories', {
         'name': cat.name, 'description': cat.desc, 'icon': cat.iconKey, 'color': cat.colorHex,
       });
-      if ((res['meta'] as Map?)?['pendingApproval'] == true) return false;
+      if ((res['meta'] as Map?)?['pendingApproval'] == true) { lastAddPending = true; return false; }
       await loadFromBackend();
       return true;
     } catch (_) { return false; }
@@ -161,54 +166,49 @@ class _DonorCategoriesScreenState extends ConsumerState<DonorCategoriesScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(donorCategoriesProvider.notifier).loadFromBackend());
   }
 
-  void _snack(String msg, {bool error = false}) =>
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
-      backgroundColor: error ? _coral500 : _brand600,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      duration: const Duration(seconds: 2),
-    ));
-
   void _openForm({DonorCategory? editing}) {
-    showModalBottomSheet(
+    showAppSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => _CategoryFormSheet(
         existing: editing,
+        // The sheet shows "Saving…" while this runs, closes only on success
+        // (or when queued for approval) and keeps the form on failure.
         onSave: (cat) async {
           final notifier = ref.read(donorCategoriesProvider.notifier);
           final ok = editing != null ? await notifier.update(editing.id, cat) : await notifier.add(cat);
-          if (!mounted) return;
-          _snack(ok ? (editing != null ? 'Category updated' : 'Category added') : 'Could not save — check your connection', error: !ok);
+          if (!mounted) return ok;
+          if (ok) {
+            AppToast.success(context, editing != null ? 'Changes saved' : 'Category added', detail: cat.name);
+            return true;
+          }
+          if (editing == null && notifier.lastAddPending) {
+            AppToast.warning(context, 'Submitted for approval', detail: 'A Super Admin will review “${cat.name}”.');
+            return true;
+          }
+          AppToast.error(context, editing != null ? 'Unable to save changes' : 'Unable to add category',
+              detail: 'Check your connection and try again.');
+          return false;
         },
       ),
     );
   }
 
-  void _confirmDelete(DonorCategory cat) {
-    showDialog(context: context, builder: (ctx) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Delete Category?', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-      content: Text(
-        '"${cat.name}" has ${cat.donorCount} donor${cat.donorCount == 1 ? '' : 's'}. '
-        'Donors will not be deleted but will become uncategorised.',
-        style: const TextStyle(fontSize: 14, color: _onSurface2, fontWeight: FontWeight.w500, height: 1.45)),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700, color: _onSurface2))),
-        ElevatedButton(
-          onPressed: () async {
-            Navigator.pop(ctx);
-            final ok = await ref.read(donorCategoriesProvider.notifier).delete(cat.id);
-            if (!mounted) return;
-            _snack(ok ? '${cat.name} deleted' : 'Could not delete — check your connection', error: !ok);
-          },
-          style: ElevatedButton.styleFrom(backgroundColor: _coral500, foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-          child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.w800)),
-        ),
-      ],
-    ));
+  Future<void> _confirmDelete(DonorCategory cat) async {
+    final ok = await AppConfirm.show(
+      context,
+      title: 'Delete category?',
+      message: '“${cat.name}” has ${cat.donorCount} donor${cat.donorCount == 1 ? '' : 's'}. '
+          'Donors will not be deleted but will become uncategorised.',
+      onConfirm: () async {
+        final done = await ref.read(donorCategoriesProvider.notifier).delete(cat.id);
+        if (!done) throw Exception('delete failed');
+      },
+      errorText: (_) => 'Unable to delete category. Check your connection and try again.',
+    );
+    if (!ok || !mounted) return;
+    AppToast.success(context, 'Category deleted', detail: cat.name);
   }
 
   @override
@@ -260,16 +260,27 @@ class _DonorCategoriesScreenState extends ConsumerState<DonorCategoriesScreen> {
 
         // ── list ─────────────────────────────────────────────────────
         Expanded(
-          child: loading
-            ? const Center(child: CircularProgressIndicator(color: _brand600))
+          child: loading && categories.isEmpty
+            ? const SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(4, 0, 4, 0),
+                child: SkeletonList(rows: 5, rowHeight: 76))
+            : categories.isEmpty && ref.read(donorCategoriesProvider.notifier).error != null
+              ? ListView(children: [
+                  ErrorState(
+                    message: 'Could not load categories. Check your connection.',
+                    onRetry: () => ref.read(donorCategoriesProvider.notifier).loadFromBackend(),
+                  ),
+                ])
             : categories.isEmpty
-              ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.category_outlined, size: 52, color: _onSurface3.withValues(alpha: 0.5)),
-                  const SizedBox(height: 12),
-                  const Text('No categories yet', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _onSurface3)),
-                  const SizedBox(height: 6),
-                  const Text('Tap + to add your first category', style: TextStyle(fontSize: 13, color: _onSurface3, fontWeight: FontWeight.w500)),
-                ]))
+              ? ListView(children: [
+                  EmptyState(
+                    icon: Icons.category_outlined,
+                    title: 'No categories yet',
+                    message: 'Create a category to group your donors.',
+                    actionLabel: 'Add Category',
+                    onAction: () => _openForm(),
+                  ),
+                ])
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(18, 0, 18, 100),
                   itemCount: categories.length,
@@ -382,7 +393,8 @@ class _CategoryCard extends StatelessWidget {
 class _CategoryFormSheet extends StatefulWidget {
   const _CategoryFormSheet({this.existing, required this.onSave});
   final DonorCategory? existing;
-  final void Function(DonorCategory) onSave;
+  // Resolves true when the sheet should close (saved or queued).
+  final Future<bool> Function(DonorCategory) onSave;
   @override
   State<_CategoryFormSheet> createState() => _CategoryFormSheetState();
 }
@@ -397,6 +409,7 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
 
   bool get _isEditing => widget.existing != null;
   String _nameErr = '';
+  bool _saving = false;
 
   @override
   void initState() {
@@ -413,8 +426,9 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
   @override
   void dispose() { _nameCtrl.dispose(); _descCtrl.dispose(); super.dispose(); }
 
-  void _save() {
-    if (_nameCtrl.text.trim().isEmpty) { setState(() => _nameErr = 'Name is required'); return; }
+  Future<void> _save() async {
+    if (_saving) return; // ignore repeated taps
+    if (_nameCtrl.text.trim().isEmpty) { setState(() => _nameErr = 'Please enter a category name.'); return; }
     final cat = DonorCategory(
       id: widget.existing?.id ?? '',
       name: _nameCtrl.text.trim(),
@@ -423,8 +437,14 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
       colorHex: _selColorHex,
       donorCount: widget.existing?.donorCount ?? 0,
     );
-    Navigator.pop(context);
-    widget.onSave(cat);
+    setState(() => _saving = true);
+    final close = await widget.onSave(cat);
+    if (!mounted) return;
+    if (close) {
+      Navigator.pop(context);
+    } else {
+      setState(() => _saving = false); // keep what was typed
+    }
   }
 
   @override
@@ -436,14 +456,14 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         // handle + title
         Padding(padding: const EdgeInsets.fromLTRB(20, 14, 20, 0), child: Column(children: [
-          Container(width: 40, height: 4, decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(2))),
+          const SheetHandle(),
           const SizedBox(height: 14),
           Row(children: [
             Container(width: 40, height: 40, decoration: BoxDecoration(color: _selColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)), child: Icon(_selIcon, color: _selColor, size: 20)),
             const SizedBox(width: 12),
             Text(_isEditing ? 'Edit Category' : 'New Category', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
             const Spacer(),
-            IconButton(icon: const Icon(Icons.close, size: 20), onPressed: () => Navigator.pop(context), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+            IconButton(tooltip: 'Close', icon: const Icon(Icons.close, size: 20), onPressed: _saving ? null : () => Navigator.pop(context), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
           ]),
         ])),
 
@@ -548,25 +568,20 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
 
         // Action buttons
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
-          child: Row(children: [
-            Expanded(child: OutlinedButton(
-              onPressed: () => Navigator.pop(context),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: _border, width: 1.5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                padding: const EdgeInsets.symmetric(vertical: 14)),
-              child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w800, color: _onSurface2)),
-            )),
-            const SizedBox(width: 12),
-            Expanded(flex: 2, child: ElevatedButton(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+          child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            AppButton(
+              label: 'Cancel',
+              variant: AppButtonVariant.secondary,
+              onPressed: _saving ? null : () => Navigator.pop(context),
+            ),
+            const SizedBox(width: 8),
+            AppButton(
+              label: _isEditing ? 'Save Changes' : 'Add Category',
+              busyLabel: _isEditing ? 'Saving…' : 'Adding…',
+              loading: _saving,
               onPressed: _save,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _brand600, foregroundColor: Colors.white, elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                padding: const EdgeInsets.symmetric(vertical: 14)),
-              child: Text(_isEditing ? 'Save Changes' : 'Add Category', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-            )),
+            ),
           ]),
         ),
       ]),

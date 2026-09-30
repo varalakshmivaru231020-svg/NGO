@@ -13,6 +13,7 @@ import '../../../core/widgets/photo_picker_widget.dart';
 import '../../../core/widgets/lazy_photo.dart' show decodePhoto, evictLazyPhoto;
 import '../../dashboard/presentation/dashboard_screen.dart' show dashboardRefreshProvider;
 import 'donors_screen.dart' show donorsProvider, demoLocalDonors, donorRefreshProvider, localDonorPhotos;
+import 'package:saksham_app/core/ui/ui.dart';
 
 // ── colours ───────────────────────────────────────────────────────────
 const _brand600 = Color(0xFFFF9933);
@@ -21,17 +22,13 @@ const _errorColor = Color(0xFFF2685E);
 
 const _preferredMethods = ['Call', 'WhatsApp', 'Email'];
 
-void _toast(BuildContext ctx, String msg, {bool error = false}) {
-  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-    content: Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(error ? Icons.error_outline : Icons.check_circle_outline, color: Colors.white, size: 18),
-      const SizedBox(width: 8),
-      Flexible(child: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700))),
-    ]),
-    backgroundColor: error ? _errorColor : _brand600,
-    behavior: SnackBarBehavior.floating,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-  ));
+// Short title + optional detail through the app-wide toast.
+void _toast(BuildContext ctx, String msg, {bool error = false, String? detail}) {
+  if (error) {
+    AppToast.error(ctx, msg, detail: detail);
+  } else {
+    AppToast.success(ctx, msg, detail: detail);
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -262,16 +259,19 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
     final code = d['donorCode'] as String?;
     _toast(
       context,
-      d['_pendingApproval'] == true
-          ? '${d['name'] ?? 'This donor'} with mobile ${d['mobile'] ?? ''} is already submitted for approval'
-          : '${d['name'] ?? 'This donor'} with mobile ${d['mobile'] ?? ''} is already added'
-              '${code != null && code.isNotEmpty ? ' ($code)' : ''}',
+      d['_pendingApproval'] == true ? 'Donor already submitted for approval' : 'Donor already exists',
+      detail: '${d['name'] ?? 'This donor'} · ${d['mobile'] ?? ''}'
+          '${code != null && code.isNotEmpty ? ' ($code)' : ''}',
       error: true,
     );
   }
 
   Future<void> _save() async {
-    if (!_form.currentState!.validate()) return;
+    if (_saving) return; // ignore repeated taps while a save is in flight
+    if (!_form.currentState!.validate()) {
+      _toast(context, 'Please check the highlighted fields', error: true);
+      return;
+    }
     setState(() => _saving = true);
 
     // Best-effort pre-check — a slow or failing lookup must never block the
@@ -352,10 +352,10 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
         if (mounted) {
           setState(() { _saving = false; _duplicateOf = {'name': _name.text.trim(), 'mobile': _mobile.text.trim()}; });
           final data = e.response?.data;
-          _toast(context,
-              (data is Map && data['message'] != null)
+          _toast(context, 'Donor already exists',
+              detail: (data is Map && data['message'] != null)
                   ? data['message'].toString()
-                  : 'This name and number is already added',
+                  : 'This name and number is already added.',
               error: true);
         }
         return;
@@ -366,7 +366,8 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
       // that vanished on reload.
       if (mounted) {
         setState(() => _saving = false);
-        _toast(context, ApiClient.errorMessage(e, fallback: 'Donor was not saved. Please try again.'), error: true);
+        _toast(context, edit ? 'Unable to save changes' : 'Unable to add donor',
+            detail: ApiClient.errorMessage(e, fallback: 'Please try again.'), error: true);
       }
       return;
     }
@@ -378,7 +379,7 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
     final meta = res['meta'];
     if (meta is Map && meta['pendingApproval'] == true) {
       setState(() => _saving = false);
-      _toast(context, 'Submitted for approval');
+      AppToast.warning(context, 'Submitted for approval', detail: 'A Super Admin will review this donor.');
       ref.read(donorRefreshProvider.notifier).state++; // shows it as pending
       context.go(edit ? '/donors/${widget.donorId}' : '/donors');
       return;
@@ -398,7 +399,7 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
     ref.read(donorRefreshProvider.notifier).state++; // refetch list from backend
     ref.read(dashboardRefreshProvider.notifier).state++;
     setState(() => _saving = false);
-    _toast(context, edit ? 'Donor updated successfully!' : 'Donor saved successfully!');
+    _toast(context, edit ? 'Changes saved' : 'Donor added', detail: _name.text.trim());
     // Open the donor so the change is clearly visible.
     context.go(savedId != null ? '/donors/$savedId' : '/donors');
   }
@@ -432,24 +433,17 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
         if (_loadingDonor)
           const Expanded(child: Center(child: CircularProgressIndicator(color: _brand600)))
         else if (_loadError != null)
-          Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.error_outline, color: _errorColor, size: 44),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(_loadError!, textAlign: TextAlign.center, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.textSub)),
-            ),
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: () { setState(() => _loadError = null); _loadDonor(); },
-              child: const Text('Retry', style: TextStyle(color: _brand600, fontWeight: FontWeight.w700)),
-            ),
-          ])))
+          Expanded(child: Center(child: SingleChildScrollView(child: ErrorState(
+            message: _loadError!,
+            onRetry: () { setState(() => _loadError = null); _loadDonor(); },
+          ))))
         else
         // ── form ───────────────────────────────────────────────────
         Expanded(
           child: Form(
             key: _form,
+            // Errors appear under a field once it has been touched.
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -473,7 +467,7 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
                   Center(child: PhotoPickerCircle(label: 'Photo', size: 92, initialImage: _photoBytes, onImageChanged: (b) => setState(() { _photoBytes = b; _photoChanged = true; }))),
                   const SizedBox(height: 16),
                   _Row2(
-                    left:  _Field(label: 'Full Name *', child: _textField(context, _name, hint: 'e.g. Rajesh Khanna', validator: (v) => v!.isEmpty ? 'Required' : null)),
+                    left:  _Field(label: 'Full Name *', child: _textField(context, _name, hint: 'e.g. Rajesh Khanna', validator: (v) => v!.isEmpty ?'Please enter the donor’s name.' : null)),
                     right: _Field(label: 'Gender',      child: _GenderToggle(value: _gender, onChanged: (v) => setState(() => _gender = v))),
                   ),
                   _Row2(
@@ -582,39 +576,24 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
                 const SizedBox(height: 20),
 
                 // ── Action buttons ─────────────────────────────────
-                Row(children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => context.go('/donors'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF5A6B67),
-                        backgroundColor: Colors.white,
-                        side: const BorderSide(color: Color(0xFFD8E5E0), width: 1.5),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: const Text('Cancel', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                    ),
+                // Right-aligned Cancel + primary on wide screens; full-width
+                // pair on phones. The primary shows "Saving…" while in flight.
+                _FormFooter(
+                  cancel: AppButton(
+                    label: 'Cancel',
+                    variant: AppButtonVariant.secondary,
+                    expand: MediaQuery.sizeOf(context).width < 600,
+                    onPressed: _saving ? null : () => context.go('/donors'),
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton(
-                      onPressed: _saving ? null : _save,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _brand600,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: _brand600.withValues(alpha: 0.6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        elevation: 0,
-                      ),
-                      child: _saving
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                        : Text(_isEditing ? 'Update Donor' : 'Save Donor', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-                    ),
+                  primary: AppButton(
+                    label: _isEditing ? 'Update Donor' : 'Save Donor',
+                    busyLabel: _isEditing ? 'Saving…' : 'Adding…',
+                    icon: Icons.check_rounded,
+                    loading: _saving,
+                    expand: MediaQuery.sizeOf(context).width < 600,
+                    onPressed: _save,
                   ),
-                ]),
+                ),
                 const SizedBox(height: 24),
               ]),
                 ),
@@ -624,6 +603,27 @@ class _AddDonorScreenState extends ConsumerState<AddDonorScreen> {
         ),
       ]),
     );
+  }
+}
+
+// ── Form footer ───────────────────────────────────────────────────────
+class _FormFooter extends StatelessWidget {
+  const _FormFooter({required this.cancel, required this.primary});
+  final Widget cancel, primary;
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.sizeOf(context).width < 600) {
+      return Row(children: [
+        Expanded(child: cancel),
+        const SizedBox(width: 10),
+        Expanded(flex: 2, child: primary),
+      ]);
+    }
+    return Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+      cancel,
+      const SizedBox(width: 8),
+      primary,
+    ]);
   }
 }
 

@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/utils/app_launcher.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/network/api_client.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 const _brand700 = Color(0xFFE07C1F);
 const _brand600 = Color(0xFFFF9933);
@@ -97,11 +98,11 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
   @override
   void dispose() { _amountCtrl.dispose(); super.dispose(); }
 
-  void _toast(String msg, {bool error = false}) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
-    backgroundColor: error ? _coral500 : _brand600, behavior: SnackBarBehavior.floating,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), duration: const Duration(seconds: 2),
-  ));
+  void _toast(String msg, {bool error = false, String? detail}) => error
+      ? AppToast.error(context, msg, detail: detail)
+      : AppToast.success(context, msg, detail: detail);
+
+  String? _amountError;
 
   Future<void> _loadRecent() async {
     if (mounted) setState(() => _loadingList = true);
@@ -116,24 +117,30 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
   }
 
   Future<void> _generate() async {
+    if (_generating) return; // ignore repeated taps
     final amount = int.tryParse(_amountCtrl.text.trim());
     if (amount == null || amount <= 0) {
-      _toast('Enter a valid amount', error: true);
+      setState(() => _amountError = 'Please enter a valid amount.');
       return;
     }
-    setState(() => _generating = true);
+    setState(() { _generating = true; _amountError = null; });
     try {
       final r = await apiClient.post('/payment-links', {'amount': amount, 'purpose': _purpose});
       final data = (r['data'] as Map).cast<String, dynamic>();
       final link = _Link.fromJson(data);
+      if (!mounted) return;
       setState(() { _current = link; _generating = false; });
       if (!link.isLive) {
-        _toast('Link created, but Razorpay isn\'t configured — this is an internal link, not a real payment page. Add Razorpay credentials in Settings.', error: true);
+        AppToast.warning(context, 'Link created — not live',
+            detail: 'Razorpay isn’t configured, so this is an internal link. Add Razorpay credentials in Settings.');
+      } else {
+        _toast('Payment link generated', detail: _inr(link.amount));
       }
       await _loadRecent();
     } catch (e) {
+      if (!mounted) return;
       setState(() => _generating = false);
-      _toast('Could not generate link — check your connection', error: true);
+      _toast('Unable to generate link', detail: 'Check your connection and try again.', error: true);
     }
   }
 
@@ -165,7 +172,9 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
               const Text('Create a Link', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800)),
               const SizedBox(height: 14),
               _lbl('Amount (₹)'),
-              _tf(_amountCtrl, 'e.g. 25000', keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+              _tf(_amountCtrl, 'e.g. 25000', keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  errorText: _amountError,
+                  onChanged: (_) { if (_amountError != null) setState(() => _amountError = null); }),
               const SizedBox(height: 12),
               _lbl('Purpose'),
               Container(
@@ -183,14 +192,18 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              SizedBox(width: double.infinity, child: ElevatedButton.icon(
-                onPressed: _generating ? null : _generate,
-                style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: const EdgeInsets.symmetric(vertical: 14), elevation: 0),
-                icon: _generating
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.link, size: 18),
-                label: Text(_generating ? 'Generating…' : 'Generate Link', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-              )),
+              // Full width on phones, right-aligned on wider screens.
+              Align(
+                alignment: Alignment.centerRight,
+                child: AppButton(
+                  label: 'Generate Link',
+                  busyLabel: 'Generating…',
+                  icon: Icons.link,
+                  loading: _generating,
+                  expand: MediaQuery.sizeOf(context).width < 600,
+                  onPressed: _generate,
+                ),
+              ),
             ]))),
 
             // ── Active link card ───────────────────────────────────
@@ -232,8 +245,8 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
                 // ── Donation link (below QR + details) — tap anywhere to copy/open ─
                 GestureDetector(
                   onTap: current.isLive
-                    ? () { Clipboard.setData(ClipboardData(text: current.url)); _toast('Link copied!'); }
-                    : () => _toast('Add Razorpay credentials in Settings to get a real payment link', error: true),
+                    ? () { Clipboard.setData(ClipboardData(text: current.url)); _toast('Link copied'); }
+                    : () => AppToast.warning(context, 'No live payment link', detail: 'Add Razorpay credentials in Settings to get a real payment link.'),
                   child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     decoration: BoxDecoration(color: _surface2, borderRadius: BorderRadius.circular(10), border: Border.all(color: _border)),
                     child: Row(children: [
@@ -270,14 +283,14 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
             // ── Recent links ──────────────────────────────────────
             const Text('Recent Links', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800)),
             const SizedBox(height: 10),
-            if (_loadingList)
-              _card(child: const Padding(padding: EdgeInsets.symmetric(vertical: 26), child: Center(child: CircularProgressIndicator(color: _brand600))))
+            if (_loadingList && _recentLinks.isEmpty)
+              _card(child: const SkeletonList(rows: 3, rowHeight: 66))
             else if (_recentLinks.isEmpty)
-              _card(child: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 26, horizontal: 16),
-                child: Center(child: Text('No payment links yet. Generate one above.',
-                  style: TextStyle(fontSize: 13.5, color: _onSurface2, fontWeight: FontWeight.w500))),
-              ))
+              _card(child: const Center(child: EmptyState(
+                icon: Icons.link_rounded,
+                title: 'No payment links yet',
+                message: 'Generate one above to share with donors.',
+              )))
             else
             _card(child: Column(children: _recentLinks.asMap().entries.map((e) {
               final i = e.key; final l = e.value;
@@ -377,10 +390,11 @@ class _ShareBtn extends StatelessWidget {
 Widget _card({required Widget child}) => Container(decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22), border: Border.all(color: _border),
   boxShadow: const [BoxShadow(color: Color(0x0A0D2822), blurRadius: 8, offset: Offset(0, 3))]), child: child);
 Widget _lbl(String t) => Padding(padding: const EdgeInsets.only(bottom: 6), child: Text(t, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)));
-Widget _tf(TextEditingController c, String hint, {TextInputType? keyboardType, List<TextInputFormatter>? inputFormatters}) => TextFormField(
-  controller: c, keyboardType: keyboardType, inputFormatters: inputFormatters,
+Widget _tf(TextEditingController c, String hint, {TextInputType? keyboardType, List<TextInputFormatter>? inputFormatters,
+    String? errorText, ValueChanged<String>? onChanged}) => TextFormField(
+  controller: c, keyboardType: keyboardType, inputFormatters: inputFormatters, onChanged: onChanged,
   style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
-  decoration: InputDecoration(hintText: hint, hintStyle: const TextStyle(color: _onSurface3, fontSize: 14, fontWeight: FontWeight.w500),
+  decoration: InputDecoration(hintText: hint, errorText: errorText, hintStyle: const TextStyle(color: _onSurface3, fontSize: 14, fontWeight: FontWeight.w500),
     filled: true, fillColor: _surface2, contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12), isDense: true,
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _border)),
     enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _border)),

@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../../core/utils/native_file_saver.dart';
 import '../../../core/network/api_client.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 // Fetches organization identity (name/address/PAN/12A/80G/etc.) configured in
 // Settings → Organization on the backend. Returns null (never throws) on any
@@ -643,7 +644,7 @@ Future<void> showReceiptSheet(BuildContext context, DonationReceipt receipt, {Ma
   // so the sheet (and any PDF download from it) render with real org data.
   final orgData = org ?? await fetchOrgSettings();
   if (!context.mounted) return;
-  await showModalBottomSheet(
+  await showAppSheet(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
@@ -678,7 +679,7 @@ class _ReceiptSheet extends StatelessWidget {
         ),
         child: Column(children: [
           const SizedBox(height: 12),
-          Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+          const SheetHandle(),
           Expanded(child: SingleChildScrollView(
             controller: sc,
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -878,7 +879,7 @@ class _ReceiptSheet extends StatelessWidget {
                       final filename = 'Receipt_${receipt.receiptNo.replaceAll('/', '-')}.pdf';
                       final ok = await NativeFileSaver.saveBytes(filename, bytes, 'application/pdf');
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        AppToast.fromSnackBar(context, SnackBar(
                           content: Text(ok
                             ? "Couldn't open print preview — downloaded the PDF instead"
                             : 'Could not open print dialog'),
@@ -888,7 +889,7 @@ class _ReceiptSheet extends StatelessWidget {
                       }
                     } catch (_) {
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        AppToast.fromSnackBar(context, const SnackBar(
                           content: Text('Could not open print dialog'),
                           backgroundColor: Color(0xFFF2685E),
                           behavior: SnackBarBehavior.floating,
@@ -913,7 +914,7 @@ class _ReceiptSheet extends StatelessWidget {
                     final filename = 'Receipt_${receipt.receiptNo.replaceAll('/', '-')}.pdf';
                     final ok = await NativeFileSaver.saveBytes(filename, bytes, 'application/pdf');
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      AppToast.fromSnackBar(context, SnackBar(
                         content: Text(ok ? 'Receipt saved as PDF' : 'Failed to save'),
                         backgroundColor: _orange,
                         behavior: SnackBarBehavior.floating,
@@ -921,7 +922,7 @@ class _ReceiptSheet extends StatelessWidget {
                     }
                   } catch (_) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      AppToast.fromSnackBar(context, const SnackBar(
                         content: Text('Could not generate PDF'),
                         backgroundColor: Color(0xFFF2685E),
                         behavior: SnackBarBehavior.floating,

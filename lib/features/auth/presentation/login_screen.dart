@@ -19,6 +19,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _loading = false;
   bool _obscure = true;
   String? _error;
+  // Missing-field messages shown under the field itself.
+  String? _emailError;
+  String? _passError;
 
   @override
   void initState() {
@@ -153,19 +156,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         style: TextStyle(fontSize: 13.5, color: _text2)),
     const SizedBox(height: 28),
 
-    if (_error != null) ...[
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(color: _errBg, borderRadius: BorderRadius.circular(12)),
-        child: Row(children: [
-          const Icon(Icons.error_outline, color: _errIcon, size: 18),
-          const SizedBox(width: 8),
-          Expanded(child: Text(_error!, style: const TextStyle(color: _errText, fontSize: 13))),
-        ]),
-      ),
-      const SizedBox(height: 18),
-    ],
+    AnimatedSize(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: _error == null
+        ? const SizedBox(width: double.infinity)
+        : Padding(
+            padding: const EdgeInsets.only(bottom: 18),
+            child: Semantics(
+              liveRegion: true,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(color: _errBg, borderRadius: BorderRadius.circular(12)),
+                child: Row(children: [
+                  const Icon(Icons.error_outline, color: _errIcon, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(_error!, style: const TextStyle(color: _errText, fontSize: 13))),
+                ]),
+              ),
+            ),
+          ),
+    ),
 
     _inputField(
       controller: _nameCtrl,
@@ -173,22 +186,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       hint: 'Enter your email',
       prefix: Icons.person_outline_rounded,
       action: TextInputAction.next,
+      error: _emailError,
+      onChanged: () { if (_emailError != null || _error != null) setState(() { _emailError = null; _error = null; }); },
     ),
     const SizedBox(height: 14),
 
     TextField(
       controller: _passCtrl,
       obscureText: _obscure,
+      enabled: !_loading,
       textInputAction: TextInputAction.done,
       onSubmitted: (_) => _login(),
+      onChanged: (_) { if (_passError != null || _error != null) setState(() { _passError = null; _error = null; }); },
       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: _text1),
       decoration: InputDecoration(
         labelText: 'Password',
         hintText: 'Enter your password',
+        errorText: _passError,
         labelStyle: const TextStyle(color: _text2, fontWeight: FontWeight.w600),
         hintStyle: TextStyle(color: _text2.withValues(alpha: 0.5), fontSize: 13.5),
         prefixIcon: const Icon(Icons.lock_outline, size: 20, color: _text2),
         suffixIcon: IconButton(
+          tooltip: _obscure ? 'Show password' : 'Hide password',
           icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20, color: _text2),
           onPressed: () => setState(() => _obscure = !_obscure),
         ),
@@ -210,12 +229,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: _brand,
           foregroundColor: Colors.white,
+          // Stay in brand colour while signing in (it's busy, not disabled).
+          disabledBackgroundColor: _brand.withValues(alpha: 0.85),
+          disabledForegroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
-        child: _loading
-            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-            : const Text('Sign In', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 0.2)),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 150),
+          child: _loading
+            ? const Row(key: ValueKey('busy'), mainAxisSize: MainAxisSize.min, children: [
+                SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2)),
+                SizedBox(width: 10),
+                Text('Signing in…', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.2)),
+              ])
+            : const Text('Sign In', key: ValueKey('idle'), style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 0.2)),
+        ),
       ),
     ),
   ]);
@@ -226,13 +255,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     required String hint,
     required IconData prefix,
     TextInputAction action = TextInputAction.next,
+    String? error,
+    VoidCallback? onChanged,
   }) => TextField(
     controller: controller,
     textInputAction: action,
+    enabled: !_loading,
+    onChanged: onChanged == null ? null : (_) => onChanged(),
     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: _text1),
     decoration: InputDecoration(
       labelText: label,
       hintText: hint,
+      errorText: error,
       labelStyle: const TextStyle(color: _text2, fontWeight: FontWeight.w600),
       hintStyle: TextStyle(color: _text2.withValues(alpha: 0.5), fontSize: 13.5),
       prefixIcon: Icon(prefix, size: 20, color: _text2),
@@ -248,11 +282,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _login() async {
     final name     = _nameCtrl.text.trim();
     final password = _passCtrl.text;
+    if (_loading) return;
     if (name.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Please enter your email and password');
+      setState(() {
+        _emailError = name.isEmpty ? 'Please enter your email' : null;
+        _passError = password.isEmpty ? 'Please enter your password' : null;
+        _error = null;
+      });
       return;
     }
-    setState(() { _loading = true; _error = null; });
+    setState(() { _loading = true; _error = null; _emailError = null; _passError = null; });
 
     // 1. Backend login — accounts persist server-side, so they work across
     //    devices/browsers.

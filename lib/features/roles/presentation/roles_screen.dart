@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/auth/role_auth.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 const _brand600 = Color(0xFFFF9933);
 const _brand700 = Color(0xFFE07C1F);
@@ -59,11 +60,7 @@ class _RolesScreenState extends State<RolesScreen> {
       try { await apiClient.patch('/users/${r.backendId}/toggle-active', {}); } catch (_) {}
     }
     setState(() { appRoles.remove(r); saveRoles(); });
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('Role "${r.name}" deleted'),
-      backgroundColor: _coral500,
-      duration: const Duration(seconds: 2),
-    ));
+    if (mounted) AppToast.success(context, 'Role deleted', detail: '“${r.name}”');
   }
 
   Widget _cardView() => appRoles.isEmpty
@@ -153,27 +150,16 @@ class _RolesScreenState extends State<RolesScreen> {
         // ── Header ──────────────────────────────────────────────────
         Container(
           color: context.headerBg,
-          padding: EdgeInsets.fromLTRB(18, top + 14, 18, 20),
+          padding: EdgeInsets.fromLTRB(18, top + 12, 16, 12),
           child: Row(children: [
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Roles & Access', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: context.textPrimary)),
+              Text('Roles & Access', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.2, color: context.textPrimary)),
               Text('${appRoles.length} role${appRoles.length == 1 ? '' : 's'} · each role has its own login',
-                  style: TextStyle(fontSize: 13, color: context.textSub)),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12.5, color: context.textSub)),
             ])),
-            GestureDetector(
-              onTap: _openCreate,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                decoration: BoxDecoration(
-                    color: _brand600,
-                    borderRadius: BorderRadius.circular(12)),
-                child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.add_rounded, color: Colors.white, size: 18),
-                  SizedBox(width: 5),
-                  Text('Create Role', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
-                ]),
-              ),
-            ),
+            const SizedBox(width: 8),
+            AppButton(label: 'Create Role', icon: Icons.add_rounded, onPressed: _openCreate),
           ]),
         ),
 
@@ -262,12 +248,14 @@ class _RoleCard extends StatelessWidget {
                 ]),
             ])),
             IconButton(
+              tooltip: 'Edit role',
               onPressed: onEdit,
               icon: const Icon(Icons.edit_outlined, size: 18, color: _brand600),
               style: IconButton.styleFrom(backgroundColor: _brand100, fixedSize: const Size(34, 34), padding: EdgeInsets.zero),
             ),
             const SizedBox(width: 6),
             IconButton(
+              tooltip: 'Delete role',
               onPressed: onDelete,
               icon: const Icon(Icons.delete_outline_rounded, size: 18, color: _coral500),
               style: IconButton.styleFrom(backgroundColor: const Color(0xFFFFF0EE), fixedSize: const Size(34, 34), padding: EdgeInsets.zero),
@@ -349,9 +337,12 @@ class _TabBtn extends StatelessWidget {
   final bool active;
   final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => GestureDetector(
+  Widget build(BuildContext context) => Semantics(
+    button: true, selected: active, label: label,
+    child: GestureDetector(
     onTap: onTap,
-    child: Container(
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
       decoration: BoxDecoration(
         color: active ? const Color(0xFFFF9933) : Colors.white,
@@ -364,7 +355,7 @@ class _TabBtn extends StatelessWidget {
         Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : const Color(0xFF5A6B67))),
       ]),
     ),
-  );
+  ));
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -376,6 +367,8 @@ void _openSheet(BuildContext context, AppRole? existing, VoidCallback onSaved) {
   final passCtrl  = TextEditingController(text: existing?.password ?? '');
   final selected  = <String>{...existing?.modules ?? {}};
   bool obscure = true;
+  String? nameError;
+  String? passError;
 
   showDialog(
     context: context,
@@ -398,7 +391,7 @@ void _openSheet(BuildContext context, AppRole? existing, VoidCallback onSaved) {
                 const SizedBox(width: 10),
                 Expanded(child: Text(existing == null ? 'Create New Role' : 'Edit Role',
                     style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800))),
-                IconButton(onPressed: () => Navigator.pop(ctx),
+                IconButton(tooltip: 'Close', onPressed: () => Navigator.pop(ctx),
                     icon: const Icon(Icons.close, color: Colors.white70, size: 20),
                     padding: EdgeInsets.zero, constraints: const BoxConstraints()),
               ]),
@@ -409,11 +402,16 @@ void _openSheet(BuildContext context, AppRole? existing, VoidCallback onSaved) {
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 // Role name
-                const Text('Role Name', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _onSurface2)),
+                const Text.rich(TextSpan(children: [TextSpan(text: 'Role Name'), TextSpan(text: ' *', style: TextStyle(color: _coral500))]),
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _onSurface2)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: nameCtrl,
+                  autofocus: existing == null,
+                  textInputAction: TextInputAction.next,
+                  onChanged: (_) { if (nameError != null) setSt(() => nameError = null); },
                   decoration: InputDecoration(
+                    errorText: nameError,
                     hintText: 'e.g. Donations Manager',
                     hintStyle: const TextStyle(color: _onSurface3),
                     prefixIcon: const Icon(Icons.badge_outlined, size: 19),
@@ -427,10 +425,11 @@ void _openSheet(BuildContext context, AppRole? existing, VoidCallback onSaved) {
                 const SizedBox(height: 14),
 
                 // Email
-                const Text('Email', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _onSurface2)),
+                const Text('Email', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _onSurface2)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: emailCtrl,
+                  textInputAction: TextInputAction.next,
                   keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
                     hintText: 'e.g. donations@saksham.org',
@@ -446,16 +445,20 @@ void _openSheet(BuildContext context, AppRole? existing, VoidCallback onSaved) {
                 const SizedBox(height: 14),
 
                 // Password
-                const Text('Password', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _onSurface2)),
+                const Text.rich(TextSpan(children: [TextSpan(text: 'Password'), TextSpan(text: ' *', style: TextStyle(color: _coral500))]),
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _onSurface2)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: passCtrl,
                   obscureText: obscure,
+                  onChanged: (_) { if (passError != null) setSt(() => passError = null); },
                   decoration: InputDecoration(
+                    errorText: passError,
                     hintText: 'Set a login password',
                     hintStyle: const TextStyle(color: _onSurface3),
                     prefixIcon: const Icon(Icons.lock_outline, size: 19),
                     suffixIcon: IconButton(
+                      tooltip: obscure ? 'Show password' : 'Hide password',
                       icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18),
                       onPressed: () => setSt(() => obscure = !obscure),
                     ),
@@ -476,7 +479,9 @@ void _openSheet(BuildContext context, AppRole? existing, VoidCallback onSaved) {
                 const SizedBox(height: 10),
                 ..._kMods.map((m) {
                   final isOn = selected.contains(m.key);
-                  return GestureDetector(
+                  return Semantics(
+                    checked: isOn, label: m.label,
+                    child: GestureDetector(
                     onTap: () => setSt(() { if (isOn) selected.remove(m.key); else selected.add(m.key); }),
                     child: Container(
                       margin: const EdgeInsets.only(bottom: 8),
@@ -512,37 +517,38 @@ void _openSheet(BuildContext context, AppRole? existing, VoidCallback onSaved) {
                         ),
                       ]),
                     ),
-                  );
+                  ));
                 }),
                 const SizedBox(height: 4),
               ]),
             )),
 
             // Buttons
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-              child: Row(children: [
-                Expanded(child: OutlinedButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: _border),
-                    foregroundColor: _onSurface2,
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),
-                )),
-                const SizedBox(width: 12),
-                Expanded(child: ElevatedButton(
+            Container(
+              decoration: const BoxDecoration(border: Border(top: BorderSide(color: _border))),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+              child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                AppButton(label: 'Cancel', variant: AppButtonVariant.secondary, onPressed: () => Navigator.pop(ctx)),
+                const SizedBox(width: 8),
+                AppButton(
+                  label: existing == null ? 'Create Role' : 'Save Changes',
                   onPressed: () {
                     final name  = nameCtrl.text.trim();
                     final email = emailCtrl.text.trim();
                     final pass  = passCtrl.text.trim();
-                    if (name.isEmpty || pass.isEmpty) return;
+                    if (name.isEmpty || pass.isEmpty) {
+                      setSt(() {
+                        nameError = name.isEmpty ? 'Please enter a role name.' : null;
+                        passError = pass.isEmpty ? 'Please set a password.' : null;
+                      });
+                      return;
+                    }
+                    var duplicate = false;
                     if (existing == null) {
                       // Prevent duplicate: skip if email already registered
                       if (email.isNotEmpty && appRoles.any((r) => r.email.toLowerCase() == email.toLowerCase())) {
                         // Just return without adding — email already exists
+                        duplicate = true;
                       } else {
                         appRoles.add(AppRole(name: name, email: email, password: pass, modules: Set.from(selected)));
                       }
@@ -555,16 +561,14 @@ void _openSheet(BuildContext context, AppRole? existing, VoidCallback onSaved) {
                     saveRoles();
                     Navigator.pop(ctx);
                     onSaved();
+                    if (!context.mounted) return;
+                    if (duplicate) {
+                      AppToast.warning(context, 'Role not added', detail: 'That email is already registered.');
+                    } else {
+                      AppToast.success(context, existing == null ? 'Role created' : 'Changes saved', detail: '“$name”');
+                    }
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _brand600, foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    elevation: 0,
-                  ),
-                  child: Text(existing == null ? 'Create Role' : 'Save Changes',
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                )),
+                ),
               ]),
             ),
           ]),

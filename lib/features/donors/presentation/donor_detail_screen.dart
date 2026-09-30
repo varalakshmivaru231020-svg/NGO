@@ -15,6 +15,7 @@ import '../../../core/auth/role_auth.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../settings/profile_store.dart';
 import 'donors_screen.dart' show demoLocalDonors, mockDonorData, localDonorPhotos;
+import 'package:saksham_app/core/ui/ui.dart';
 
 const _brand600 = Color(0xFFFF9933);
 const _brand700 = Color(0xFFE07C1F);
@@ -194,19 +195,19 @@ class _DonorDetailScreenState extends State<DonorDetailScreen> with SingleTicker
     if (_error != null || _donor == null) {
       return Scaffold(
         backgroundColor: context.scaffoldBg,
-        body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.error_outline, color: _coral500, size: 44),
-          const SizedBox(height: 12),
-          Text('Failed to load donor', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: context.textPrimary)),
-          if (_error != null) Padding(
-            padding: const EdgeInsets.fromLTRB(24, 6, 24, 0),
-            child: Text(_error!, textAlign: TextAlign.center, style: TextStyle(fontSize: 12.5, color: context.textHint)),
+        body: SafeArea(child: Column(children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: IconButton(
+              tooltip: 'Back to Donors',
+              icon: Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: context.textPrimary),
+              onPressed: () => context.go('/donors'),
+            ),
           ),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: () { setState(() { _loading = true; _error = null; }); _load(); },
-            child: const Text('Retry', style: TextStyle(color: _brand600, fontWeight: FontWeight.w700)),
-          ),
+          Expanded(child: Center(child: SingleChildScrollView(child: ErrorState(
+            message: _error ?? 'Donor not found',
+            onRetry: () { setState(() { _loading = true; _error = null; }); _load(); },
+          )))),
         ])),
       );
     }
@@ -542,15 +543,14 @@ class _DonationsTabState extends State<_DonationsTab> {
     final earliest = dates.isEmpty ? now : dates.reduce((a, b) => a.isBefore(b) ? a : b);
     final allTime = DateTimeRange(start: earliest, end: now);
 
-    return showModalBottomSheet<DateTimeRange>(
+    return showAppSheet<DateTimeRange>(
       context: context,
       backgroundColor: context.cardBg,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => SafeArea(child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(color: ctx.border, borderRadius: BorderRadius.circular(2)))),
+          Center(child: SheetHandle(margin: const EdgeInsets.only(bottom: 16))),
           Text('Select Period', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: ctx.textPrimary)),
           const SizedBox(height: 4),
           Text('Choose the date range to include in the statement', style: TextStyle(fontSize: 12.5, color: ctx.textHint, fontWeight: FontWeight.w500)),
@@ -597,11 +597,10 @@ class _DonationsTabState extends State<_DonationsTab> {
   // Donations → Download All), mirroring the standard SKET invoice format
   // used for the single-donation receipt.
   Future<void> _downloadAll() async {
+    if (_downloading) return; // ignore repeated taps
     final completed = widget.donations.where((d) => (d['status'] as String? ?? 'COMPLETED') == 'COMPLETED').toList();
     if (completed.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('No completed donations to include', style: TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: _coral500, behavior: SnackBarBehavior.floating));
+      AppToast.warning(context, 'No completed donations to include');
       return;
     }
     final range = await _pickRange(completed);
@@ -612,9 +611,7 @@ class _DonationsTabState extends State<_DonationsTab> {
       return dt != null && !dt.isBefore(range.start) && !dt.isAfter(rangeEnd);
     }).toList();
     if (filtered.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('No donations found in that date range', style: TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: _coral500, behavior: SnackBarBehavior.floating));
+      AppToast.warning(context, 'No donations in that date range', detail: 'Try a wider period.');
       return;
     }
     setState(() => _downloading = true);
@@ -625,16 +622,14 @@ class _DonationsTabState extends State<_DonationsTab> {
       final filename = 'Donation_Statement_$donorName.pdf';
       final ok = await NativeFileSaver.saveBytes(filename, bytes, 'application/pdf');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(ok ? 'Statement saved as PDF' : 'Failed to save', style: const TextStyle(fontWeight: FontWeight.w700)),
-          backgroundColor: ok ? _brand600 : _coral500, behavior: SnackBarBehavior.floating));
+        if (ok) {
+          AppToast.success(context, 'Statement downloaded', detail: filename);
+        } else {
+          AppToast.error(context, 'Unable to save statement', detail: 'Please try again.');
+        }
       }
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Could not generate statement', style: TextStyle(fontWeight: FontWeight.w700)),
-          backgroundColor: _coral500, behavior: SnackBarBehavior.floating));
-      }
+      if (mounted) AppToast.error(context, 'Unable to generate statement', detail: 'Please try again.');
     }
     if (mounted) setState(() => _downloading = false);
   }
@@ -656,7 +651,11 @@ class _DonationsTabState extends State<_DonationsTab> {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(8), border: Border.all(color: _brand600.withValues(alpha: 0.25))),
                 child: _downloading
-                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600))
+                    ? const Row(mainAxisSize: MainAxisSize.min, children: [
+                        AppSpinner(size: 12),
+                        SizedBox(width: 6),
+                        Text('Preparing…', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _brand600)),
+                      ])
                     : const Row(mainAxisSize: MainAxisSize.min, children: [
                         Icon(Icons.download_rounded, size: 14, color: _brand600),
                         SizedBox(width: 5),
@@ -667,11 +666,13 @@ class _DonationsTabState extends State<_DonationsTab> {
         ]),
       ),
       if (allDonations.isEmpty)
-        Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('💸', style: TextStyle(fontSize: 44)),
-          const SizedBox(height: 12),
-          Text('No donations yet', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: context.textHint)),
-        ])))
+        Expanded(child: ListView(children: const [
+          EmptyState(
+            icon: Icons.volunteer_activism_outlined,
+            title: 'No donations yet',
+            message: 'Donations recorded for this donor will appear here.',
+          ),
+        ]))
       else
       Expanded(child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(18, 4, 18, 40),
@@ -858,11 +859,11 @@ class _DocumentsTabState extends State<_DocumentsTab> {
     final filename = _getFilename(docName);
     final ok = await NativeFileSaver.saveBytes(filename, bytes, _mimeFor(filename));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(ok ? 'Downloaded $filename' : 'Failed to download'),
-        backgroundColor: ok ? _brand600 : _coral500,
-        behavior: SnackBarBehavior.floating,
-      ));
+      if (ok) {
+        AppToast.success(context, 'Document downloaded', detail: filename);
+      } else {
+        AppToast.error(context, 'Unable to download document', detail: 'Please try again.');
+      }
     }
   }
 
@@ -1062,16 +1063,20 @@ class _SponsoredTabState extends State<_SponsoredTab> {
     }
   }
 
-  Future<void> _removeSponsorship(String sponsorshipId) async {
-    try {
-      await apiClient.delete('/students/sponsorships/$sponsorshipId');
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(ApiClient.errorMessage(e), style: const TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: _coral500, behavior: SnackBarBehavior.floating));
-    }
-    if (!mounted) return;
+  Future<void> _removeSponsorship(String sponsorshipId, String childName) async {
+    // Same request as before, run from a confirm dialog so the button shows
+    // "Removing…" and a failure keeps the dialog open with an error toast.
+    final ok = await AppConfirm.show(
+      context,
+      title: 'Remove sponsorship?',
+      message: 'This donor will no longer be listed as the sponsor of ${childName.isNotEmpty ? childName : 'this child'}.',
+      confirmLabel: 'Remove',
+      busyLabel: 'Removing…',
+      onConfirm: () => apiClient.delete('/students/sponsorships/$sponsorshipId'),
+      errorText: (e) => ApiClient.errorMessage(e, fallback: 'Unable to remove sponsorship.'),
+    );
+    if (!ok || !mounted) return;
+    AppToast.success(context, 'Sponsorship removed', detail: childName.isNotEmpty ? childName : null);
     await _load();
   }
 
@@ -1099,7 +1104,7 @@ class _SponsoredTabState extends State<_SponsoredTab> {
       if (sheetOpen) setSheetRef?.call(() {});
     });
 
-    showModalBottomSheet(
+    showAppSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: context.cardBg,
@@ -1121,7 +1126,7 @@ class _SponsoredTabState extends State<_SponsoredTab> {
             height: MediaQuery.of(ctx).size.height * 0.7,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               const SizedBox(height: 8),
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: context.border, borderRadius: BorderRadius.circular(2))),
+              const SheetHandle(),
               const SizedBox(height: 14),
               Text('Select a Child to Sponsor', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: context.textPrimary)),
               const SizedBox(height: 12),
@@ -1149,13 +1154,19 @@ class _SponsoredTabState extends State<_SponsoredTab> {
               const SizedBox(height: 8),
               Expanded(
                 child: loadingStudents
-                  ? const Center(child: CircularProgressIndicator(color: _brand600))
+                  ? const SingleChildScrollView(child: SkeletonList(rows: 5, rowHeight: 60))
                   : loadError != null && allStudents.isEmpty
-                  ? Center(child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Text(loadError!, textAlign: TextAlign.center, style: const TextStyle(color: _coral500, fontSize: 13.5, fontWeight: FontWeight.w600))))
+                  ? SingleChildScrollView(child: EmptyStateLike(
+                      icon: Icons.cloud_off_rounded,
+                      title: 'Couldn’t load children',
+                      message: loadError,
+                    ))
                   : filtered.isEmpty
-                    ? Center(child: Text('No matching children', style: TextStyle(color: context.textHint, fontSize: 13.5)))
+                    ? const SingleChildScrollView(child: EmptyState(
+                        icon: Icons.search_off_rounded,
+                        title: 'No matching children',
+                        message: 'Try a different name or child ID.',
+                      ))
                     : ListView.builder(
                         padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
                         itemCount: filtered.length,
@@ -1212,61 +1223,24 @@ class _SponsoredTabState extends State<_SponsoredTab> {
   }
 
   Future<void> _promptAmountAndSave(Map<String, dynamic> student) async {
-    final amountCtrl = TextEditingController();
-    final purposeCtrl = TextEditingController();
     final name = student['name'] as String? ?? 'this child';
-    final result = await showDialog<(int, String)>(
+    // The request runs inside the dialog: "Assigning…" on the button, the
+    // dialog stays open (with what was typed) if it fails.
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add Sponsorship'),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Annual sponsorship this donor will provide $name', style: TextStyle(fontSize: 13, color: context.textHint)),
-          const SizedBox(height: 14),
-          Text('Sponsorship Amount', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: context.textSub)),
-          const SizedBox(height: 6),
-          TextField(
-            controller: amountCtrl, autofocus: true, keyboardType: TextInputType.number,
-            decoration: const InputDecoration(prefixText: '₹ ', hintText: 'e.g. 18000'),
-          ),
-          const SizedBox(height: 14),
-          Text('Sponsorship Purpose', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: context.textSub)),
-          const SizedBox(height: 6),
-          TextField(
-            controller: purposeCtrl,
-            decoration: const InputDecoration(hintText: 'e.g. Education, Health, General welfare'),
-          ),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(onPressed: () {
-            final v = int.tryParse(amountCtrl.text.trim());
-            if (v != null && v > 0) Navigator.pop(ctx, (v, purposeCtrl.text.trim()));
-          }, child: const Text('Assign')),
-        ],
+      builder: (ctx) => _SponsorAmountDialog(
+        childName: name,
+        onSubmit: (amount, purpose) => apiClient.post('/students/${student['id']}/sponsorships', {
+          'donorId': widget.donorId,
+          'amount': amount,
+          'frequency': 'ANNUAL',
+          if (purpose.isNotEmpty) 'notes': purpose,
+        }),
       ),
     );
-    if (result == null || !mounted) return;
-    final (amount, purpose) = result;
-
-    try {
-      await apiClient.post('/students/${student['id']}/sponsorships', {
-        'donorId': widget.donorId,
-        'amount': amount,
-        'frequency': 'ANNUAL',
-        if (purpose.isNotEmpty) 'notes': purpose,
-      });
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('$name assigned as sponsored child', style: const TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
-      await _load();
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Could not save sponsorship — check your connection and try again', style: TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: _coral500, behavior: SnackBarBehavior.floating));
-    }
+    if (saved != true || !mounted) return;
+    AppToast.success(context, 'Sponsorship added', detail: '$name is now sponsored by this donor');
+    await _load();
   }
 
   String _fmtDate(String? iso) {
@@ -1286,30 +1260,22 @@ class _SponsoredTabState extends State<_SponsoredTab> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: _brand600));
+      return const SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(4, 12, 4, 0),
+        child: SkeletonList(rows: 3, rowHeight: 72),
+      );
     }
 
     if (_children.isEmpty) {
-      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.child_care_outlined, size: 44, color: context.textHint),
-        const SizedBox(height: 12),
-        Text('No children sponsored', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: context.textHint)),
-        const SizedBox(height: 6),
-        Text('This donor has not sponsored any child yet.', style: TextStyle(fontSize: 13, color: context.textHint)),
-        const SizedBox(height: 20),
-        GestureDetector(
-          onTap: _openAddSponsor,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(14)),
-            child: const Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.add, color: Colors.white, size: 18),
-              SizedBox(width: 6),
-              Text('Add Sponsor', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
-            ]),
-          ),
+      return ListView(children: [
+        EmptyState(
+          icon: Icons.child_care_outlined,
+          title: 'No children sponsored',
+          message: 'This donor has not sponsored any child yet.',
+          actionLabel: 'Add Sponsor',
+          onAction: _openAddSponsor,
         ),
-      ]));
+      ]);
     }
 
     return ListView(
@@ -1371,7 +1337,7 @@ class _SponsoredTabState extends State<_SponsoredTab> {
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.textHint)),
                 ])),
                 GestureDetector(
-                  onTap: sp == null ? null : () => _removeSponsorship(sp['id'] as String),
+                  onTap: sp == null ? null : () => _removeSponsorship(sp['id'] as String, name),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(20)),
@@ -1403,6 +1369,89 @@ class _SponsoredTabState extends State<_SponsoredTab> {
       ],
     );
   }
+}
+
+// Compact "Add Sponsorship" dialog: validates the amount under the field,
+// runs [onSubmit] with a loading button and closes (true) only on success.
+class _SponsorAmountDialog extends StatefulWidget {
+  const _SponsorAmountDialog({required this.childName, required this.onSubmit});
+  final String childName;
+  final Future<dynamic> Function(int amount, String purpose) onSubmit;
+  @override
+  State<_SponsorAmountDialog> createState() => _SponsorAmountDialogState();
+}
+
+class _SponsorAmountDialogState extends State<_SponsorAmountDialog> {
+  final _form = GlobalKey<FormState>();
+  final _amount = TextEditingController();
+  final _purpose = TextEditingController();
+  bool _busy = false;
+
+  @override
+  void dispose() { _amount.dispose(); _purpose.dispose(); super.dispose(); }
+
+  Future<void> _submit() async {
+    if (_busy) return;
+    if (!_form.currentState!.validate()) return;
+    setState(() => _busy = true);
+    try {
+      await widget.onSubmit(int.parse(_amount.text.trim()), _purpose.text.trim());
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      AppToast.error(context, 'Unable to add sponsorship',
+          detail: ApiClient.errorMessage(e, fallback: 'Check your connection and try again.'));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Dialog(
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    insetPadding: const EdgeInsets.all(20),
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 420),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+        child: Form(
+          key: _form,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Add Sponsorship', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text('Annual sponsorship this donor will provide ${widget.childName}',
+                style: TextStyle(fontSize: 12.5, color: context.textHint)),
+            const SizedBox(height: 14),
+            Text('Sponsorship Amount', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: context.textSub)),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: _amount, autofocus: true, keyboardType: TextInputType.number, enabled: !_busy,
+              decoration: const InputDecoration(prefixText: '₹ ', hintText: 'e.g. 18000'),
+              validator: (v) {
+                final n = int.tryParse((v ?? '').trim());
+                return (n == null || n <= 0) ? 'Enter an amount greater than 0.' : null;
+              },
+            ),
+            const SizedBox(height: 14),
+            Text('Sponsorship Purpose', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: context.textSub)),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: _purpose, enabled: !_busy,
+              decoration: const InputDecoration(hintText: 'e.g. Education, Health, General welfare'),
+              onFieldSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 18),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              AppButton(label: 'Cancel', variant: AppButtonVariant.secondary,
+                  onPressed: _busy ? null : () => Navigator.pop(context)),
+              const SizedBox(width: 8),
+              AppButton(label: 'Assign', busyLabel: 'Assigning…', loading: _busy, onPressed: _submit),
+            ]),
+          ]),
+        ),
+      ),
+    ),
+  );
 }
 
 class _SpnDetail extends StatelessWidget {
@@ -1499,15 +1548,20 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
     return null;
   }
 
-  void _toast(String msg, {bool error = false}) {
+  void _toast(String msg, {bool error = false, String? detail}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
-      backgroundColor: error ? _coral500 : _brand600, behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+    if (error) {
+      AppToast.error(context, msg, detail: detail);
+    } else {
+      AppToast.success(context, msg, detail: detail);
+    }
   }
 
+  // Which upload is in flight — its button shows "Uploading…".
+  _MediaKind? _uploadingKind;
+
   Future<void> _upload(_MediaKind kind) async {
+    if (_uploading) return; // ignore repeated taps
     final r = await FilePicker.platform.pickFiles(
       type: kind == _MediaKind.video ? FileType.video : FileType.image, withData: true);
     final file = r?.files.firstOrNull;
@@ -1517,7 +1571,7 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
     final allowed = kind == _MediaKind.video ? _allowedVideoExt : _allowedImageExt;
     if (!allowed.contains(ext)) {
       final formats = kind == _MediaKind.video ? 'MP4, MOV, AVI, or WebM' : 'JPG, PNG, or WebP';
-      _toast('Unsupported format "$ext" — please upload $formats.', error: true);
+      _toast('Unsupported file format', detail: 'Please upload $formats.', error: true);
       return;
     }
 
@@ -1554,18 +1608,14 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
           ),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-            child: const Text('Upload'),
-          ),
+          AppButton(label: 'Cancel', variant: AppButtonVariant.secondary, onPressed: () => Navigator.pop(ctx, false)),
+          AppButton(label: 'Upload', icon: Icons.upload_rounded, onPressed: () => Navigator.pop(ctx, true)),
         ],
       )),
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _uploading = true);
+    setState(() { _uploading = true; _uploadingKind = kind; });
     try {
       final path = kind == _MediaKind.video ? 'activity-videos' : 'activity-images';
       await apiClient.post('/donors/${widget.donorId}/$path', {
@@ -1576,15 +1626,15 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
         'uploadedBy': _uploaderName,
         'data': base64Encode(file.bytes!),
       });
-      _toast('${kind == _MediaKind.video ? 'Video' : 'Photo'} uploaded successfully');
+      _toast('${kind == _MediaKind.video ? 'Video' : 'Photo'} uploaded');
       await _load();
     } catch (e) {
       final tooLarge = e.toString().contains('too large');
-      _toast(tooLarge
-        ? '${kind == _MediaKind.video ? 'Video' : 'Photo'} is too large — please upload a smaller file.'
-        : 'Upload failed. Please try again.', error: true);
+      _toast('Unable to upload ${kind == _MediaKind.video ? 'video' : 'photo'}',
+        detail: tooLarge ? 'The file is too large — please upload a smaller file.' : 'Please try again.',
+        error: true);
     } finally {
-      if (mounted) setState(() => _uploading = false);
+      if (mounted) setState(() { _uploading = false; _uploadingKind = null; });
     }
   }
 
@@ -1659,17 +1709,15 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
 
   Future<void> _delete(_ActivityItem item) async {
     final label = item.kind == _MediaKind.video ? 'Video' : 'Photo';
-    final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      title: Text('Delete $label?', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-      content: Text('This will permanently remove "${item.title}".', style: TextStyle(fontSize: 13.5, color: context.textSub)),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: _coral500, fontWeight: FontWeight.w700))),
-      ],
-    ));
-    if (confirmed != true) return;
-    try { await apiClient.delete('${item._basePath}/${item.id}'); _toast('$label deleted'); } catch (_) { _toast('Delete failed', error: true); }
+    final confirmed = await AppConfirm.show(
+      context,
+      title: 'Delete ${label.toLowerCase()}?',
+      message: 'Are you sure you want to delete “${item.title}”? This action cannot be undone.',
+      onConfirm: () => apiClient.delete('${item._basePath}/${item.id}'),
+      errorText: (_) => 'Unable to delete ${label.toLowerCase()}. Please try again.',
+    );
+    if (!confirmed || !mounted) return;
+    _toast('$label deleted', detail: item.title);
     await _load();
   }
 
@@ -1686,10 +1734,14 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(10)),
-              child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.add_photo_alternate_outlined, color: _brand600, size: 16),
-                SizedBox(width: 4),
-                Text('Photo', style: TextStyle(color: _brand600, fontSize: 12, fontWeight: FontWeight.w800)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (_uploadingKind == _MediaKind.image)
+                  const AppSpinner(size: 14)
+                else
+                  const Icon(Icons.add_photo_alternate_outlined, color: _brand600, size: 16),
+                const SizedBox(width: 4),
+                Text(_uploadingKind == _MediaKind.image ? 'Uploading…' : 'Photo',
+                    style: const TextStyle(color: _brand600, fontSize: 12, fontWeight: FontWeight.w800)),
               ]),
             ),
           ),
@@ -1699,8 +1751,12 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(10)),
-              child: _uploading
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              child: _uploadingKind == _MediaKind.video
+                ? const Row(mainAxisSize: MainAxisSize.min, children: [
+                    AppSpinner(size: 14, color: Colors.white),
+                    SizedBox(width: 6),
+                    Text('Uploading…', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                  ])
                 : const Row(mainAxisSize: MainAxisSize.min, children: [
                     Icon(Icons.videocam_outlined, color: Colors.white, size: 16),
                     SizedBox(width: 4),
@@ -1714,13 +1770,13 @@ class _ActivitiesTabState extends State<_ActivitiesTab> {
         Expanded(child: ListView(padding: const EdgeInsets.fromLTRB(18, 4, 18, 40),
           children: List.generate(3, (_) => const Padding(padding: EdgeInsets.only(bottom: 10), child: _SkeletonCard()))))
       else if (_items.isEmpty)
-        Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.photo_library_outlined, size: 44, color: context.textHint),
-          const SizedBox(height: 12),
-          Text('No activities uploaded.', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: context.textHint)),
-          const SizedBox(height: 6),
-          Text('Tap Photo or Video above to add the first one.', style: TextStyle(fontSize: 13, color: context.textHint)),
-        ])))
+        Expanded(child: ListView(children: const [
+          EmptyState(
+            icon: Icons.photo_library_outlined,
+            title: 'No activities uploaded',
+            message: 'Tap Photo or Video above to add the first one.',
+          ),
+        ]))
       else
         Expanded(child: ListView.separated(
           padding: const EdgeInsets.fromLTRB(18, 4, 18, 40),

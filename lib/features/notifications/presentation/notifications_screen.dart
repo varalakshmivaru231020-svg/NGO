@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../notification_store.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
-const _brand600 = Color(0xFFFF9933);
 
 // ══════════════════════════════════════════════════════════════════════
 class NotificationsScreen extends StatefulWidget {
@@ -17,7 +17,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   int get _unreadCount => _notifs.where((n) => n.unread).length;
 
-  void _markAllRead() => setState(markAllNotifsRead);
+  void _markAllRead() {
+    setState(markAllNotifsRead);
+    AppToast.success(context, 'All notifications marked as read');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,27 +31,34 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       body: Column(children: [
         Container(
           color: context.headerBg,
-          padding: EdgeInsets.fromLTRB(18, top + 14, 14, 16),
+          padding: EdgeInsets.fromLTRB(8, top + 10, 14, 10),
           child: Row(children: [
-            IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20), onPressed: () => context.go('/more'), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
-            const SizedBox(width: 10),
+            IconButton(tooltip: 'Back', icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18), onPressed: () => context.go('/more')),
+            const SizedBox(width: 2),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Notifications', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: context.textPrimary)),
-              Text('$_unreadCount unread', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
+              Text('Notifications', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.2, color: context.textPrimary)),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 150),
+                child: Text(_unreadCount == 0 ? 'All caught up' : '$_unreadCount unread', key: ValueKey(_unreadCount),
+                    style: TextStyle(fontSize: 12.5, color: context.textSub, fontWeight: FontWeight.w500)),
+              ),
             ])),
             if (_unreadCount > 0)
-              TextButton(
-                onPressed: _markAllRead,
-                style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                child: const Text('Mark all read', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _brand600)),
-              ),
+              AppButton(label: 'Mark all read', icon: Icons.done_all_rounded, variant: AppButtonVariant.ghost, dense: true, onPressed: _markAllRead),
           ]),
         ),
+        if (_notifs.isEmpty)
+          const Expanded(child: Center(child: EmptyStateLike(
+            icon: Icons.notifications_none_rounded,
+            title: 'No notifications yet',
+            message: 'Updates about donations, approvals and reminders will appear here.',
+          )))
+        else
         Expanded(child: Center(child: ConstrainedBox(
           constraints: const BoxConstraints(),
           child: ListView(
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(0, 12, 0, 100),
+            padding: const EdgeInsets.fromLTRB(0, 12, 0, 24),
             children: groups.expand((g) {
               final items = _notifs.where((n) => n.group == g).toList();
               if (items.isEmpty) return <Widget>[];
@@ -71,9 +81,13 @@ class _NotifCard extends StatelessWidget {
   final AppNotif notif;
   final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => GestureDetector(
+  Widget build(BuildContext context) => Semantics(
+    button: notif.unread,
+    label: notif.unread ? 'Unread: ${notif.title}. Tap to mark as read' : notif.title,
+    child: GestureDetector(
     onTap: onTap,
-    child: Container(
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
       margin: const EdgeInsets.fromLTRB(18, 0, 18, 8),
       decoration: BoxDecoration(
         color: context.cardBg,
@@ -108,5 +122,5 @@ class _NotifCard extends StatelessWidget {
         )),
       ]),
     ),
-  );
+  ));
 }

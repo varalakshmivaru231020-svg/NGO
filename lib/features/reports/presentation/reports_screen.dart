@@ -8,6 +8,7 @@ import '../../../core/utils/native_file_saver.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/network/api_client.dart';
 import '../../students/student_lookups.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 const _brand700 = Color(0xFFE07C1F);
 const _brand600 = Color(0xFFFF9933);
@@ -17,7 +18,6 @@ const _coral500 = Color(0xFFF2685E);
 const _violet500 = Color(0xFF7C6CF0);
 const _sky500 = Color(0xFF2D9CDB);
 const _green500 = Color(0xFF14A98C);
-const _onSurface1 = Color(0xFF15211E);
 const _onSurface2 = Color(0xFF5A6B67);
 const _onSurface3 = Color(0xFF93A29F);
 const _border = Color(0xFFE5EBE9);
@@ -243,6 +243,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Future<void> _export() async {
+    if (_exporting) return;
     setState(() => _exporting = true);
     final excel = xl.Excel.createExcel();
     final dateStr = DateFormat('ddMMyyyy').format(DateTime.now());
@@ -264,11 +265,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _exporting = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(ApiClient.errorMessage(e, fallback: 'Could not load the report data.'),
-              style: const TextStyle(fontWeight: FontWeight.w700)),
-          backgroundColor: Colors.red, behavior: SnackBarBehavior.floating,
-        ));
+        AppToast.error(context, 'Export failed',
+            detail: ApiClient.errorMessage(e, fallback: 'Could not load the report data.'));
       }
       return;
     }
@@ -379,7 +377,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
     if (excel.sheets.containsKey('Sheet1')) excel.delete('Sheet1');
 
     final bytes = excel.encode();
-    if (bytes == null) { if (mounted) setState(() => _exporting = false); return; }
+    if (bytes == null) {
+      if (mounted) {
+        setState(() => _exporting = false);
+        AppToast.error(context, 'Export failed', detail: 'The spreadsheet could not be created.');
+      }
+      return;
+    }
 
     final filename = 'SKET_${_reportFilter}_Report_$dateStr.xlsx';
     final ok = await NativeFileSaver.saveBytes(filename, Uint8List.fromList(bytes),
@@ -387,13 +391,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     if (mounted) {
       setState(() => _exporting = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(ok ? '✓ Saved: $filename' : 'Export failed', style: const TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: ok ? _brand600 : Colors.red,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 3),
-      ));
+      if (ok) {
+        AppToast.success(context, 'Report exported', detail: filename);
+      } else {
+        AppToast.error(context, 'Export failed', detail: 'The file could not be saved.');
+      }
     }
   }
 
@@ -403,26 +405,33 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return Scaffold(
       body: Column(children: [
         // header
-        Container(color: context.headerBg, padding: EdgeInsets.fromLTRB(18, top + 14, 18, 16),
+        Container(color: context.headerBg, padding: EdgeInsets.fromLTRB(8, top + 10, 16, 10),
           child: Row(children: [
-            IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20), onPressed: () => context.go('/more'), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
-            const SizedBox(width: 10),
+            IconButton(tooltip: 'Back', icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18), onPressed: () => context.go('/more')),
+            const SizedBox(width: 2),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Reports & Analytics', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-              Text('Performance overview', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
+              const Text('Reports & Analytics', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.2)),
+              Text(_loading ? 'Loading…' : 'Performance overview', style: TextStyle(fontSize: 12.5, color: context.textSub, fontWeight: FontWeight.w500)),
             ])),
           ])),
 
         if (_loading)
-          const Expanded(child: Center(child: CircularProgressIndicator(color: _brand600)))
+          Expanded(child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Skeleton(height: 40, radius: 12),
+              const SizedBox(height: 12),
+              Row(children: const [
+                Expanded(child: Skeleton(height: 84, radius: 14)),
+                SizedBox(width: 10),
+                Expanded(child: Skeleton(height: 84, radius: 14)),
+              ]),
+              const SizedBox(height: 12),
+              const Skeleton(height: 200, radius: 14),
+            ]),
+          ))
         else if (_error != null)
-          Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.wifi_off_rounded, size: 44, color: _onSurface3),
-            const SizedBox(height: 10),
-            Text(_error!, style: const TextStyle(fontWeight: FontWeight.w700, color: _onSurface1)),
-            const SizedBox(height: 10),
-            TextButton(onPressed: _load, child: const Text('Retry', style: TextStyle(color: _brand600, fontWeight: FontWeight.w700))),
-          ])))
+          Expanded(child: Center(child: ErrorState(message: _error!, onRetry: _load)))
         else
         Expanded(child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
@@ -468,9 +477,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           overflow: TextOverflow.ellipsis,
                         )),
                         if (_dateRange != null)
-                          GestureDetector(
+                          Tooltip(message: 'Clear date range', child: GestureDetector(
                             onTap: () => setState(() => _dateRange = null),
-                            child: const Icon(Icons.close_rounded, size: 16, color: _brand600)),
+                            child: const Icon(Icons.close_rounded, size: 16, color: _brand600))),
                       ]),
                     ),
                   )),
@@ -482,9 +491,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     scrollDirection: Axis.horizontal,
                     children: _filterOptions.map((f) {
                       final active = _reportFilter == f;
-                      return Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(
+                      return Padding(padding: const EdgeInsets.only(right: 8), child: Semantics(
+                        button: true, selected: active, label: '$f report',
+                        child: GestureDetector(
                         onTap: () => setState(() => _reportFilter = f),
-                        child: Container(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                           decoration: BoxDecoration(
                             color: active ? _brand600 : context.cardBg,
@@ -493,25 +505,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           ),
                           child: Text(f, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub)),
                         ),
-                      ));
+                      )));
                     }).toList(),
                   ))),
                   const SizedBox(width: 10),
-                  GestureDetector(
-                    onTap: _exporting ? null : _export,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-                      decoration: BoxDecoration(
-                        color: _exporting ? _brand600.withValues(alpha: 0.6) : _brand600,
-                        borderRadius: BorderRadius.circular(12)),
-                      child: _exporting
-                        ? const SizedBox(width: 60, child: Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))))
-                        : const Row(mainAxisSize: MainAxisSize.min, children: [
-                            Icon(Icons.download_outlined, color: Colors.white, size: 16),
-                            SizedBox(width: 6),
-                            Text('Export Excel', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white)),
-                          ]),
-                    ),
+                  AppButton(
+                    label: 'Export Excel', busyLabel: 'Exporting…', icon: Icons.download_outlined,
+                    loading: _exporting, onPressed: _export,
                   ),
                 ]),
               ]),

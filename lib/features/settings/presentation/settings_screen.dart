@@ -12,6 +12,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/utils/open_bytes.dart';
 import '../profile_store.dart';
 import '../org_store.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 const _brand600 = Color(0xFFFF9933);
 const _coral500 = Color(0xFFF2685E);
@@ -71,12 +72,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     });
   }
 
-  void _toastError(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
-    backgroundColor: _coral500, behavior: SnackBarBehavior.floating,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    duration: const Duration(seconds: 3),
-  ));
+  void _toastError(String msg, {String? detail}) => AppToast.error(context, msg, detail: detail);
 
   // ── Payments / Razorpay (backend-persisted, SUPER_ADMIN only) ───────────
   final _payKeyIdCtrl = TextEditingController();
@@ -89,6 +85,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   // Backend restricts GET/PATCH /settings/razorpay to SUPER_ADMIN — a plain
   // ADMIN (also "isAdmin" on the client) gets a 403; show a clean message.
   bool _payForbidden = false;
+  String? _payKeyIdError;
+  String? _paySecretError;
 
   Future<void> _loadPaymentsFromBackend() async {
     if (mounted) setState(() => _payLoading = true);
@@ -113,23 +111,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     final keyId = _payKeyIdCtrl.text.trim();
     final keySecret = _paySecretCtrl.text.trim();
     final webhookSecret = _payWebhookCtrl.text.trim();
+    if (_paySaving) return;
     if (keyId.isEmpty || keySecret.isEmpty) {
-      _toastError('Both Key ID and Key Secret are required');
+      setState(() {
+        _payKeyIdError = keyId.isEmpty ? 'Key ID is required' : null;
+        _paySecretError = keySecret.isEmpty ? 'Key Secret is required' : null;
+      });
       return;
     }
-    setState(() => _paySaving = true);
+    setState(() { _paySaving = true; _payKeyIdError = null; _paySecretError = null; });
     try {
       await apiClient.patch('/settings/razorpay',
           {'keyId': keyId, 'keySecret': keySecret, 'webhookSecret': webhookSecret});
       if (mounted) _toast('Razorpay credentials saved');
     } on DioException catch (e) {
       if (mounted) {
-        _toastError(e.response?.statusCode == 403
-            ? 'You do not have permission to update payment settings'
-            : 'Could not save — check your connection and try again');
+        _toastError('Could not save credentials', detail: e.response?.statusCode == 403
+            ? 'You do not have permission to update payment settings.'
+            : 'Check your connection and try again.');
       }
     } catch (_) {
-      if (mounted) _toastError('Could not save — check your connection and try again');
+      if (mounted) _toastError('Could not save credentials', detail: 'Check your connection and try again.');
     }
     if (mounted) setState(() => _paySaving = false);
   }
@@ -166,6 +168,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
         title: const Text('Document Name', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
         content: TextField(
           controller: nameCtrl, autofocus: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) { final v = nameCtrl.text.trim(); if (v.isNotEmpty) Navigator.pop(ctx, v); },
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
             hintText: 'Enter document name',
@@ -176,12 +180,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () { final v = nameCtrl.text.trim(); if (v.isNotEmpty) Navigator.pop(ctx, v); },
-            style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-            child: const Text('Next'),
-          ),
+          AppButton(label: 'Cancel', variant: AppButtonVariant.secondary, onPressed: () => Navigator.pop(ctx)),
+          AppButton(label: 'Next', onPressed: () { final v = nameCtrl.text.trim(); if (v.isNotEmpty) Navigator.pop(ctx, v); }),
         ],
       ),
     );
@@ -196,12 +196,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
           'category': category, 'fileName': fileName, 'mimeType': null, 'data': base64Encode(bytes),
         });
         await _loadMyDocuments();
-        if (mounted) _toast('$fileName uploaded successfully');
+        if (mounted) _toast('Document uploaded', detail: fileName);
       }
-    } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Upload failed — check your connection and try again', style: TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: _coral500, behavior: SnackBarBehavior.floating));
+    } catch (e) {
+      if (mounted) _toastError('Upload failed', detail: ApiClient.errorMessage(e, fallback: 'Check your connection and try again.'));
     }
     if (mounted) setState(() => _myDocsUploading = false);
   }
@@ -214,33 +212,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
       final b64 = data['data'] as String? ?? '';
       if (b64.isNotEmpty) openBytesInBrowser(base64Decode(b64), d.fileName);
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Could not open document', style: TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: _coral500, behavior: SnackBarBehavior.floating));
+      if (mounted) _toastError('Could not open document');
     }
     if (mounted) setState(() => _myDocsViewingId = null);
   }
 
   void _confirmDeleteMyDocument(_MyDoc d) {
-    showDialog(context: context, builder: (ctx) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Delete Document', style: TextStyle(fontWeight: FontWeight.w800)),
-      content: Text('Delete "${d.fileName}"? This cannot be undone.'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        TextButton(
-          onPressed: () { Navigator.pop(ctx); _deleteMyDocument(d); },
-          child: const Text('Delete', style: TextStyle(color: _coral500, fontWeight: FontWeight.w700)),
-        ),
-      ],
-    ));
+    if (_myDocsDeletingId != null) return;
+    AppConfirm.show(
+      context,
+      title: 'Delete document?',
+      message: 'Delete “${d.fileName}”? This cannot be undone.',
+    ).then((ok) { if (ok && mounted) _deleteMyDocument(d); });
   }
 
   Future<void> _deleteMyDocument(_MyDoc d) async {
     setState(() => _myDocsDeletingId = d.id);
-    try { await apiClient.delete('/users/documents/${d.id}'); } catch (_) {}
+    var failed = false;
+    try { await apiClient.delete('/users/documents/${d.id}'); } catch (_) { failed = true; }
     await _loadMyDocuments();
-    if (mounted) setState(() => _myDocsDeletingId = null);
+    if (!mounted) return;
+    setState(() => _myDocsDeletingId = null);
+    if (failed) {
+      _toastError('Could not delete the document');
+    } else {
+      _toast('Document deleted');
+    }
   }
 
   void _editField(String label, String current, void Function(String) onSave) {
@@ -250,6 +247,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
       title: Text('Edit $label', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
       content: TextField(
         controller: ctrl, autofocus: true,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) { if (ctrl.text.trim().isNotEmpty) { onSave(ctrl.text.trim()); } Navigator.pop(ctx); },
         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         decoration: InputDecoration(
           filled: true, fillColor: ctx.surface2,
@@ -258,12 +257,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12)),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        ElevatedButton(
-          onPressed: () { if (ctrl.text.trim().isNotEmpty) { onSave(ctrl.text.trim()); } Navigator.pop(ctx); },
-          style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-          child: const Text('Save'),
-        ),
+        AppButton(label: 'Cancel', variant: AppButtonVariant.secondary, onPressed: () => Navigator.pop(ctx)),
+        AppButton(label: 'Save', onPressed: () { if (ctrl.text.trim().isNotEmpty) { onSave(ctrl.text.trim()); } Navigator.pop(ctx); }),
       ],
     ));
   }
@@ -292,66 +287,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   }
 
   void _showChangePasswordDialog() {
-    final currentCtrl = TextEditingController();
-    final newCtrl = TextEditingController();
-    final confirmCtrl = TextEditingController();
-    showDialog(
+    showAppSheet<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Change Password', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          _pwField(currentCtrl, 'Enter Current Password'),
-          const SizedBox(height: 10),
-          _pwField(newCtrl, 'Enter New Password'),
-          const SizedBox(height: 10),
-          _pwField(confirmCtrl, 'Confirm New Password'),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (newCtrl.text != confirmCtrl.text || newCtrl.text.isEmpty) {
-                _toast('Passwords do not match');
-                return;
-              }
-              if (newCtrl.text.length < 8) {
-                _toast('New password must be at least 8 characters');
-                return;
-              }
-              // Actually change it server-side — this dialog used to toast
-              // success without calling any API at all.
-              try {
-                await apiClient.patch('/users/me/password', {
-                  'currentPassword': currentCtrl.text,
-                  'newPassword': newCtrl.text,
-                });
-                if (ctx.mounted) Navigator.pop(ctx);
-                _toast('Password changed successfully');
-              } catch (e) {
-                _toast(ApiClient.errorMessage(e, fallback: 'Could not change password'));
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: _brand600, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-            child: const Text('Update'),
-          ),
-        ],
-      ),
-    );
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _ChangePasswordForm(),
+    ).then((ok) {
+      if (ok == true && mounted) _toast('Password changed successfully');
+    });
   }
-
-  Widget _pwField(TextEditingController ctrl, String hint) => TextField(
-    controller: ctrl,
-    obscureText: true,
-    style: const TextStyle(fontSize: 14),
-    decoration: InputDecoration(
-      hintText: hint,
-      filled: true, fillColor: context.surface2,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _brand600, width: 1.5)),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    ),
-  );
 
   @override
   void initState() {
@@ -373,12 +316,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     super.dispose();
   }
 
-  void _toast(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w700)),
-    backgroundColor: _brand600, behavior: SnackBarBehavior.floating,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    duration: const Duration(seconds: 2),
-  ));
+  void _toast(String msg, {String? detail}) => AppToast.success(context, msg, detail: detail);
 
   @override
   Widget build(BuildContext context) {
@@ -391,34 +329,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
         // ── Header ───────────────────────────────────────────────
         Container(
           color: context.headerBg,
-          padding: EdgeInsets.fromLTRB(18, top + 14, 18, 16),
+          padding: EdgeInsets.fromLTRB(8, top + 10, 16, 6),
           child: Row(children: [
             IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+              tooltip: 'Back',
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
               onPressed: () => context.go('/more'),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 2),
             Text('Settings', style: TextStyle(
-              fontSize: 22, fontWeight: FontWeight.w800,
-              letterSpacing: -0.3, color: context.textPrimary)),
+              fontSize: 18, fontWeight: FontWeight.w700,
+              letterSpacing: -0.2, color: context.textPrimary)),
           ]),
         ),
 
         // ── Tab Bar ──────────────────────────────────────────────
         Container(
-          color: context.headerBg,
+          decoration: BoxDecoration(color: context.headerBg, border: Border(bottom: BorderSide(color: context.border))),
           child: TabBar(
             controller: _tabCtrl,
             isScrollable: true,
+            tabAlignment: TabAlignment.start,
             indicatorColor: _brand600,
             indicatorWeight: 2.5,
+            indicatorSize: TabBarIndicatorSize.label,
+            dividerColor: Colors.transparent,
             labelColor: _brand600,
             unselectedLabelColor: context.textSub,
-            labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+            labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
             unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            labelPadding: const EdgeInsets.symmetric(horizontal: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             tabs: const [
               Tab(text: '🏢  Organization'),
               Tab(text: '👤  Profile'),
@@ -464,14 +405,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
           ),
           title: const Text('Upload Logo', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
           subtitle: Text('PNG or SVG, recommended 200×200px', style: TextStyle(fontSize: 12, color: context.textSub)),
-          trailing: GestureDetector(
-            onTap: _pickLogo,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(8)),
-              child: Text(org.logoBytes != null ? 'Change' : 'Upload',
-                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white)),
-            ),
+          trailing: AppButton(
+            label: org.logoBytes != null ? 'Change' : 'Upload',
+            icon: Icons.upload_outlined,
+            dense: true,
+            onPressed: _pickLogo,
           ),
         ),
       ]),
@@ -496,10 +434,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
         ),
       ]),
       const SizedBox(height: 16),
-      if (_orgLoading)
-        const Padding(padding: EdgeInsets.symmetric(vertical: 12),
-          child: Center(child: SizedBox(width: 20, height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600)))),
+      AnimatedSwitcher(
+        duration: const Duration(milliseconds: 180),
+        child: _orgLoading
+          ? Padding(
+              key: const ValueKey('orgLoading'),
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(children: [
+                const AppSpinner(size: 12, color: _brand600),
+                const SizedBox(width: 8),
+                Text('Refreshing organization details…', style: TextStyle(fontSize: 12, color: context.textSub, fontWeight: FontWeight.w500)),
+              ]))
+          : const SizedBox.shrink(key: ValueKey('orgIdle')),
+      ),
       _settingsSection('Organization Details', [
         _settingsItem(Icons.business_outlined, 'Organization Name', org.name,
           onTap: () => _editOrgField('Organization Name', org.name, (o, v) => o.copyWith(name: v), 'name')),
@@ -553,7 +500,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
       _settingsSection('Data', [
         _settingsItem(Icons.download_outlined, 'Export Data', 'Download reports & records', onTap: () => context.go('/settings/export-data')),
         _settingsItem(Icons.cloud_sync_outlined, 'Backup & Sync', 'Last synced today', onTap: () => context.go('/settings/backup-sync')),
-        _settingsItem(Icons.router_outlined, 'Server URL', 'Update backend connection', onTap: () => context.go('/settings/server-url')),
         _settingsItem(Icons.payment_outlined, 'Razorpay Credentials', 'Add payment gateway keys', onTap: () => context.go('/settings/razorpay')),
       ]),
       const SizedBox(height: 16),
@@ -652,8 +598,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
           final rows = snap.data ?? const [];
           return _settingsSection('Login History', [
             if (snap.connectionState != ConnectionState.done)
-              const Padding(padding: EdgeInsets.all(20),
-                child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))))
+              const SkeletonList(rows: 3, rowHeight: 56)
             else if (rows.isEmpty)
               Padding(padding: const EdgeInsets.all(16),
                 child: Text('No login history yet — entries appear from your next sign-in.',
@@ -719,18 +664,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   // ── Tab: Payments (Razorpay) — SUPER_ADMIN only server-side ─────
   Widget _paymentsTab() {
     if (_payLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(18, 16, 18, 40),
+        child: SkeletonList(rows: 3, rowHeight: 64),
+      );
     }
     if (_payForbidden) {
-      return Center(child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.lock_outline, size: 40, color: context.textHint),
-          const SizedBox(height: 12),
-          Text('You do not have permission to view payment settings',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.textSub)),
-        ]),
+      return const Center(child: EmptyStateLike(
+        icon: Icons.lock_outline,
+        title: 'No access',
+        message: 'You do not have permission to view payment settings. Only a Super Admin can change them.',
       ));
     }
     return SingleChildScrollView(
@@ -754,12 +697,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
         _settingsSection('Razorpay Credentials', [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: _payField(_payKeyIdCtrl, 'Key ID', Icons.vpn_key_outlined, hint: 'rzp_test_XXXXXXXXXXXXXXXXXX'),
+            child: _payField(_payKeyIdCtrl, 'Key ID', Icons.vpn_key_outlined, hint: 'rzp_test_XXXXXXXXXXXXXXXXXX',
+              error: _payKeyIdError, onChanged: () { if (_payKeyIdError != null) setState(() => _payKeyIdError = null); }),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
             child: _payField(_paySecretCtrl, 'Key Secret', Icons.lock_outline,
               obscure: _payObscureSecret,
+              error: _paySecretError, onChanged: () { if (_paySecretError != null) setState(() => _paySecretError = null); },
               onToggle: () => setState(() => _payObscureSecret = !_payObscureSecret)),
           ),
           Padding(
@@ -769,24 +714,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
               onToggle: () => setState(() => _payObscureWebhook = !_payObscureWebhook)),
           ),
         ]),
-        const SizedBox(height: 20),
-        SizedBox(width: double.infinity, child: ElevatedButton.icon(
-          onPressed: _paySaving ? null : _savePayments,
-          icon: _paySaving
-            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-            : const Icon(Icons.save_outlined, size: 16),
-          label: const Text('Save Credentials'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _brand600, foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-        )),
+        const SizedBox(height: 16),
+        Align(
+          alignment: Alignment.centerRight,
+          child: AppButton(
+            label: 'Save Credentials', busyLabel: 'Saving…', icon: Icons.save_outlined,
+            loading: _paySaving, expand: !isWideLayout(context), onPressed: _savePayments,
+          ),
+        ),
       ]),
     );
   }
 
   Widget _payField(TextEditingController ctrl, String label, IconData icon,
-      {String? hint, bool obscure = false, VoidCallback? onToggle}) => Column(
+      {String? hint, bool obscure = false, VoidCallback? onToggle, String? error, VoidCallback? onChanged}) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: context.textSub)),
@@ -794,13 +735,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
       TextField(
         controller: ctrl,
         obscureText: obscure,
+        enabled: !_paySaving,
+        onChanged: onChanged == null ? null : (_) => onChanged(),
         style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, fontFamily: 'monospace', color: context.textPrimary),
         decoration: InputDecoration(
           prefixIcon: Icon(icon, size: 18, color: _brand600),
+          errorText: error,
           hintText: hint ?? '••••••••••••••••••••',
           hintStyle: TextStyle(fontSize: 12, color: context.textHint),
           filled: true, fillColor: context.surface2,
           suffixIcon: onToggle == null ? null : IconButton(
+            tooltip: obscure ? 'Show $label' : 'Hide $label',
             icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: context.textHint),
             onPressed: onToggle),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
@@ -828,6 +773,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
           padding: EdgeInsets.fromLTRB(18, top + 14, 18, 16),
           child: Row(children: [
             IconButton(
+              tooltip: 'Back to Dashboard',
               icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
               onPressed: () => context.go('/dashboard'),
               padding: EdgeInsets.zero, constraints: const BoxConstraints(),
@@ -884,11 +830,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     if (backendId == null) return const [];
     final items = <Widget>[
       if (_myDocsLoading)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 20),
-          child: Center(child: SizedBox(width: 22, height: 22,
-            child: CircularProgressIndicator(strokeWidth: 2.5, color: _brand600))),
-        )
+        const SkeletonList(rows: 2, rowHeight: 56)
       else if (_myDocs.isEmpty)
         ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -918,20 +860,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
         overflow: TextOverflow.ellipsis),
       subtitle: Text(d.category, style: TextStyle(fontSize: 12.5, color: context.textSub)),
       trailing: deleting
-        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _coral500))
+        ? const AppSpinner(size: 16, color: _coral500)
         : Row(mainAxisSize: MainAxisSize.min, children: [
             GestureDetector(
               onTap: viewing ? null : () => _viewMyDocument(d),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: viewing
-                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: _brand600))
+                  ? const AppSpinner(color: _brand600)
                   : const Text('View', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand600)),
               ),
             ),
-            GestureDetector(
-              onTap: () => _confirmDeleteMyDocument(d),
-              child: const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.delete_outline, size: 18, color: _coral500)),
+            IconButton(
+              tooltip: 'Delete document',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _confirmDeleteMyDocument(d),
+              icon: const Icon(Icons.delete_outline, size: 18, color: _coral500),
             ),
           ]),
     );
@@ -985,4 +929,116 @@ class _MyDoc {
   factory _MyDoc.fromJson(Map<String, dynamic> j) => _MyDoc(
     id: j['id'] as String, category: j['category'] as String,
     fileName: j['fileName'] as String, mimeType: j['mimeType'] as String?);
+}
+
+// Compact change-password form: errors under the fields, a loading button
+// that can't be pressed twice, and the typed values kept if the server
+// rejects the change. Pops `true` once the password has been changed.
+class _ChangePasswordForm extends StatefulWidget {
+  const _ChangePasswordForm();
+  @override
+  State<_ChangePasswordForm> createState() => _ChangePasswordFormState();
+}
+
+class _ChangePasswordFormState extends State<_ChangePasswordForm> {
+  final _form = GlobalKey<FormState>();
+  final _current = TextEditingController();
+  final _new = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void dispose() { _current.dispose(); _new.dispose(); _confirm.dispose(); super.dispose(); }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    if (!_form.currentState!.validate()) return;
+    setState(() => _saving = true);
+    // Actually change it server-side — this dialog used to toast success
+    // without calling any API at all.
+    try {
+      await apiClient.patch('/users/me/password', {
+        'currentPassword': _current.text,
+        'newPassword': _new.text,
+      });
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      AppToast.error(context, 'Could not change password', detail: ApiClient.errorMessage(e, fallback: 'Please try again.'));
+    }
+  }
+
+  Widget _label(String t) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text.rich(TextSpan(children: [
+      TextSpan(text: t),
+      const TextSpan(text: ' *', style: TextStyle(color: _coral500)),
+    ]), style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.textSub)),
+  );
+
+  Widget _field(TextEditingController c, String hint, {String? Function(String?)? validator, bool last = false, bool autofocus = false}) => TextFormField(
+    controller: c,
+    obscureText: true,
+    autofocus: autofocus,
+    enabled: !_saving,
+    textInputAction: last ? TextInputAction.done : TextInputAction.next,
+    onFieldSubmitted: last ? (_) => _save() : null,
+    validator: validator,
+    style: const TextStyle(fontSize: 14),
+    decoration: InputDecoration(hintText: hint),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: BoxDecoration(color: context.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(16))),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        child: Form(
+          key: _form,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const SheetHandle(margin: EdgeInsets.only(bottom: 10)),
+            Row(children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Change Password', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text('Use at least 8 characters.', style: TextStyle(fontSize: 12.5, color: context.textSub)),
+              ])),
+              IconButton(
+                tooltip: 'Close',
+                icon: Icon(Icons.close_rounded, size: 20, color: context.textSub),
+                onPressed: _saving ? null : () => Navigator.of(context).pop(),
+              ),
+            ]),
+            const SizedBox(height: 16),
+            _label('Current password'),
+            _field(_current, 'Enter current password', autofocus: true),
+            const SizedBox(height: 12),
+            _label('New password'),
+            _field(_new, 'Enter new password', validator: (v) {
+              if ((v ?? '').isEmpty) return 'Please enter a new password.';
+              if (v!.length < 8) return 'New password must be at least 8 characters.';
+              return null;
+            }),
+            const SizedBox(height: 12),
+            _label('Confirm new password'),
+            _field(_confirm, 'Re-enter new password', last: true, validator: (v) {
+              if ((v ?? '') != _new.text || (v ?? '').isEmpty) return 'Passwords do not match.';
+              return null;
+            }),
+            const SizedBox(height: 18),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              AppButton(label: 'Cancel', variant: AppButtonVariant.secondary,
+                  onPressed: _saving ? null : () => Navigator.of(context).pop()),
+              const SizedBox(width: 8),
+              AppButton(label: 'Update Password', busyLabel: 'Updating…', loading: _saving, onPressed: _save),
+            ]),
+          ]),
+        ),
+      ),
+    );
+  }
 }

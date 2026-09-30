@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/api_client.dart';
 import 'donor_categories_screen.dart' show DonorCategory;
+import 'package:saksham_app/core/ui/ui.dart';
 
 const _brand600   = Color(0xFFFF9933);
-const _onSurface1 = Color(0xFF15211E);
 const _onSurface2 = Color(0xFF5A6B67);
 const _onSurface3 = Color(0xFF93A29F);
 const _border     = Color(0xFFE5EBE9);
@@ -94,21 +94,19 @@ class _CategoryDonorsScreenState extends State<CategoryDonorsScreen> {
         ),
         Expanded(
           child: _loading
-            ? const Center(child: CircularProgressIndicator(color: _brand600))
+            ? const SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(4, 14, 4, 0),
+                child: SkeletonList(rows: 5, rowHeight: 70))
             : _error != null
-              ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.wifi_off_rounded, size: 44, color: _onSurface3),
-                  const SizedBox(height: 10),
-                  Text(_error!, style: const TextStyle(fontWeight: FontWeight.w700, color: _onSurface1)),
-                  const SizedBox(height: 10),
-                  TextButton(onPressed: _load, child: const Text('Retry', style: TextStyle(color: _brand600, fontWeight: FontWeight.w700))),
-                ]))
+              ? ListView(children: [ErrorState(message: _error!, onRetry: _load)])
               : _donors.isEmpty
-                ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.people_outline, size: 52, color: _onSurface3.withValues(alpha: 0.5)),
-                    const SizedBox(height: 12),
-                    const Text('No donors in this category yet', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: _onSurface3)),
-                  ]))
+                ? ListView(children: const [
+                    EmptyState(
+                      icon: Icons.people_outline,
+                      title: 'No donors in this category yet',
+                      message: 'Assign this category from a donor’s profile.',
+                    ),
+                  ])
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(18, 14, 18, 40),
                     itemCount: _donors.length,

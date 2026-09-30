@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/native_file_saver.dart';
 import 'expense_report_generator.dart';
 import 'expense_voucher_generator.dart';
+import 'package:saksham_app/core/ui/ui.dart';
 
 const _orange   = Color(0xFFF97316);
 const _orange700 = Color(0xFFC2410C);
@@ -292,15 +293,15 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   // Period chooser → calendar-based Expense Report PDF (also respects the
   // active category filter).
   Future<void> _downloadReport() async {
-    final period = await showModalBottomSheet<String>(
+    if (_downloadingReport) return; // ignore repeated taps
+    final period = await showAppSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
         decoration: BoxDecoration(color: ctx.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Center(child: Container(width: 40, height: 4,
-            decoration: BoxDecoration(color: ctx.border, borderRadius: BorderRadius.circular(2)))),
+          Center(child: const SheetHandle()),
           const SizedBox(height: 16),
           const Text('Expense Report — choose period', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
           const SizedBox(height: 12),
@@ -417,21 +418,14 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       final dateStr = DateTime.now().toIso8601String().split('T').first.replaceAll('-', '');
       final ok = await NativeFileSaver.saveBytes('SKET_Expense_Report_$dateStr.pdf', bytes, 'application/pdf');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(ok ? '✓ Expense report downloaded' : 'Failed to save report',
-              style: const TextStyle(fontWeight: FontWeight.w700)),
-          backgroundColor: ok ? _orange : const Color(0xFFF2685E),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ));
+        if (ok) {
+          AppToast.success(context, 'Expense report downloaded', detail: periodLabel);
+        } else {
+          AppToast.error(context, 'Unable to save report', detail: 'Please try again.');
+        }
       }
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Could not generate the report', style: TextStyle(fontWeight: FontWeight.w700)),
-          backgroundColor: Color(0xFFF2685E), behavior: SnackBarBehavior.floating,
-        ));
-      }
+      if (mounted) AppToast.error(context, 'Unable to generate report', detail: 'Please try again.');
     }
     if (mounted) setState(() => _downloadingReport = false);
   }
@@ -449,16 +443,19 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           child: Column(children: [
             Row(children: [
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Expenses', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+                const Text('Expenses', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
                 Text('${_real.length} expenses', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
               ])),
-              GestureDetector(
+              Tooltip(
+                message: _downloadingReport ? 'Preparing report…' : 'Download expense report',
+                child: GestureDetector(
                 onTap: _downloadingReport ? null : _downloadReport,
                 child: Container(width: 44, height: 44, margin: const EdgeInsets.only(right: 10),
                   decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: context.border)),
                   child: _downloadingReport
-                    ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _orange)))
+                    ? const Center(child: AppSpinner(size: 18, color: _orange))
                     : const Icon(Icons.download_outlined, color: _orange, size: 22))),
+              ),
               GestureDetector(
                 onTap: () => context.go('/expenses/new'),
                 child: Container(width: 44, height: 44, decoration: BoxDecoration(color: _orange, borderRadius: BorderRadius.circular(14)),
@@ -516,44 +513,49 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   }
 
   Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: _orange));
+    // First load: skeleton rows. Pull-to-refresh keeps the list on screen
+    // with a thin progress bar — no layout jump.
+    if (_loading && _expenses.isEmpty) {
+      return const SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(4, 10, 4, 0),
+        child: SkeletonList(rows: 6, rowHeight: 72),
+      );
     }
     if (_error != null) {
-      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.wifi_off_outlined, size: 48, color: _coral500),
-        const SizedBox(height: 12),
-        Text('Could not load expenses', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: context.textPrimary)),
-        const SizedBox(height: 4),
-        Text('Make sure the backend is running', style: TextStyle(fontSize: 13, color: context.textSub)),
-        const SizedBox(height: 16),
-        ElevatedButton.icon(
-          onPressed: _load,
-          icon: const Icon(Icons.refresh),
-          label: const Text('Retry'),
-          style: ElevatedButton.styleFrom(backgroundColor: _orange, foregroundColor: Colors.white),
-        ),
-      ]));
+      return ListView(children: [
+        ErrorState(message: 'Could not load expenses. Check your connection and try again.', onRetry: _load),
+      ]);
     }
     final items = _filtered;
-    if (items.isEmpty) {
-      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.receipt_long_outlined, size: 48, color: context.textHint),
-        const SizedBox(height: 12),
-        Text('No expenses found', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: context.textHint)),
-      ]));
-    }
-    return RefreshIndicator(
-      onRefresh: _load,
-      color: _orange,
-      child: ListView.separated(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(18, 14, 18, 100),
-        itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (_, i) => _ExpenseCard(e: items[i]),
-      ),
-    );
+    final Widget list = items.isEmpty
+        ? ListView(physics: const AlwaysScrollableScrollPhysics(), children: [
+            _filter != 'All'
+                ? const EmptyState(
+                    icon: Icons.filter_alt_off_outlined,
+                    title: 'No expenses in this category',
+                    message: 'Choose another category or All.',
+                  )
+                : EmptyState(
+                    icon: Icons.receipt_long_outlined,
+                    title: 'No expenses yet',
+                    message: 'Recorded expenses will appear here.',
+                    actionLabel: 'Add Expense',
+                    onAction: () => context.go('/expenses/new'),
+                  ),
+          ])
+        : ListView.separated(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 100),
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (_, i) => _ExpenseCard(e: items[i]),
+          );
+    return Stack(children: [
+      RefreshIndicator(onRefresh: _load, color: _orange, child: list),
+      if (_loading)
+        const Positioned(top: 0, left: 0, right: 0,
+          child: LinearProgressIndicator(minHeight: 2, color: _orange, backgroundColor: Colors.transparent)),
+    ]);
   }
 }
 
