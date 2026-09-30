@@ -29,10 +29,11 @@ const _danger = Color(0xFFE5484D);
 // documents, each with a free-text name.
 // ══════════════════════════════════════════════════════════════════════
 
-// Quick picks for the document name; any other name can be typed.
+// Fallback quick picks, used until the shared list (Settings → Document
+// Types, GET /students/lookups/DOCUMENT_TYPE) has loaded.
 const kStudentDocSuggestions = [
   'Aadhaar Card', 'Birth Certificate', 'Transfer Certificate', 'Medical Report',
-  'Report Card', 'Family Photo', "Parents' Aadhaar", 'Other',
+  'Report Card', 'Family Photo', "Parents' Aadhaar",
 ];
 
 // Files above this size still go through, but the user is warned first.
@@ -92,8 +93,58 @@ class _StudentDocumentSheetState extends State<StudentDocumentSheet> {
   bool _submitted = false;
   String? _serverError;
 
+  // Shared document names; "+ New name" adds one for every user.
+  List<String> _types = StudentLookups.documentTypes.isNotEmpty
+      ? StudentLookups.documentTypes.map((o) => o.label).toList()
+      : List.of(kStudentDocSuggestions);
+  bool _addingType = false;
+  bool _savingType = false;
+  final _newType = TextEditingController();
+  String? _newTypeError;
+
   @override
-  void dispose() { _name.dispose(); _nameFocus.dispose(); super.dispose(); }
+  void initState() {
+    super.initState();
+    StudentLookups.load(force: true).then((_) {
+      if (!mounted || StudentLookups.documentTypes.isEmpty) return;
+      setState(() => _types = StudentLookups.documentTypes.map((o) => o.label).toList());
+    });
+  }
+
+  @override
+  void dispose() { _name.dispose(); _nameFocus.dispose(); _newType.dispose(); super.dispose(); }
+
+  Future<void> _saveNewType() async {
+    if (_savingType) return;
+    final label = _newType.text.trim();
+    if (label.isEmpty) { setState(() => _newTypeError = 'Enter a name.'); return; }
+    final existing = _types.where((t) => t.toLowerCase() == label.toLowerCase()).firstOrNull;
+    if (existing != null) {
+      // Already in the list — just pick it.
+      setState(() { _name.text = existing; _addingType = false; _newType.clear(); _newTypeError = null; });
+      return;
+    }
+    setState(() { _savingType = true; _newTypeError = null; });
+    try {
+      await apiClient.post('/students/document-types', {'label': label});
+      await StudentLookups.load(force: true);
+      if (!mounted) return;
+      setState(() {
+        _types = StudentLookups.documentTypes.isNotEmpty
+            ? StudentLookups.documentTypes.map((o) => o.label).toList()
+            : [..._types, label];
+        _name.text = label;
+        _addingType = false;
+        _savingType = false;
+        _newType.clear();
+      });
+      _form.currentState?.validate();
+      AppToast.success(context, 'Document name added', detail: '“$label” is now available to everyone');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _savingType = false; _newTypeError = ApiClient.errorMessage(e, fallback: 'Could not add the name.'); });
+    }
+  }
 
   Future<void> _pick() async {
     if (_picking || _busy) return;
@@ -220,20 +271,54 @@ class _StudentDocumentSheetState extends State<StudentDocumentSheet> {
               decoration: const InputDecoration(hintText: 'e.g. Birth Certificate'),
             ),
             const SizedBox(height: 8),
-            Wrap(spacing: 6, runSpacing: 6, children: [
-              for (final s in kStudentDocSuggestions)
+            Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              for (final s in _types)
                 _SuggestionChip(
                   label: s,
                   selected: _name.text.trim() == s,
                   onTap: _busy ? null : () {
-                    setState(() {
-                      if (s == 'Other') { _name.clear(); } else { _name.text = s; }
-                    });
-                    if (s == 'Other') _nameFocus.requestFocus();
+                    setState(() => _name.text = s);
                     _form.currentState?.validate();
                   },
                 ),
+              if (!_addingType)
+                _SuggestionChip(
+                  label: '+ New name',
+                  selected: false,
+                  onTap: _busy ? null : () => setState(() { _addingType = true; _newTypeError = null; }),
+                ),
             ]),
+            // Inline "+ New name": saved to the shared list for all users.
+            AnimatedSize(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              child: !_addingType ? const SizedBox(width: double.infinity) : Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(child: TextField(
+                    controller: _newType,
+                    autofocus: true,
+                    enabled: !_savingType,
+                    textCapitalization: TextCapitalization.words,
+                    onSubmitted: (_) => _saveNewType(),
+                    onChanged: (_) { if (_newTypeError != null) setState(() => _newTypeError = null); },
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                    decoration: InputDecoration(
+                      hintText: 'New document name, e.g. Caste Certificate',
+                      errorText: _newTypeError,
+                      helperText: 'Added to the list for everyone',
+                    ),
+                  )),
+                  const SizedBox(width: 8),
+                  AppButton(label: 'Add', busyLabel: 'Adding…', loading: _savingType, dense: true, onPressed: _saveNewType),
+                  IconButton(
+                    tooltip: 'Cancel',
+                    icon: Icon(Icons.close_rounded, size: 18, color: context.textSub),
+                    onPressed: _savingType ? null : () => setState(() { _addingType = false; _newType.clear(); _newTypeError = null; }),
+                  ),
+                ]),
+              ),
+            ),
             if (_serverError != null) ...[
               const SizedBox(height: 12),
               _InlineError(_serverError!),

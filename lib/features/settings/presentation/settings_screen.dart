@@ -491,6 +491,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
         _settingsItem(Icons.face_outlined, 'Support Categories', 'Full support, semi support…', onTap: () => context.go('/settings/student-categories')),
         _settingsItem(Icons.flag_outlined, 'Student Status', 'Active, drop out, relieved, former…', onTap: () => context.go('/settings/student-statuses')),
         _settingsItem(Icons.school_outlined, 'Education Levels', 'Primary, high school, college…', onTap: () => context.go('/settings/education-levels')),
+        _settingsItem(Icons.description_outlined, 'Document Types', 'Names used when uploading student documents', onTap: () => context.go('/settings/document-types')),
         _settingsItem(Icons.receipt_long_outlined, 'Expense Categories', 'Manage expense categories', onTap: () => context.go('/settings/expense-categories')),
         _settingsItem(Icons.location_city_outlined, 'Manage Centres', 'Add and manage centres', onTap: () => context.go('/settings/centres')),
         _settingsItem(Icons.business_outlined, 'Offices', 'Manage office locations', onTap: () => context.go('/offices')),

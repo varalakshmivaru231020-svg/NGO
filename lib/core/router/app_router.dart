@@ -81,6 +81,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/settings/student-categories', builder: (ctx, state) => const StudentCategoriesScreen()),
           GoRoute(path: '/settings/student-statuses',   builder: (ctx, state) => const StudentStatusesScreen()),
           GoRoute(path: '/settings/education-levels',   builder: (ctx, state) => const EducationLevelsScreen()),
+          GoRoute(path: '/settings/document-types',     builder: (ctx, state) => const DocumentTypesScreen()),
           GoRoute(path: '/settings/expense-categories', builder: (ctx, state) => const ExpenseCategoriesScreen()),
           GoRoute(path: '/settings/export-data',     builder: (ctx, state) => const ExportDataScreen()),
           GoRoute(path: '/settings/backup-sync',     builder: (ctx, state) => const BackupSyncScreen()),

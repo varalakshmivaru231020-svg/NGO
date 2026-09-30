@@ -32,6 +32,8 @@ class StudentLookups {
   static List<StudentOption> statuses = List.of(_fallbackStatuses);
   static List<StudentOption> educationLevels = [];
   static List<StudentOption> categories = [];
+  // Shared document names offered in "Add document" (anyone can add one).
+  static List<StudentOption> documentTypes = [];
 
   static Future<void>? _inflight;
   static DateTime? _loadedAt;
@@ -63,11 +65,13 @@ class StudentLookups {
       apiClient.get('/students/lookups/STATUS').then((r) => r['data']).catchError((_) => null),
       apiClient.get('/students/lookups/EDUCATION_LEVEL').then((r) => r['data']).catchError((_) => null),
       apiClient.get('/students/categories').then((r) => r['data']).catchError((_) => null),
+      apiClient.get('/students/lookups/DOCUMENT_TYPE').then((r) => r['data']).catchError((_) => null),
     ]);
     final st = parse(results[0]);
     if (st.isNotEmpty) statuses = st;
     if (results[1] != null) educationLevels = parse(results[1]);
     if (results[2] != null) categories = parse(results[2], byId: true);
+    if (results[3] != null) documentTypes = parse(results[3]);
     _loadedAt = DateTime.now();
   }
 

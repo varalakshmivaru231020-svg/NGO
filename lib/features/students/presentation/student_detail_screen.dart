@@ -338,18 +338,39 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
 
   void _showSponsorPicker(BuildContext context) {
     final donorsFuture = _fetchDonors();
+    final searchCtrl = TextEditingController();
+    var query = '';
     showAppSheet(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        height: MediaQuery.of(ctx).size.height * 0.6,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) => Container(
+        height: MediaQuery.of(ctx).size.height * 0.7,
         decoration: BoxDecoration(color: context.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(16))),
         child: Column(children: [
           const SheetHandle(margin: EdgeInsets.only(top: 10)),
-          Padding(padding: const EdgeInsets.fromLTRB(20, 10, 8, 6), child: Row(children: [
+          Padding(padding: const EdgeInsets.fromLTRB(20, 10, 8, 4), child: Row(children: [
             const Expanded(child: Text('Select sponsor', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
             IconButton(tooltip: 'Close', icon: Icon(Icons.close_rounded, size: 20, color: context.textSub),
                 onPressed: () => Navigator.pop(ctx)),
           ])),
+          // Search by name, mobile number, donor code or city.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
+            child: TextField(
+              controller: searchCtrl,
+              autofocus: true,
+              onChanged: (v) => setSheet(() => query = v),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              decoration: InputDecoration(
+                hintText: 'Search by name, mobile or donor code',
+                prefixIcon: Icon(Icons.search_rounded, size: 18, color: context.textHint),
+                suffixIcon: query.isEmpty ? null : IconButton(
+                  tooltip: 'Clear search',
+                  icon: Icon(Icons.close_rounded, size: 16, color: context.textHint),
+                  onPressed: () { searchCtrl.clear(); setSheet(() => query = ''); },
+                ),
+              ),
+            ),
+          ),
           Divider(height: 1, color: context.border),
           Expanded(child: FutureBuilder<List<Map<String, dynamic>>>(
             future: donorsFuture,
@@ -365,14 +386,34 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
                   message: 'Add a donor first, then assign them here.',
                 ));
               }
+              final q = query.trim().toLowerCase();
+              final qDigits = q.replaceAll(RegExp(r'[^0-9]'), '');
+              final filtered = q.isEmpty ? donors : donors.where((d) {
+                String f(String k) => (d[k] ?? '').toString().toLowerCase();
+                if (f('name').contains(q) || f('donorCode').contains(q) || f('city').contains(q)) return true;
+                return qDigits.isNotEmpty &&
+                    f('mobile').replaceAll(RegExp(r'[^0-9]'), '').contains(qDigits);
+              }).toList();
+              if (filtered.isEmpty) {
+                return Center(child: EmptyState(
+                  icon: Icons.search_off_rounded,
+                  title: 'No matching donors',
+                  message: 'Nothing matches “${query.trim()}”. Try a name, mobile number or donor code.',
+                ));
+              }
               return ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                itemCount: donors.length,
+                itemCount: filtered.length,
                 itemBuilder: (_, i) {
-                  final d = donors[i];
+                  final d = filtered[i];
                   final name = (d['name'] ?? '').toString();
                   final city = (d['city'] ?? '').toString();
                   final id = (d['id'] ?? '').toString();
+                  final sub = [
+                    (d['donorCode'] ?? '').toString(),
+                    (d['mobile'] ?? '').toString(),
+                    city,
+                  ].where((x) => x.isNotEmpty).join('  ·  ');
                   return ListTile(
                     dense: true,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -380,7 +421,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
                       decoration: BoxDecoration(color: _brand100, borderRadius: BorderRadius.circular(9)),
                       child: Center(child: Text(_initials(name), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _brand600)))),
                     title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                    subtitle: Text(city.isNotEmpty ? 'Donor · $city' : 'Donor', style: TextStyle(fontSize: 12, color: context.textHint)),
+                    subtitle: Text(sub.isEmpty ? 'Donor' : sub, style: TextStyle(fontSize: 12, color: context.textHint)),
                     trailing: Icon(Icons.chevron_right, size: 18, color: context.textHint),
                     onTap: () {
                       Navigator.pop(ctx);
@@ -392,8 +433,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen>
             },
           )),
         ]),
-      ),
-    );
+      )),
+    ).whenComplete(searchCtrl.dispose);
   }
 
   // Asks for the annual sponsorship amount (required by the backend) and

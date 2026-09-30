@@ -125,6 +125,33 @@ Map<String, dynamic>? findStudentRecord(String id) {
   return null;
 }
 
+// Permanently deletes a child after confirmation. Returns true when the
+// child is gone (or the request was queued for Super Admin approval — then
+// [pending] is reported through the toast and the row stays).
+Future<bool> confirmDeleteStudent(BuildContext context, {required String id, required String name}) async {
+  var pending = false;
+  final ok = await AppConfirm.show(
+    context,
+    title: 'Delete student?',
+    message: 'Are you sure you want to delete “$name”? Their documents, sponsorships, '
+        'achievements, growth and attendance records will be removed too. This action cannot be undone.',
+    onConfirm: () async {
+      final res = await apiClient.delete('/students/$id');
+      pending = (res?['meta'] as Map?)?['pendingApproval'] == true;
+    },
+    errorText: (e) => ApiClient.errorMessage(e, fallback: 'Could not delete the student.'),
+  );
+  if (!ok || !context.mounted) return false;
+  if (pending) {
+    AppToast.warning(context, 'Submitted for Super Admin approval', detail: '“$name” will be deleted once approved.');
+    return false;
+  }
+  demoLocalStudents.removeWhere((s) => s['id'] == id);
+  loadedStudents.removeWhere((s) => s['id'] == id);
+  AppToast.success(context, 'Student deleted', detail: '“$name” and their records were removed.');
+  return true;
+}
+
 // ── avatar helpers ────────────────────────────────────────────────────
 Color _avColor(String seed) {
   final palette = [_brand600, const Color(0xFFF6A723), _violet500, const Color(0xFF2D9CDB),
@@ -511,6 +538,11 @@ class _StudentsScreenState extends State<StudentsScreen> {
                           student: children[i],
                           last: i == children.length - 1,
                           onTap: () => context.go('/students/${children[i].id}'),
+                          onDelete: () async {
+                            final st = children[i];
+                            final gone = await confirmDeleteStudent(context, id: st.id, name: st.name);
+                            if (gone && mounted) setState(() => _all.removeWhere((x) => x.id == st.id));
+                          },
                         ),
                     ]))),
               ),
@@ -541,9 +573,10 @@ Widget _VDiv(BuildContext context) =>
 
 // ── Child row ─────────────────────────────────────────────────────────
 class _ChildCard extends StatefulWidget {
-  const _ChildCard({required this.student, required this.onTap, required this.last});
+  const _ChildCard({required this.student, required this.onTap, required this.onDelete, required this.last});
   final _Student student;
   final VoidCallback onTap;
+  final VoidCallback onDelete;
   final bool last;
   @override
   State<_ChildCard> createState() => _ChildCardState();
@@ -632,8 +665,33 @@ class _ChildCardState extends State<_ChildCard> {
                     style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500, color: context.textHint)),
               ],
             ]),
-            const SizedBox(width: 4),
-            Icon(Icons.chevron_right_rounded, size: 18, color: context.textHint),
+            const SizedBox(width: 2),
+            PopupMenuButton<String>(
+              tooltip: 'Actions for ${student.name}',
+              icon: Icon(Icons.more_horiz_rounded, size: 20, color: context.textSub),
+              position: PopupMenuPosition.under,
+              offset: const Offset(0, 4),
+              constraints: const BoxConstraints(minWidth: 150),
+              onSelected: (v) {
+                if (v == 'open') widget.onTap();
+                if (v == 'delete') widget.onDelete();
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'open', height: 36, child: Row(children: [
+                  Icon(Icons.open_in_new_rounded, size: 17, color: context.textSub),
+                  const SizedBox(width: 10),
+                  const Text('Open / Edit', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500)),
+                ])),
+                if (!student.id.startsWith('local-')) ...[
+                  const PopupMenuDivider(height: 8),
+                  const PopupMenuItem(value: 'delete', height: 36, child: Row(children: [
+                    Icon(Icons.delete_outline_rounded, size: 17, color: Color(0xFFE5484D)),
+                    SizedBox(width: 10),
+                    Text('Delete', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500, color: Color(0xFFE5484D))),
+                  ])),
+                ],
+              ],
+            ),
           ]),
         ),
       ),

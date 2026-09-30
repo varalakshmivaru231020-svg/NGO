@@ -83,6 +83,24 @@ final _educationLevels = _MasterConfig(
   emptyHelp: 'Create levels like Primary School, High School or College.',
 );
 
+final _documentTypes = _MasterConfig(
+  title: 'Document Types',
+  noun: 'document type',
+  plural: 'document types',
+  icon: Icons.description_outlined,
+  listAllPath: '/students/lookups/DOCUMENT_TYPE/all',
+  createPath: '/students/lookups/DOCUMENT_TYPE',
+  itemPath: (id) => '/students/lookup-items/$id',
+  hint: 'e.g. Caste Certificate',
+  emptyHelp: 'Names offered when uploading a student document. Staff can also add one with “+ New name”.',
+);
+
+class DocumentTypesScreen extends StatelessWidget {
+  const DocumentTypesScreen({super.key});
+  @override
+  Widget build(BuildContext context) => _StudentMasterScreen(config: _documentTypes);
+}
+
 class StudentCategoriesScreen extends StatelessWidget {
   const StudentCategoriesScreen({super.key});
   @override
@@ -225,10 +243,12 @@ class _StudentMasterScreenState extends State<_StudentMasterScreen> {
     final system = t['isSystem'] == true;
     final busy = _toggling.contains(t['id']);
     final count = (t['studentCount'] as num?)?.toInt() ?? ((t['_count'] as Map?)?['students'] as num?)?.toInt();
+    final docCount = (t['documentCount'] as num?)?.toInt();
     final key = t['key'] as String?;
     final color = _c == _studentStatuses ? StudentLookups.statusColor(key) : _brand600;
     final sub = [
       if (count != null) '$count student${count == 1 ? '' : 's'}',
+      if (docCount != null) '$docCount document${docCount == 1 ? '' : 's'}',
       if (system) 'Built in',
       if (desc.isNotEmpty) desc,
     ].join('  ·  ');
