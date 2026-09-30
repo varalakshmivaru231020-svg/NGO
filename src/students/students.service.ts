@@ -23,6 +23,15 @@ const DEFAULT_LOOKUPS: Record<StudentLookupType, { key: string; label: string; i
     { key: 'GRADUATED', label: 'Graduated' },
     { key: 'FORMER', label: 'Former Student' },
   ],
+  DOCUMENT_TYPE: [
+    { key: 'AADHAAR_CARD', label: 'Aadhaar Card' },
+    { key: 'BIRTH_CERTIFICATE', label: 'Birth Certificate' },
+    { key: 'TRANSFER_CERTIFICATE', label: 'Transfer Certificate' },
+    { key: 'MEDICAL_REPORT', label: 'Medical Report' },
+    { key: 'REPORT_CARD', label: 'Report Card' },
+    { key: 'FAMILY_PHOTO', label: 'Family Photo' },
+    { key: 'PARENTS_AADHAAR', label: "Parents' Aadhaar" },
+  ],
   EDUCATION_LEVEL: [
     { key: 'PRIMARY', label: 'Primary School' },
     { key: 'HIGH_SCHOOL', label: 'High School' },
@@ -89,7 +98,7 @@ export class StudentsService implements OnModuleInit {
     if (!key) return;
     const row = await this.prisma.studentLookup.findUnique({ where: { type_key: { type, key } } });
     if (!row) {
-      const what = type === 'STATUS' ? 'student status' : 'education level';
+      const what = type === 'STATUS' ? 'student status' : type === 'EDUCATION_LEVEL' ? 'education level' : 'document type';
       throw new BadRequestException(`Unknown ${what} "${key}" — add it under Settings first`);
     }
   }
@@ -208,6 +217,16 @@ export class StudentsService implements OnModuleInit {
     return student;
   }
 
+  // Sponsorships, attendance, growth/progress records, documents and
+  // achievements are all onDelete: Cascade in the schema, so one delete
+  // removes the child's whole record without leaving orphans.
+  async remove(id: string) {
+    const student = await this.prisma.student.findUnique({ where: { id }, select: { id: true, name: true, childId: true } });
+    if (!student) throw new NotFoundException('Student not found');
+    await this.prisma.student.delete({ where: { id } });
+    return { ...student, deleted: true };
+  }
+
   async getPhoto(id: string) {
     const row = await this.prisma.student.findUnique({ where: { id }, select: { id: true, photo: true } });
     if (!row) throw new NotFoundException('Student not found');
@@ -305,9 +324,9 @@ export class StudentsService implements OnModuleInit {
   }
 
   private async lookupUsage(type: StudentLookupType, key?: string) {
-    return type === 'STATUS'
-      ? this.prisma.student.count({ where: key ? { status: key } : {} })
-      : this.prisma.student.count({ where: key ? { educationLevel: key } : {} });
+    if (type === 'STATUS') return this.prisma.student.count({ where: key ? { status: key } : {} });
+    if (type === 'EDUCATION_LEVEL') return this.prisma.student.count({ where: key ? { educationLevel: key } : {} });
+    return 0; // document names are copied onto each document — never "in use"
   }
 
   async findLookups(type: string, includeInactive = false) {
@@ -317,6 +336,12 @@ export class StudentsService implements OnModuleInit {
       orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
     });
     if (!includeInactive) return rows;
+    if (t === 'DOCUMENT_TYPE') {
+      // Documents store the name itself; show how many carry each name.
+      const docs = await this.prisma.studentDocument.groupBy({ by: ['category'], _count: { _all: true } });
+      const byLabel = new Map(docs.map((d) => [d.category, d._count._all]));
+      return rows.map((r) => ({ ...r, documentCount: byLabel.get(r.label) ?? 0 }));
+    }
     // The admin list also shows how many children use each entry.
     const counts: { key: string | null; n: number }[] = t === 'STATUS'
       ? (await this.prisma.student.groupBy({ by: ['status'], _count: { _all: true } }))

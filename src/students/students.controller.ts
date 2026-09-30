@@ -72,6 +72,12 @@ export class StudentsController {
   @Post('lookups/:type') @Roles('ADMIN') @ApiOperation({ summary: 'Add an entry to a student list' })
   createLookup(@Param('type') type: string, @Body() dto: CreateStudentLookupDto) { return this.svc.createLookup(type, dto); }
 
+  // Any staff member can add a document name while uploading ("+" in the
+  // Add document dialog); it becomes a choice for everyone. Rename/delete
+  // stay admin-only via lookup-items below.
+  @Post('document-types') @ApiOperation({ summary: 'Add a shared document name' })
+  createDocumentType(@Body() dto: CreateStudentLookupDto) { return this.svc.createLookup('DOCUMENT_TYPE', dto); }
+
   @Put('lookup-items/:id') @Roles('ADMIN') @ApiOperation({ summary: 'Rename / reorder / toggle a list entry' })
   updateLookup(@Param('id') id: string, @Body() dto: UpdateStudentLookupDto) { return this.svc.updateLookup(id, dto); }
 
@@ -92,6 +98,11 @@ export class StudentsController {
 
   @Put(':id') @ApiOperation({ summary: 'Update student' })
   update(@Param('id') id: string, @Body() dto: UpdateStudentDto) { return this.svc.update(id, dto); }
+
+  // Permanent. Non-admin staff are routed through the approval queue by the
+  // global ApprovalInterceptor, like every other mutation.
+  @Delete(':id') @ApiOperation({ summary: 'Permanently delete a student and all linked records' })
+  remove(@Param('id') id: string) { return this.svc.remove(id); }
 
   @Post(':id/sponsorships') @ApiOperation({ summary: 'Add sponsorship' })
   addSponsorship(@Param('id') id: string, @Body() dto: CreateSponsorshipDto) {

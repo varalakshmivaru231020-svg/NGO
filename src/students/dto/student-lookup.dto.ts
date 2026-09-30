@@ -1,7 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
-export const STUDENT_LOOKUP_TYPES = ['STATUS', 'EDUCATION_LEVEL'] as const;
+// DOCUMENT_TYPE: shared names offered when uploading a student document.
+export const STUDENT_LOOKUP_TYPES = ['STATUS', 'EDUCATION_LEVEL', 'DOCUMENT_TYPE'] as const;
 export type StudentLookupType = (typeof STUDENT_LOOKUP_TYPES)[number];
 
 export class CreateStudentLookupDto {
