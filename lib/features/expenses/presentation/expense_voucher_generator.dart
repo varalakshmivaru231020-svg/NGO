@@ -264,11 +264,7 @@ class _VoucherSheet extends StatelessWidget {
     final amtStr = '₹${_fmt(voucher.amount)}.00';
     final modeLabel = _modeLabels[voucher.paymentMode] ?? voucher.paymentMode;
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.9,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      builder: (_, sc) => Container(
+    Widget sheet(ScrollController? sc) => Container(
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -444,7 +440,21 @@ class _VoucherSheet extends StatelessWidget {
             ]),
           ),
         ]),
-      ),
+      );
+
+    // A drag-to-resize sheet needs the bounded height of a phone bottom
+    // sheet. On wide screens showAppSheet shows a centred dialog whose body
+    // scrolls (unbounded height), where the sheet laid out as a blank box —
+    // so give it the dialog's full height instead (88% of the screen minus
+    // the frame's 24px padding, see _DesktopDialogFrame).
+    if (isWideLayout(context)) {
+      return SizedBox(height: MediaQuery.sizeOf(context).height * 0.88 - 48, child: sheet(null));
+    }
+    return DraggableScrollableSheet(
+      initialChildSize: 0.9,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (_, sc) => sheet(sc),
     );
   }
 
