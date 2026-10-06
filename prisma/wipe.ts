@@ -16,6 +16,7 @@ async function main() {
   await prisma.donorCategoryMap.deleteMany();
   await prisma.student.deleteMany();
   await prisma.donor.deleteMany();
+  await prisma.staff.deleteMany(); // cascades staff_children; must go before centres (FK)
   await prisma.center.deleteMany();
 
   // Approval history + notifications.
@@ -34,6 +35,7 @@ async function main() {
   const counts = {
     users: await prisma.user.count(),
     students: await prisma.student.count(),
+    staff: await prisma.staff.count(),
     donors: await prisma.donor.count(),
     donations: await prisma.donation.count(),
     offices: await prisma.office.count(),

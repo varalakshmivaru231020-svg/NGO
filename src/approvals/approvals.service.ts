@@ -31,6 +31,9 @@ const EXEMPT_PATH_PATTERNS: RegExp[] = [
   /^users\/documents\/[^/]+$/i,
   /^expenses\/categories$/i,
   /^students\/document-types$/i,
+  // "+" next to Designation / Status in the staff form adds a list option —
+  // reference data, and the form needs it straight away.
+  /^staff\/lookups\/[^/]+$/i,
   // Donor media uploads (base64, up to ~27MB once encoded) — queueing them
   // copies the whole blob into ApprovalRequest.payload, which can exceed
   // MySQL's max_allowed_packet and kill the upload with an opaque 500.

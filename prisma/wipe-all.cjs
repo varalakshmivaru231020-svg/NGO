@@ -21,6 +21,7 @@ const p = new PrismaClient();
   await p.donorCategoryMap.deleteMany();
   await p.student.deleteMany();
   await p.donor.deleteMany();
+  await p.staff.deleteMany(); // cascades staff_children; must go before centres (FK)
   await p.center.deleteMany();
   await p.approvalRequest.deleteMany();
   await p.notification.deleteMany();
@@ -29,12 +30,12 @@ const p = new PrismaClient();
   await p.user.deleteMany({ where: { role: { not: 'SUPER_ADMIN' } } });
   await p.user.updateMany({ data: { officeId: null } });
   await p.office.deleteMany();
-  // Reset numbering so real data starts at SKET/<year>/00001 and DID00001
+  // Reset numbering so real data starts at SKET/<year>/00001, DID00001 and STF0001
   await p.$executeRawUnsafe('DELETE FROM sequence_counters');
 
   const counts = {
     users: await p.user.count(), donors: await p.donor.count(), donations: await p.donation.count(),
-    students: await p.student.count(), expenses: await p.expense.count(), offices: await p.office.count(),
+    students: await p.student.count(), staff: await p.staff.count(), expenses: await p.expense.count(), offices: await p.office.count(),
     centers: await p.center.count(), approvals: await p.approvalRequest.count(),
     donationTypes: await p.donationType.count(), expenseCategories: await p.expenseCategory.count(),
     paymentLinks: await p.paymentLink.count(), notifications: await p.notification.count(),

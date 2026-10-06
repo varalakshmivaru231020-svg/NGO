@@ -327,6 +327,7 @@ model Center {
   createdAt DateTime @default(now())
 
   students Student[]
+  staff    Staff[]
 
   @@map("centers")
 }
@@ -546,6 +547,135 @@ model Achievement {
 
   @@index([studentId])
   @@map("achievements")
+}
+
+// ─────────────────────────────────────────
+// STAFF (employees — teachers, wardens, cooks…)
+// ─────────────────────────────────────────
+
+// HR records for the people the trust employs. Separate from User: most
+// staff never log in, and a login account carries no salary/bank details.
+// Salary figures are whole rupees per month, like every other amount here.
+model Staff {
+  id             String    @id @default(cuid())
+  staffCode      String    @unique // STF0001 — from SequenceCounter 'staff-code'
+  name           String
+  gender         String    @default("MALE")
+  dob            DateTime?
+  mobile         String?
+  whatsapp       String?
+  email          String?
+  address        String?   @db.Text
+  photo          String?   @db.LongText
+  aadhaarNumber  String?
+  panNumber      String?
+  designation    String
+  centerId       String?
+  joiningDate    DateTime?
+  employmentType String    @default("FULL_TIME") // FULL_TIME | PART_TIME | CONTRACT | VOLUNTEER
+  status         String    @default("ACTIVE")    // StaffLookup key of type STATUS
+  workTimings    String?   // e.g. "9:00 AM - 6:00 PM" — printed on payslips
+
+  // Salary structure
+  basicSalary  Int     @default(0)
+  hra          Int     @default(0)
+  allowances   Int     @default(0)
+  pfApplicable Boolean @default(false)
+
+  // Bank
+  bankName      String?
+  accountNumber String?
+  ifscCode      String?
+
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  notes                 String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  center   Center?       @relation(fields: [centerId], references: [id])
+  children StaffChild[]
+  salaries StaffSalary[]
+
+  @@index([name])
+  @@index([centerId])
+  @@map("staff")
+}
+
+// Staff profile → Children / family details.
+model StaffChild {
+  id        String    @id @default(cuid())
+  staffId   String
+  name      String
+  relation  String?
+  dob       DateTime?
+  school    String?
+  createdAt DateTime  @default(now())
+
+  staff Staff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@map("staff_children")
+}
+
+// Option lists for the staff form (Designation / Status), grown with the "+"
+// next to each field. Staff.status stores the stable `key`; Staff.designation
+// stores the label text, so the list only supplies choices.
+model StaffLookup {
+  id        String   @id @default(cuid())
+  type      String   // DESIGNATION | STATUS
+  key       String
+  label     String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  // Built-in rows other code depends on (ACTIVE drives "active staff" counts).
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([type, key])
+  @@index([type])
+  @@map("staff_lookups")
+}
+
+// One row per staff member per month — what the payslip and the monthly /
+// yearly salary report are built from. Whole rupees; gross / deductions / net
+// are derived, never stored, so they can't drift from their parts.
+model StaffSalary {
+  id      String @id @default(cuid())
+  staffId String
+  month   String // YYYY-MM
+
+  // Earnings
+  basic      Int @default(0)
+  hra        Int @default(0)
+  allowances Int @default(0)
+  overtime   Int @default(0)
+  bonus      Int @default(0)
+
+  // Deductions
+  leaveDeduction Int @default(0)
+  pf             Int @default(0)
+  advance        Int @default(0)
+  otherDeduction Int @default(0)
+
+  // Attendance, as printed on the payslip
+  workingDays      Int?
+  leaveDays        Float   @default(0)
+  workedOnHolidays Boolean @default(false)
+
+  status      String    @default("PENDING") // PENDING | PAID
+  paidOn      DateTime?
+  paymentMode String?
+  notes       String?   @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  staff Staff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, month])
+  @@index([month])
+  @@map("staff_salaries")
 }
 
 // ─────────────────────────────────────────

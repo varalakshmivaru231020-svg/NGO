@@ -21,6 +21,7 @@ import { WebsocketModule } from './websocket/websocket.module';
 import { ApprovalsModule } from './approvals/approvals.module';
 import { SettingsModule } from './settings/settings.module';
 import { PublicDonationsModule } from './public-donations/public-donations.module';
+import { StaffModule } from './staff/staff.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { PublicDonationsModule } from './public-donations/public-donations.modul
     ApprovalsModule,
     SettingsModule,
     PublicDonationsModule,
+    StaffModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

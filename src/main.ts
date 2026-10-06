@@ -92,6 +92,7 @@ async function bootstrap() {
       .addTag('students').addTag('categories').addTag('achievements')
       .addTag('reminders').addTag('offices').addTag('reports')
       .addTag('notifications').addTag('payment-links').addTag('public-donations')
+      .addTag('staff')
       .build();
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('docs', app, document, {
