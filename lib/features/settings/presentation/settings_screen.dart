@@ -572,6 +572,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
         const SizedBox(height: 16),
         _settingsSection('Edit Profile', [
           _settingsItem(Icons.edit_outlined, 'Edit Profile', 'Update your personal information', onTap: () => context.go('/settings/edit-profile')),
+          // Also under Security — kept here so it's found next to the profile.
+          _settingsItem(Icons.lock_outline, 'Change Password', 'Update your login password', onTap: _showChangePasswordDialog),
         ]),
       ]),
     ),
@@ -1016,7 +1018,8 @@ class _ChangePasswordFormState extends State<_ChangePasswordForm> {
             ]),
             const SizedBox(height: 16),
             _label('Current password'),
-            _field(_current, 'Enter current password', autofocus: true),
+            _field(_current, 'Enter current password', autofocus: true,
+                validator: (v) => (v ?? '').isEmpty ? 'Please enter your current password.' : null),
             const SizedBox(height: 12),
             _label('New password'),
             _field(_new, 'Enter new password', validator: (v) {

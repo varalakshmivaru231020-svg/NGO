@@ -31,7 +31,6 @@ class _StaffSalaryTabState extends State<StaffSalaryTab> {
   List<StaffSalary> _rows = [];
   bool _loading = true;
   String? _error;
-  int _year = DateTime.now().year;
   String? _busyPdf; // salary id whose pay slip download is running
   Future<Map<String, dynamic>?>? _org; // org header for PDFs, fetched once
 
@@ -55,23 +54,20 @@ class _StaffSalaryTabState extends State<StaffSalaryTab> {
     }
   }
 
-  List<int> get _years {
-    final now = DateTime.now().year;
-    final ys = {now, _year, ..._rows.map((r) => r.year)}.toList()..sort((a, b) => b.compareTo(a));
-    return ys;
-  }
-
-  // Months shown for the selected year: every month up to now (Jan–Dec for
-  // past years), plus any later month that already has a record.
-  List<int> get _months {
+  // Months listed, newest first: every month of the current year so far, plus
+  // every month that has a record (any year). Periods for reports are picked
+  // on the calendar in Salary report, so there's no year filter here.
+  List<DateTime> get _months {
     final now = DateTime.now();
-    final last = _year < now.year ? 12 : _year == now.year ? now.month : 0;
-    final recorded = _rows.where((r) => r.year == _year).map((r) => salaryMonthDate(r.month)!.month);
-    return {for (var m = 1; m <= last; m++) m, ...recorded}.toList()..sort((a, b) => b.compareTo(a));
+    final keys = <String>{
+      for (var m = 1; m <= now.month; m++) salaryMonthKey(DateTime(now.year, m)),
+      ..._rows.map((r) => r.month),
+    };
+    return keys.map(salaryMonthDate).whereType<DateTime>().toList()..sort((a, b) => b.compareTo(a));
   }
 
-  StaffSalary? _recordFor(int month) =>
-      _rows.where((r) => r.month == salaryMonthKey(DateTime(_year, month))).firstOrNull;
+  StaffSalary? _recordFor(DateTime month) =>
+      _rows.where((r) => r.month == salaryMonthKey(month)).firstOrNull;
 
   Future<void> _openSheet({StaffSalary? existing, String? month}) async {
     final saved = await showAppSheet<bool>(
@@ -87,10 +83,10 @@ class _StaffSalaryTabState extends State<StaffSalaryTab> {
     if (saved == true) _load();
   }
 
-  // First month (newest first) of the selected year without a record.
+  // Newest listed month without a record.
   String _nextMonth() {
     for (final m in _months) {
-      if (_recordFor(m) == null) return salaryMonthKey(DateTime(_year, m));
+      if (_recordFor(m) == null) return salaryMonthKey(m);
     }
     return salaryMonthKey(DateTime(DateTime.now().year, DateTime.now().month));
   }
@@ -163,11 +159,13 @@ class _StaffSalaryTabState extends State<StaffSalaryTab> {
     if (_loading) return const Padding(padding: EdgeInsets.all(16), child: SkeletonList(rows: 5, rowHeight: 56));
     if (_error != null) return Center(child: Padding(padding: const EdgeInsets.all(16), child: ErrorState(message: _error!, onRetry: _load)));
 
-    final yearRows = _rows.where((r) => r.year == _year).toList();
+    final year = DateTime.now().year;
+    final yearRows = _rows.where((r) => r.year == year).toList();
     final paid = yearRows.where((r) => r.isPaid).fold<int>(0, (a, r) => a + r.net);
-    final pending = yearRows.where((r) => !r.isPaid).fold<int>(0, (a, r) => a + r.net);
+    final pending = _rows.where((r) => !r.isPaid).fold<int>(0, (a, r) => a + r.net);
     final allTime = _rows.where((r) => r.isPaid).fold<int>(0, (a, r) => a + r.net);
     final months = _months;
+    final multiYear = months.map((m) => m.year).toSet().length > 1;
 
     return RefreshIndicator(
       color: _brand600,
@@ -178,32 +176,19 @@ class _StaffSalaryTabState extends State<StaffSalaryTab> {
         children: [Align(alignment: Alignment.topCenter, child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 880),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // ── toolbar: year + actions ───────────────────────────────
+            // ── toolbar ──────────────────────────────────────────────
             Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              Container(
-                height: 38,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: context.border)),
-                child: DropdownButtonHideUnderline(child: DropdownButton<int>(
-                  value: _year,
-                  borderRadius: BorderRadius.circular(10),
-                  icon: Icon(Icons.expand_more_rounded, size: 18, color: context.textSub),
-                  items: [for (final y in _years) DropdownMenuItem(value: y, child: Text('Year $y',
-                      style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.textPrimary)))],
-                  onChanged: (y) { if (y != null) setState(() => _year = y); },
-                )),
-              ),
               AppButton(label: 'Salary report', icon: Icons.date_range_outlined, variant: AppButtonVariant.secondary,
                   onPressed: _openReport),
               AppButton(label: 'Add month’s salary', icon: Icons.add, onPressed: () => _openSheet()),
             ]),
             const SizedBox(height: 12),
 
-            // ── year summary ─────────────────────────────────────────
+            // ── summary ──────────────────────────────────────────────
             _Card(child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
               child: Row(children: [
-                _Stat(value: staffInr(paid), label: 'Paid in $_year', color: _green),
+                _Stat(value: staffInr(paid), label: 'Paid in $year', color: _green),
                 _vDiv(context),
                 _Stat(value: staffInr(pending), label: 'Pending', color: _amber),
                 _vDiv(context),
@@ -222,23 +207,30 @@ class _StaffSalaryTabState extends State<StaffSalaryTab> {
               ),
 
             // ── months ───────────────────────────────────────────────
-            _Card(child: months.isEmpty
-                ? EmptyState(icon: Icons.event_note_outlined, title: 'Nothing to show for $_year',
-                    message: 'This year hasn’t started yet.')
-                : Column(children: [
-                    for (var i = 0; i < months.length; i++)
+            _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    for (var i = 0; i < months.length; i++) ...[
+                      // Year heading whenever the list spans more than one year.
+                      if (multiYear && (i == 0 || months[i - 1].year != months[i].year))
+                        Container(
+                          width: double.infinity,
+                          color: context.surface2,
+                          padding: const EdgeInsets.fromLTRB(14, 7, 14, 7),
+                          child: Text('${months[i].year}', style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.5, color: context.textSub)),
+                        ),
                       _MonthRow(
-                        month: DateTime(_year, months[i]),
+                        month: months[i],
                         record: _recordFor(months[i]),
                         last: i == months.length - 1,
                         pdfBusy: _busyPdf != null && _busyPdf == _recordFor(months[i])?.id,
-                        onAdd: () => _openSheet(month: salaryMonthKey(DateTime(_year, months[i]))),
+                        onAdd: () => _openSheet(month: salaryMonthKey(months[i])),
                         onEdit: (s) => _openSheet(existing: s),
                         onView: _viewPayslip,
                         onDownload: _downloadPayslip,
                         onMarkPaid: _markPaid,
                         onDelete: _delete,
                       ),
+                    ],
                   ])),
           ]),
         ))],
