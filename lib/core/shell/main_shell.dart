@@ -28,6 +28,7 @@ const _main = [
   _N(Icons.people_outlined,            Icons.people,              'Donors',          '/donors',           module: 'donors'),
   _N(Icons.receipt_long_outlined,      Icons.receipt_long,        'Donations',       '/donations',        module: 'donations'),
   _N(Icons.school_outlined,            Icons.school,              'Students',        '/students',         module: 'students'),
+  _N(Icons.badge_outlined,             Icons.badge,               'Staff',           '/staff',            module: 'staff'),
 ];
 
 const _mgmt = [

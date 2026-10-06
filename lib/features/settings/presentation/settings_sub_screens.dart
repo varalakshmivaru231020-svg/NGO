@@ -2809,7 +2809,7 @@ class _ManageRolesState extends State<ManageRolesScreen> {
     for (final entry in {
       'donors': 'Donors', 'donations': 'Donations', 'expenses': 'Expenses', 'students': 'Students',
       'offices': 'Offices', 'reminders': 'Reminders',
-      'donationTracker': 'Tracker', 'paymentLinks': 'Pay Links', 'achievements': 'Achievements',
+      'donationTracker': 'Tracker', 'paymentLinks': 'Pay Links', 'achievements': 'Achievements', 'staff': 'Staff',
     }.entries) {
       final lv = _level(entry.key);
       if (lv.isNotEmpty) parts.add('${entry.value} ($lv)');
@@ -2843,6 +2843,7 @@ class _ManageRolesState extends State<ManageRolesScreen> {
       'donationTracker': initPerm('donationTracker', ['view', 'add', 'edit', 'delete']),
       'paymentLinks':    initPerm('paymentLinks',    ['view', 'add', 'edit', 'delete']),
       'achievements':    initPerm('achievements',    ['view', 'add', 'edit', 'delete']),
+      'staff':           initPerm('staff',           ['view', 'add', 'edit', 'delete']),
       'settings':        initPerm('settings',        ['access']),
     };
 
@@ -3027,6 +3028,18 @@ class _ManageRolesState extends State<ManageRolesScreen> {
                     if (v && k != 'view') perms['achievements']!['view'] = true;
                     if (v && k == 'delete') perms['achievements']!['edit'] = true;
                     if (!v && k == 'view') { perms['achievements']!['add'] = false; perms['achievements']!['edit'] = false; perms['achievements']!['delete'] = false; }
+                  }),
+                ),
+                const SizedBox(height: 10),
+                _PermModule(
+                  icon: Icons.badge_outlined, color: _sky500, title: 'Staff (salary & bank details)',
+                  perms: perms['staff']!,
+                  labels: const {'view': 'View', 'add': 'Add', 'edit': 'Edit', 'delete': 'Delete'},
+                  onToggle: (k, v) => setSt(() {
+                    perms['staff']![k] = v;
+                    if (v && k != 'view') perms['staff']!['view'] = true;
+                    if (v && k == 'delete') perms['staff']!['edit'] = true;
+                    if (!v && k == 'view') { perms['staff']!['add'] = false; perms['staff']!['edit'] = false; perms['staff']!['delete'] = false; }
                   }),
                 ),
                 const SizedBox(height: 10),

@@ -55,7 +55,7 @@ final _defaultRoles = <AppRole>[];
 
 // Seeded team accounts — always available in every browser (including incognito),
 // regardless of what's in local storage. Add built-in logins here.
-const _allModules = {'donors', 'donations', 'expenses', 'students', 'offices', 'reports', 'reminders', 'tracker', 'payments', 'achievements'};
+const _allModules = {'donors', 'donations', 'expenses', 'students', 'offices', 'reports', 'reminders', 'tracker', 'payments', 'achievements', 'staff'};
 // The super admin logs in via the backend (and the offline fallback in the
 // login screen), so it isn't listed here as a team member.
 final _seededRoles = <AppRole>[];
@@ -140,6 +140,7 @@ const _templateKeyToModule = <String, String>{
   'donationTracker': 'tracker',
   'paymentLinks':    'payments',
   'achievements':    'achievements',
+  'staff':           'staff',
 };
 
 // No default roles — the Super Admin creates every role in Manage Roles.
@@ -210,6 +211,7 @@ const moduleToRoute = <String, String>{
   'tracker':      '/donation-tracker',
   'payments':     '/payment-links',
   'achievements': '/achievements',
+  'staff':        '/staff',
 };
 
 bool get isAdmin => currentLoggedInRole == null;

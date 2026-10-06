@@ -14,6 +14,9 @@ import '../../features/expenses/presentation/add_expense_screen.dart';
 import '../../features/students/presentation/students_screen.dart';
 import '../../features/students/presentation/student_detail_screen.dart';
 import '../../features/students/presentation/add_student_screen.dart';
+import '../../features/staff/presentation/staff_screen.dart';
+import '../../features/staff/presentation/staff_detail_screen.dart';
+import '../../features/staff/presentation/add_staff_screen.dart';
 import '../../features/more/presentation/more_screen.dart';
 import '../../features/offices/presentation/offices_screen.dart';
 import '../../features/payment_links/presentation/payment_links_screen.dart';
@@ -63,6 +66,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/students',        builder: (ctx, state) => const StudentsScreen()),
           GoRoute(path: '/students/new',    builder: (ctx, state) => const AddStudentScreen()),
           GoRoute(path: '/students/:id',    builder: (ctx, state) => StudentDetailScreen(id: state.pathParameters['id']!)),
+          GoRoute(path: '/staff',           builder: (ctx, state) => const StaffScreen()),
+          GoRoute(path: '/staff/new',       builder: (ctx, state) => const AddStaffScreen()),
+          GoRoute(path: '/staff/:id/edit',  builder: (ctx, state) => AddStaffScreen(staffId: state.pathParameters['id']!)),
+          GoRoute(path: '/staff/:id',       builder: (ctx, state) => StaffDetailScreen(
+            id: state.pathParameters['id']!,
+            initialTab: state.uri.queryParameters['tab'] == 'salary' ? 1 : 0,
+          )),
           GoRoute(path: '/more',            builder: (ctx, state) => const MoreScreen()),
           GoRoute(path: '/offices',         builder: (ctx, state) => const OfficesScreen()),
           GoRoute(path: '/payment-links',   builder: (ctx, state) => const PaymentLinksScreen()),

@@ -36,6 +36,7 @@ const _kMods = [
   _Mod('tracker',     'Donation Tracker',  Icons.track_changes_outlined,  _amber600),
   _Mod('payments',    'Payment Links',     Icons.link_rounded,            _violet500),
   _Mod('achievements','Achievements',      Icons.emoji_events_outlined,   _amber600),
+  _Mod('staff',       'Staff',             Icons.badge_outlined,          _sky500),
 ];
 
 _Mod _modInfo(String key) =>
