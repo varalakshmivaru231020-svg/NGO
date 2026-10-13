@@ -7,6 +7,7 @@ import { CreateDonationTypeDto, UpdateDonationTypeDto } from './dto/donation-typ
 import { ConfigService } from '@nestjs/config';
 import { paginate, paginatedResponse } from '../common/dto/pagination.dto';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import type { SessionUser } from '../approvals/approvals.service';
 
 @Injectable()
 export class DonationsService {
@@ -155,6 +156,44 @@ export class DonationsService {
   async update(id: string, dto: UpdateDonationDto) {
     await this.findOne(id);
     return this.prisma.donation.update({ where: { id }, data: { ...dto, date: dto.date ? new Date(dto.date) : undefined }, include: this.include });
+  }
+
+  // Hard delete, but the full invoice (incl. donor details) is first copied
+  // into the audit log so a deleted receipt can still be looked up
+  // (GET /donations/deleted). A payment link that produced this donation is
+  // unlinked, not deleted. All in one transaction.
+  async remove(id: string, user: SessionUser) {
+    const donation = await this.findOne(id);
+    await this.prisma.$transaction([
+      this.prisma.auditLog.create({
+        data: {
+          userId: user?.id ?? null,
+          action: 'DELETE',
+          entity: 'Donation',
+          entityId: id,
+          oldValue: JSON.stringify(donation),
+          newValue: JSON.stringify({ deletedBy: user?.name ?? user?.email ?? null }),
+        },
+      }),
+      this.prisma.paymentLink.updateMany({ where: { donationId: id }, data: { donationId: null } }),
+      this.prisma.donation.delete({ where: { id } }),
+    ]);
+    return { id, receiptNo: donation.receiptNo, deleted: true };
+  }
+
+  async findDeleted() {
+    const logs = await this.prisma.auditLog.findMany({
+      where: { entity: 'Donation', action: 'DELETE' },
+      include: { user: { select: { name: true, email: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+    return logs.map((l) => ({
+      id: l.id,
+      deletedAt: l.createdAt,
+      deletedBy: l.user?.name ?? l.user?.email ?? null,
+      record: l.oldValue ? JSON.parse(l.oldValue) : null,
+    }));
   }
 
   async summary() {

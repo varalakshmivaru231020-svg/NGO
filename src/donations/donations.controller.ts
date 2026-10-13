@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { DonationsService } from './donations.service';
 import { CreateDonationDto } from './dto/create-donation.dto';
@@ -8,6 +8,8 @@ import { CreateDonationTypeDto, UpdateDonationTypeDto } from './dto/donation-typ
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { SessionUser } from '../approvals/approvals.service';
 
 @ApiTags('donations')
 @ApiBearerAuth('JWT')
@@ -42,9 +44,16 @@ export class DonationsController {
   @Put('types/:id') @Roles('ADMIN') @ApiOperation({ summary: 'Update a donation type' })
   updateType(@Param('id') id: string, @Body() dto: UpdateDonationTypeDto) { return this.svc.updateType(id, dto); }
 
+  // Declared before ':id' so 'deleted' isn't captured as an id.
+  @Get('deleted') @Roles('ADMIN') @ApiOperation({ summary: 'Record of deleted donation invoices' })
+  findDeleted() { return this.svc.findDeleted(); }
+
   @Get(':id') @ApiOperation({ summary: 'Get donation by ID' })
   findOne(@Param('id') id: string) { return this.svc.findOne(id); }
 
   @Put(':id') @ApiOperation({ summary: 'Update donation' })
   update(@Param('id') id: string, @Body() dto: UpdateDonationDto) { return this.svc.update(id, dto); }
+
+  @Delete(':id') @ApiOperation({ summary: 'Delete a donation (a copy is kept in the deleted record)' })
+  remove(@Param('id') id: string, @CurrentUser() user: SessionUser) { return this.svc.remove(id, user); }
 }

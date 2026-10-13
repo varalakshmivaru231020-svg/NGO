@@ -131,6 +131,26 @@ export class UsersService {
     return { ...user, deleted: true };
   }
 
+  // "Delete all team members" — same soft delete as remove(), applied to every
+  // active non-admin account at once. ADMIN/SUPER_ADMIN accounts and the
+  // caller are never touched, so the system can't be locked out.
+  async removeAllMembers(callerId: string) {
+    const targets = await this.prisma.user.findMany({
+      where: { isActive: true, role: { notIn: ['SUPER_ADMIN', 'ADMIN'] }, id: { not: callerId } },
+      select: { id: true },
+    });
+    const ids = targets.map((t) => t.id);
+    if (ids.length === 0) return { removed: 0 };
+    await this.prisma.$transaction([
+      this.prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } }),
+      this.prisma.user.updateMany({ where: { id: { in: ids } }, data: { isActive: false } }),
+      this.prisma.auditLog.create({
+        data: { userId: callerId, action: 'DELETE_ALL', entity: 'User', newValue: JSON.stringify({ ids }) },
+      }),
+    ]);
+    return { removed: ids.length };
+  }
+
   // ── Staff/own-profile documents — mirrors StudentsService's document
   // methods (same base64-in-JSON storage approach). Access control (self or
   // ADMIN) is enforced in the controller since it isn't a pure role check.

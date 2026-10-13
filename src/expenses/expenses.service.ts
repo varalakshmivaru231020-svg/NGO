@@ -124,6 +124,42 @@ export class ExpensesService {
     });
   }
 
+  // Hard delete, but the full voucher is first copied into the audit log so a
+  // deleted voucher can still be looked up (GET /expenses/deleted). Runs in
+  // one transaction — never a delete without its record, or vice versa.
+  async remove(id: string, user: SessionUser) {
+    const expense = await this.findOne(id);
+    await this.prisma.$transaction([
+      this.prisma.auditLog.create({
+        data: {
+          userId: user?.id ?? null,
+          action: 'DELETE',
+          entity: 'Expense',
+          entityId: id,
+          oldValue: JSON.stringify(expense),
+          newValue: JSON.stringify({ deletedBy: user?.name ?? user?.email ?? null }),
+        },
+      }),
+      this.prisma.expense.delete({ where: { id } }),
+    ]);
+    return { id, voucherNo: expense.voucherNo, deleted: true };
+  }
+
+  async findDeleted() {
+    const logs = await this.prisma.auditLog.findMany({
+      where: { entity: 'Expense', action: 'DELETE' },
+      include: { user: { select: { name: true, email: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+    return logs.map((l) => ({
+      id: l.id,
+      deletedAt: l.createdAt,
+      deletedBy: l.user?.name ?? l.user?.email ?? null,
+      record: l.oldValue ? JSON.parse(l.oldValue) : null,
+    }));
+  }
+
   async summary() {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);

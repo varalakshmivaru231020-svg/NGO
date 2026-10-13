@@ -68,6 +68,12 @@ export class UsersController {
   @ApiOperation({ summary: 'Toggle user active status' })
   toggleActive(@Param('id') id: string) { return this.usersService.toggleActive(id); }
 
+  // Collection-level DELETE — distinct from ':id', no route clash.
+  @Delete()
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Remove (deactivate) every non-admin team member' })
+  removeAll(@CurrentUser('id') callerId: string) { return this.usersService.removeAllMembers(callerId); }
+
   @Delete(':id')
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Remove (deactivate) a team member so they can no longer log in' })

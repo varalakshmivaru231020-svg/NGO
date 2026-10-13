@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { UpdateExpenseCategoryDto } from './dto/create-expense-category.dto';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -45,9 +45,16 @@ export class ExpensesController {
     return this.svc.updateCategory(id, dto);
   }
 
+  // Declared before ':id' so 'deleted' isn't captured as an id.
+  @Get('deleted') @Roles('ADMIN') @ApiOperation({ summary: 'Record of deleted expense vouchers' })
+  findDeleted() { return this.svc.findDeleted(); }
+
   @Get(':id') @ApiOperation({ summary: 'Get expense by ID' })
   findOne(@Param('id') id: string) { return this.svc.findOne(id); }
 
   @Put(':id') @ApiOperation({ summary: 'Update expense' })
   update(@Param('id') id: string, @Body() dto: UpdateExpenseDto) { return this.svc.update(id, dto); }
+
+  @Delete(':id') @ApiOperation({ summary: 'Delete an expense (a copy is kept in the deleted record)' })
+  remove(@Param('id') id: string, @CurrentUser() user: SessionUser) { return this.svc.remove(id, user); }
 }
