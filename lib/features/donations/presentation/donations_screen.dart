@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../core/auth/role_auth.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/deleted_records_sheet.dart';
 import 'receipt_generator.dart';
 import 'package:saksham_app/core/ui/ui.dart';
 
@@ -307,6 +309,44 @@ class _DonationsScreenState extends State<DonationsScreen> {
   // the list but excluded from the collected totals.
   List<_Donation> get _real => _donations.where((d) => d.status != 'Pending Approval').toList();
 
+  // Backend-recorded donation (not pending, not an offline-only local entry).
+  bool _isEditable(_Donation d) => d.status == 'Received' && d.id.isNotEmpty && !d.id.startsWith('local_');
+
+  void _edit(_Donation d) => context.go('/donations/${d.id}/edit');
+
+  Future<void> _delete(_Donation d) async {
+    var queued = false;
+    final ok = await AppConfirm.show(
+      context,
+      title: 'Delete donation?',
+      message: 'Delete invoice ${d.receipt} (${_inr(d.amount)} from ${d.name})? '
+          'It will be removed from the list and totals. A copy is kept in the deleted records.',
+      confirmLabel: 'Delete Donation',
+      onConfirm: () async {
+        final r = await apiClient.delete('/donations/${d.id}');
+        queued = (r?['meta'] as Map?)?['pendingApproval'] == true;
+      },
+      errorText: (err) => ApiClient.errorMessage(err, fallback: 'Could not delete the donation.'),
+    );
+    if (!ok || !mounted) return;
+    if (queued) {
+      AppToast.warning(context, 'Submitted for approval', detail: 'A Super Admin will review this deletion.');
+    } else {
+      setState(() => _donations.removeWhere((x) => x.id == d.id));
+      AppToast.success(context, 'Donation deleted', detail: d.receipt);
+    }
+  }
+
+  void _showDeleted() => showDeletedRecordsSheet(
+    context,
+    title: 'Deleted Donations',
+    path: '/donations/deleted',
+    describe: (r) => (
+      number: r['receiptNo'] as String? ?? '',
+      name: (r['donor'] as Map?)?['name'] as String? ?? 'Unknown',
+    ),
+  );
+
   int get _monthTotal => _real.fold(0, (s, d) => s + d.amount);
   int get _uniqueDonors => _real.map((d) => d.donorId).toSet().length;
   int get _avgGift => _real.isEmpty ? 0 : _monthTotal ~/ _real.length;
@@ -324,6 +364,15 @@ class _DonationsScreenState extends State<DonationsScreen> {
                 const Text('Donations', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
                 Text('${_real.length} donations', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
               ])),
+              if (isAdmin)
+                Tooltip(
+                  message: 'Deleted donations',
+                  child: GestureDetector(
+                    onTap: _showDeleted,
+                    child: Container(width: 44, height: 44, margin: const EdgeInsets.only(right: 10),
+                      decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: context.border)),
+                      child: Icon(Icons.history_rounded, color: context.textSub, size: 22))),
+                ),
               GestureDetector(
                 onTap: () => context.go('/donations/new'),
                 child: Container(width: 44, height: 44, decoration: BoxDecoration(color: _brand600, borderRadius: BorderRadius.circular(14)),
@@ -450,7 +499,15 @@ class _DonationsScreenState extends State<DonationsScreen> {
             padding: const EdgeInsets.fromLTRB(18, 14, 18, 100),
             itemCount: items.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (_, i) => _DonationCard(d: items[i]),
+            itemBuilder: (_, i) {
+              final d = items[i];
+              final editable = _isEditable(d);
+              return _DonationCard(
+                d: d,
+                onEdit: editable ? () => _edit(d) : null,
+                onDelete: editable ? () => _delete(d) : null,
+              );
+            },
           );
     return Stack(children: [
       RefreshIndicator(onRefresh: _load, color: _brand600, child: list),
@@ -472,8 +529,9 @@ class _SumStat extends StatelessWidget {
 }
 
 class _DonationCard extends StatelessWidget {
-  const _DonationCard({required this.d});
+  const _DonationCard({required this.d, this.onEdit, this.onDelete});
   final _Donation d;
+  final VoidCallback? onEdit, onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -508,6 +566,7 @@ class _DonationCard extends StatelessWidget {
             Text(d.entryDate.isNotEmpty ? d.entryDate : d.date,
                 style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w500)),
           ]),
+          if (onEdit != null || onDelete != null) _CardMenu(onEdit: onEdit, onDelete: onDelete),
         ])),
         Padding(padding: const EdgeInsets.fromLTRB(14, 0, 14, 10), child: Column(children: [
           _DashedDivider(borderColor: context.border),
@@ -590,4 +649,24 @@ class _DashPainter extends CustomPainter {
   }
   @override
   bool shouldRepaint(covariant CustomPainter _) => false;
+}
+
+// Edit / Delete overflow menu on a list card.
+class _CardMenu extends StatelessWidget {
+  const _CardMenu({this.onEdit, this.onDelete});
+  final VoidCallback? onEdit, onDelete;
+  @override
+  Widget build(BuildContext context) => PopupMenuButton<String>(
+    tooltip: 'More actions',
+    icon: Icon(Icons.more_vert_rounded, size: 20, color: context.textHint),
+    padding: EdgeInsets.zero,
+    onSelected: (v) => v == 'edit' ? onEdit?.call() : onDelete?.call(),
+    itemBuilder: (_) => [
+      if (onEdit != null) const PopupMenuItem(value: 'edit', child: Row(children: [
+        Icon(Icons.edit_outlined, size: 18), SizedBox(width: 10), Text('Edit')])),
+      if (onDelete != null) const PopupMenuItem(value: 'delete', child: Row(children: [
+        Icon(Icons.delete_outline, size: 18, color: _coral500), SizedBox(width: 10),
+        Text('Delete', style: TextStyle(color: _coral500))])),
+    ],
+  );
 }

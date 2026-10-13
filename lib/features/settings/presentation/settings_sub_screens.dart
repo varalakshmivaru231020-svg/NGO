@@ -580,7 +580,10 @@ class _TeamMembersState extends State<TeamMembersScreen> {
       final r = await apiClient.get('/users', params: {'limit': '100', 'page': '1'});
       final inner = r['data'];
       final list = inner is Map ? (inner['data'] as List? ?? const []) : (inner is List ? inner : const []);
-      final backend = list.whereType<Map>().map((m) => m.cast<String, dynamic>()).toList();
+      // Deleted members are only deactivated server-side — skip them, or they
+      // reappear in the list as "Active" on the next visit.
+      final backend = list.whereType<Map>().map((m) => m.cast<String, dynamic>())
+          .where((u) => u['isActive'] != false).toList();
       final backendEmails = backend.map((u) => (u['email'] as String? ?? '').toLowerCase()).toSet();
       final adminEmail = adminProfile.value.email.toLowerCase();
 
@@ -593,19 +596,27 @@ class _TeamMembersState extends State<TeamMembersScreen> {
         if (email.isEmpty || email.toLowerCase() == adminEmail) continue;
         final role = (u['role'] as String? ?? 'STAFF');
         if (role == 'SUPER_ADMIN' || role == 'ADMIN') continue;
-        if (!appRoles.any((r0) => r0.email.toLowerCase() == email.toLowerCase())) {
-          final csv = u['modules'] as String?;
-          final modules = (csv != null && csv.trim().isNotEmpty)
-              ? csv.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toSet()
-              : <String>{};
+        final csv = u['modules'] as String?;
+        final modules = (csv != null && csv.trim().isNotEmpty)
+            ? csv.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toSet()
+            : <String>{};
+        final existing = appRoles.where((r0) => r0.email.toLowerCase() == email.toLowerCase()).firstOrNull;
+        if (existing == null) {
           appRoles.add(AppRole(
             name: u['name'] as String? ?? email,
             email: email,
             password: '',
-            roleName: role,
+            roleName: roleNameForModules(modules) ?? role,
             modules: modules,
             backendId: u['id'] as String?,
           ));
+        } else {
+          // The server's modules are what the member actually gets.
+          existing.backendId ??= u['id'] as String?;
+          if (modules.isNotEmpty && !(existing.modules.length == modules.length && existing.modules.containsAll(modules))) {
+            existing.modules = modules;
+            existing.roleName = roleNameForModules(modules) ?? existing.roleName;
+          }
         }
       }
       saveRoles();
@@ -831,6 +842,123 @@ class _TeamMembersState extends State<TeamMembersScreen> {
     );
   }
 
+  // Change a member's role without recreating the account: updates the
+  // backend login (role + module access) and the local mirror.
+  void _showEditRole(int idx) {
+    final ai = idx - 1;
+    final members = _memberRoles;
+    if (ai < 0 || ai >= members.length) return;
+    final member = members[ai];
+    final roleOptions = roleTemplates.map((t) => t['name'] as String).toList();
+    if (roleOptions.isEmpty) { AppToast.warning(context, 'Create a role in Manage Roles first'); return; }
+    String selectedRole = roleOptions.firstWhere(
+        (r) => r.toLowerCase() == member.roleName.toLowerCase(),
+        orElse: () => roleNameForModules(member.modules) ?? roleOptions.first);
+    bool saving = false;
+
+    showAppSheet(
+      context: context, isScrollControlled: true, backgroundColor: Colors.transparent, useSafeArea: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) => Container(
+        decoration: BoxDecoration(color: ctx.cardBg, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+        padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Center(child: SheetHandle(margin: const EdgeInsets.symmetric(vertical: 12))),
+          Row(children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Edit Role', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text('${member.name}  ·  ${member.email}', style: TextStyle(fontSize: 12.5, color: ctx.textSub), overflow: TextOverflow.ellipsis),
+            ])),
+            IconButton(
+              tooltip: 'Close',
+              icon: Icon(Icons.close_rounded, size: 20, color: ctx.textSub),
+              onPressed: saving ? null : () => Navigator.of(ctx).pop(),
+            ),
+          ]),
+          const SizedBox(height: 16),
+          Text('Role', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: ctx.textSub)),
+          const SizedBox(height: 6),
+          Container(
+            decoration: BoxDecoration(color: ctx.surface2, borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: DropdownButtonHideUnderline(child: DropdownButton<String>(
+              value: selectedRole,
+              isExpanded: true,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              dropdownColor: ctx.cardBg,
+              borderRadius: BorderRadius.circular(12),
+              items: roleOptions.map((r) => DropdownMenuItem(value: r,
+                child: Text(r, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: ctx.textPrimary)))).toList(),
+              onChanged: saving ? null : (v) { if (v != null) setSheet(() => selectedRole = v); },
+            )),
+          ),
+          const SizedBox(height: 8),
+          Text('Their access changes the next time they open or reload the app.',
+              style: TextStyle(fontSize: 12, color: ctx.textHint)),
+          const SizedBox(height: 20),
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            AppButton(label: 'Cancel', variant: AppButtonVariant.secondary,
+                onPressed: saving ? null : () => Navigator.of(ctx).pop()),
+            const SizedBox(width: 8),
+            AppButton(
+              label: 'Save Role', busyLabel: 'Saving…', loading: saving,
+              onPressed: () async {
+                if (saving) return;
+                final modules = modulesForRoleName(selectedRole);
+                final backendRole = selectedRole.toLowerCase() == 'admin' ? 'ADMIN' : 'STAFF';
+                var queued = false;
+                if (member.backendId != null) {
+                  setSheet(() => saving = true);
+                  try {
+                    final res = await apiClient.patch('/users/${member.backendId}', {
+                      'role': backendRole, 'modules': modules.join(','),
+                    });
+                    queued = (res['meta'] as Map?)?['pendingApproval'] == true;
+                  } catch (e) {
+                    if (ctx.mounted) setSheet(() => saving = false);
+                    if (mounted) AppToast.error(context, 'Could not change role', detail: ApiClient.errorMessage(e));
+                    return;
+                  }
+                }
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (!mounted) return;
+                if (queued) {
+                  _snack(context, 'Role change submitted for Super Admin approval', error: false);
+                  return;
+                }
+                setState(() { member.roleName = selectedRole; member.modules = modules; });
+                saveRoles();
+                _snack(context, '${member.name} is now $selectedRole', error: false);
+              },
+            ),
+          ]),
+        ]),
+      )),
+    );
+  }
+
+  // Admin-only: deactivate every team member (never admins / the owner).
+  void _confirmRemoveAll() {
+    final count = _memberRoles.length;
+    AppConfirm.show(
+      context,
+      title: 'Delete all team members?',
+      message: 'This deletes all $count team member${count == 1 ? '' : 's'}. Every one of them will be signed out '
+          'and will not be able to log in again. Admin accounts are not affected. This cannot be undone.',
+      confirmLabel: 'Delete All',
+      busyLabel: 'Deleting…',
+      onConfirm: () async {
+        await apiClient.delete('/users');
+        final adminEmail = adminProfile.value.email.toLowerCase();
+        if (mounted) setState(() => appRoles.removeWhere((r) => r.email.toLowerCase() != adminEmail));
+        saveRoles();
+      },
+      errorText: (e) => ApiClient.errorMessage(e, fallback: 'Could not delete team members.'),
+    ).then((ok) {
+      if (ok && mounted) _snack(context, 'All team members deleted', error: false);
+    });
+  }
+
   void _confirmRemove(int idx) {
     final name = _members[idx]['name'] as String;
     AppConfirm.show(
@@ -911,6 +1039,13 @@ class _TeamMembersState extends State<TeamMembersScreen> {
                       child: Icon(Icons.folder_outlined, size: 16, color: context.textSub)))),
                 ],
                 const SizedBox(width: 6),
+                Tooltip(message: 'Edit role', child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _showEditRole(i),
+                  child: Container(padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(color: context.surface2, borderRadius: BorderRadius.circular(8)),
+                    child: Icon(Icons.manage_accounts_outlined, size: 16, color: context.textSub)))),
+                const SizedBox(width: 6),
                 Tooltip(message: 'Delete member', child: InkWell(
                   borderRadius: BorderRadius.circular(8),
                   onTap: () => _confirmRemove(i),
@@ -921,6 +1056,16 @@ class _TeamMembersState extends State<TeamMembersScreen> {
             ]),
           );
         }).toList())),
+        if (isAdmin && _memberRoles.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: Align(alignment: Alignment.centerRight, child: AppButton(
+              label: 'Delete All Members', icon: Icons.group_remove_outlined,
+              variant: AppButtonVariant.destructive, onPressed: _confirmRemoveAll,
+            )),
+          ),
+        ],
         if (_pendingMembers.isNotEmpty) ...[
           const SizedBox(height: 20),
           Padding(

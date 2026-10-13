@@ -12,12 +12,18 @@ import 'package:saksham_app/core/ui/ui.dart';
 // Settings → Organization on the backend. Returns null (never throws) on any
 // failure so the receipt still renders with the hardcoded fallbacks below —
 // this must never block a donor from getting their receipt.
+//
+// Cached after the first success and capped at a few seconds: the invoice
+// sheet waits for this before opening, and the API client's own 90s receive
+// timeout left the Invoice button looking stuck on a slow connection.
+Map<String, dynamic>? _orgCache;
+
 Future<Map<String, dynamic>?> fetchOrgSettings() async {
   try {
-    final r = await apiClient.get('/settings/organization');
-    return (r['data'] as Map).cast<String, dynamic>();
+    final r = await apiClient.get('/settings/organization').timeout(const Duration(seconds: 6));
+    return _orgCache = (r['data'] as Map).cast<String, dynamic>();
   } catch (_) {
-    return null;
+    return _orgCache;
   }
 }
 
@@ -174,11 +180,16 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
 
   // MultiPage (not a fixed-size Page): a Page silently clips/positions any
   // content past its bottom edge when it overflows. MultiPage flows the
-  // overflow onto another page instead.
+  // overflow onto another page instead — but only between its TOP-LEVEL
+  // children. These sections used to sit in one outer Column, which can't be
+  // split, so a receipt taller than one A4 page (long description/address)
+  // made MultiPage retry forever on the release build and Print/Download
+  // just kept loading.
   doc.addPage(pw.MultiPage(
     pageFormat: PdfPageFormat.a4,
     margin: const pw.EdgeInsets.fromLTRB(36, 30, 36, 30),
-    build: (ctx) => [pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    build: (ctx) => [
       // Header: logo (wordmark is baked into the asset)
       pw.Image(logo, height: 64),
       pw.SizedBox(height: 16),
@@ -305,7 +316,8 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
           pw.Text('STATUTORY REGISTRATION DETAILS (TAX BENEFITS)',
               style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: orange, letterSpacing: 0.3)),
           pw.SizedBox(height: 5),
-          pw.Text('• Trust PAN: $orgPan | • 12AA Registration: $org12A | • 80G Certification: $org80G',
+          // Plain separators — Helvetica has no bullet glyph (it printed blank).
+          pw.Text('Trust PAN: $orgPan  |  12AA Registration: $org12A  |  80G Certification: $org80G',
               style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: dark)),
           if (orgAddress.isNotEmpty) ...[
             pw.SizedBox(height: 5),
@@ -322,7 +334,7 @@ Future<Uint8List> buildReceiptPdf(DonationReceipt r, {Map<String, dynamic>? org}
           ],
         ]),
       ),
-    ])],
+    ],
   ));
   return doc.save();
 }
@@ -642,7 +654,7 @@ pw.Widget _totRowPdf(String label, String value, PdfColor color, {bool bold = fa
 Future<void> showReceiptSheet(BuildContext context, DonationReceipt receipt, {Map<String, dynamic>? org}) async {
   // Fetch org settings once up front if the caller didn't already have them,
   // so the sheet (and any PDF download from it) render with real org data.
-  final orgData = org ?? await fetchOrgSettings();
+  final orgData = org ?? _orgCache ?? await fetchOrgSettings();
   if (!context.mounted) return;
   await showAppSheet(
     context: context,

@@ -58,7 +58,9 @@ const _quickAmounts = [5000, 11000, 25000, 51000];
 
 // ══════════════════════════════════════════════════════════════════════
 class AddDonationScreen extends StatefulWidget {
-  const AddDonationScreen({super.key});
+  const AddDonationScreen({super.key, this.donationId});
+  // Set → edit an existing (already-invoiced) donation instead of adding one.
+  final String? donationId;
   @override
   State<AddDonationScreen> createState() => _AddDonationScreenState();
 }
@@ -77,6 +79,13 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
   DateTime _selectedDate = DateTime.now();
   bool _saving = false;
   final List<String> _attachments = [];
+
+  bool get _isEdit => widget.donationId != null;
+  // Edit mode: the receipt number already issued (it never changes on edit),
+  // and the stored payment mode when it has no chip here (e.g. CARD).
+  String? _existingReceiptNo;
+  String? _originalMode;
+  bool _loadingExisting = false;
   bool _pickingFile = false;
 
   // Loaded from API
@@ -97,6 +106,72 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     _typeLabelToId = {for (final k in _typeVisuals.keys) k: k};
     _typeLabels = _typeVisuals.keys.toList();
     _loadFormData();
+    if (_isEdit) _loadExisting();
+  }
+
+  Future<void> _loadExisting() async {
+    setState(() => _loadingExisting = true);
+    try {
+      final r = await apiClient.get('/donations/${widget.donationId}');
+      final j = (r['data'] as Map?)?.cast<String, dynamic>() ?? r;
+      if (!mounted) return;
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      final dt = DateTime.tryParse(j['date'] as String? ?? '')?.toLocal() ?? DateTime.now();
+      final donor = (j['donor'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final type = (j['type'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final mode = j['paymentMode'] as String? ?? 'CASH';
+      setState(() {
+        _existingReceiptNo = j['receiptNo'] as String?;
+        _amountCtrl.text = '${(j['amount'] as num?)?.toInt() ?? ''}';
+        _selectedDonorId = donor['id'] as String? ?? j['donorId'] as String?;
+        _selectedDonorName = donor['name'] as String?;
+        final typeLabel = type['label'] as String?;
+        if (typeLabel != null) {
+          _donationType = typeLabel;
+          final typeId = type['id'] as String? ?? j['typeId'] as String?;
+          if (typeId != null) _typeLabelToId[typeLabel] = typeId;
+        }
+        final label = _methodModes.entries.where((e) => e.value == mode).firstOrNull?.key;
+        _method = label ?? _method;
+        _originalMode = label == null ? mode : null;
+        _txnIdCtrl.text = j['reference'] as String? ?? '';
+        _descriptionCtrl.text = j['notes'] as String? ?? '';
+        _selectedDate = dt;
+        _date = '${dt.day.toString().padLeft(2,'0')} ${months[dt.month-1]} ${dt.year}';
+        _loadingExisting = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.error(context, 'Could not load donation', detail: ApiClient.errorMessage(e));
+      context.go('/donations');
+    }
+  }
+
+  // Edit mode save — PUT the corrected fields; the receipt number is kept.
+  Future<void> _update(int amount, String typeId) async {
+    try {
+      final resp = await apiClient.put('/donations/${widget.donationId}', {
+        'donorId': _selectedDonorId,
+        'typeId': typeId,
+        'amount': amount,
+        'paymentMode': _methodModes[_method] ?? _originalMode ?? 'CASH',
+        'date': _selectedDate.toIso8601String(),
+        'reference': _txnIdCtrl.text.trim(),
+        'notes': _descriptionCtrl.text.trim(),
+      });
+      if (!mounted) return;
+      if ((resp['meta'] as Map?)?['pendingApproval'] == true) {
+        AppToast.warning(context, 'Submitted for approval', detail: 'A Super Admin will review this change.');
+      } else {
+        AppToast.success(context, 'Donation updated', detail: _existingReceiptNo);
+      }
+      context.go('/donations');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      _snack('Unable to update donation', isError: true,
+          detail: ApiClient.errorMessage(e, fallback: 'Please try again.'));
+    }
   }
 
   List<({String id, String name, String city, String tier, String mobile, String email, String pan, String address, String state, String pincode, String country})> _fallbackDonors() {
@@ -183,7 +258,8 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
   }
 
   // late final — a getter regenerated a different number on every rebuild.
-  late final String _receipt = 'SF/26-27/${DateTime.now().millisecondsSinceEpoch % 10000 + 400}';
+  late final String _receiptPreview = 'SF/26-27/${DateTime.now().millisecondsSinceEpoch % 10000 + 400}';
+  String get _receipt => _existingReceiptNo ?? _receiptPreview;
 
   void _pickAmount(int amount) {
     _amountCtrl.text = amount.toString();
@@ -307,6 +383,11 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     final typeId = _typeLabelToId[_donationType] ?? _donationType;
     setState(() => _saving = true);
 
+    if (_isEdit) {
+      await _update(amount, typeId);
+      return;
+    }
+
     String receiptNo = 'SF/26-27/${(DateTime.now().millisecondsSinceEpoch % 9999 + 1000)}';
     bool backendOk = false;
     try {
@@ -425,7 +506,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
             ),
             const SizedBox(width: 6),
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Add Donation', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF15211E))),
+              Text(_isEdit ? 'Edit Donation' : 'Add Donation', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF15211E))),
               Container(
                 margin: const EdgeInsets.only(top: 3),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -436,6 +517,9 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
           ]),
         ),
 
+        if (_loadingExisting)
+          const Expanded(child: Center(child: AppSpinner(size: 28, color: _brand600)))
+        else
         Expanded(child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           child: Center(child: ConstrainedBox(
@@ -534,7 +618,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                 Wrap(spacing: 8, runSpacing: 8, children: _methods.map((m) {
                   final active = _method == m;
                   return GestureDetector(
-                    onTap: () => setState(() => _method = m),
+                    onTap: () => setState(() { _method = m; _originalMode = null; }),
                     child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(color: active ? _brand600 : context.scaffoldBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: active ? _brand600 : context.border)),
                       child: Text(m, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: active ? Colors.white : context.textSub))),
@@ -677,7 +761,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                 onPressed: _saving ? null : () => context.go('/donations'),
               );
               final save = AppButton(
-                label: 'Save Donation', busyLabel: 'Saving…', icon: Icons.check_rounded,
+                label: _isEdit ? 'Update Donation' : 'Save Donation', busyLabel: 'Saving…', icon: Icons.check_rounded,
                 loading: _saving, expand: narrow, onPressed: _save,
               );
               return narrow

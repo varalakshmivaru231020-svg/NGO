@@ -29,7 +29,9 @@ String _currentUserName() => isAdmin ? adminProfile.value.name : (currentLoggedI
 
 // ══════════════════════════════════════════════════════════════════════
 class AddExpenseScreen extends StatefulWidget {
-  const AddExpenseScreen({super.key});
+  const AddExpenseScreen({super.key, this.expenseId});
+  // Set → edit an existing (already-vouchered) expense instead of adding one.
+  final String? expenseId;
   @override
   State<AddExpenseScreen> createState() => _AddExpenseScreenState();
 }
@@ -45,6 +47,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   String _date = '';
   DateTime _selectedDate = DateTime.now();
   bool _saving = false;
+
+  bool get _isEdit => widget.expenseId != null;
+  // Edit mode: the voucher number already issued (it never changes on edit).
+  String? _existingVoucherNo;
+  bool _loadingExisting = false;
 
   // Loaded from API
   List<({String id, String label})> _categories = [];
@@ -67,6 +74,38 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     _preparedByCtrl = TextEditingController(text: _currentUserName());
     _loadCategories();
     _loadApprovers();
+    if (_isEdit) _loadExisting();
+  }
+
+  Future<void> _loadExisting() async {
+    setState(() => _loadingExisting = true);
+    try {
+      final r = await apiClient.get('/expenses/${widget.expenseId}');
+      final j = (r['data'] as Map?)?.cast<String, dynamic>() ?? r;
+      if (!mounted) return;
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      final dt = DateTime.tryParse(j['date'] as String? ?? '')?.toLocal() ?? DateTime.now();
+      final mode = j['paymentMode'] as String? ?? 'CASH';
+      setState(() {
+        _existingVoucherNo = j['voucherNo'] as String?;
+        _amountCtrl.text = '${(j['amount'] as num?)?.toInt() ?? ''}';
+        _paidToCtrl.text = j['paidTo'] as String? ?? '';
+        _purposeCtrl.text = j['purpose'] as String? ?? '';
+        _preparedByCtrl.text = j['preparedBy'] as String? ?? '';
+        _approvedByCtrl.text = j['approvedBy'] as String? ?? '';
+        _receivedByCtrl.text = j['receivedBy'] as String? ?? '';
+        _notesCtrl.text = j['notes'] as String? ?? '';
+        _method = _methodModes.entries.where((e) => e.value == mode).firstOrNull?.key ?? 'Cash';
+        _categoryId = j['categoryId'] as String? ?? _categoryId;
+        _selectedDate = dt;
+        _date = '${dt.day.toString().padLeft(2,'0')} ${months[dt.month-1]} ${dt.year}';
+        _loadingExisting = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.error(context, 'Could not load expense', detail: ApiClient.errorMessage(e));
+      context.go('/expenses');
+    }
   }
 
   Future<void> _loadCategories() async {
@@ -80,7 +119,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       if (mounted) {
         setState(() {
           _categories = categories;
-          if (categories.isNotEmpty) _categoryId = categories.first.id;
+          // Edit mode keeps the expense's own category.
+          if (categories.isNotEmpty && _categoryId == null) _categoryId = categories.first.id;
           _loadingData = false;
         });
       }
@@ -123,7 +163,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     AppToast.success(context, 'Category added', detail: created.label);
   }
 
-  String get _voucherPreview => 'EXP/${DateTime.now().year}/${(DateTime.now().millisecondsSinceEpoch % 9999 + 1000)}';
+  String get _voucherPreview => _existingVoucherNo ?? 'EXP/${DateTime.now().year}/${(DateTime.now().millisecondsSinceEpoch % 9999 + 1000)}';
 
   void _pickAmount(int amount) {
     _amountCtrl.text = amount.toString();
@@ -160,6 +200,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     final int amount = parsed!; // validated above
 
     setState(() => _saving = true);
+
+    if (_isEdit) {
+      await _update(amount);
+      return;
+    }
 
     final categoryLabel = _categories.where((c) => c.id == _categoryId).firstOrNull?.label ?? 'Miscellaneous';
     String voucherNo = _voucherPreview;
@@ -240,6 +285,37 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     if (mounted) context.go('/expenses');
   }
 
+  // Edit mode save — PUT the corrected fields. Blank optional fields are sent
+  // as '' so a correction can also clear them.
+  Future<void> _update(int amount) async {
+    try {
+      final resp = await apiClient.put('/expenses/${widget.expenseId}', {
+        'categoryId': _categoryId,
+        'paidTo': _paidToCtrl.text.trim(),
+        'purpose': _purposeCtrl.text.trim(),
+        'amount': amount,
+        'paymentMode': _methodModes[_method] ?? 'CASH',
+        'date': _selectedDate.toIso8601String(),
+        'preparedBy': _preparedByCtrl.text.trim(),
+        'approvedBy': _approvedByCtrl.text.trim(),
+        'receivedBy': _receivedByCtrl.text.trim(),
+        'notes': _notesCtrl.text.trim(),
+      });
+      if (!mounted) return;
+      if ((resp['meta'] as Map?)?['pendingApproval'] == true) {
+        AppToast.warning(context, 'Submitted for approval', detail: 'A Super Admin will review this change.');
+      } else {
+        AppToast.success(context, 'Expense updated', detail: _existingVoucherNo);
+      }
+      context.go('/expenses');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      _snack('Unable to update expense', isError: true,
+          detail: ApiClient.errorMessage(e, fallback: 'Please try again.'));
+    }
+  }
+
   void _snack(String msg, {bool isError = false, String? detail}) {
     if (isError) {
       AppToast.error(context, msg, detail: detail);
@@ -283,7 +359,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             ),
             const SizedBox(width: 6),
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Add Expense', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF15211E))),
+              Text(_isEdit ? 'Edit Expense' : 'Add Expense', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF15211E))),
               Container(
                 margin: const EdgeInsets.only(top: 3),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -294,6 +370,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           ]),
         ),
 
+        if (_loadingExisting)
+          const Expanded(child: Center(child: AppSpinner(size: 28, color: _orange)))
+        else
         Expanded(child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           child: Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 32), child: Column(children: [
@@ -565,7 +644,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 onPressed: _saving ? null : () => context.go('/expenses'),
               );
               final save = AppButton(
-                label: 'Save Expense', busyLabel: 'Saving…', icon: Icons.check_rounded,
+                label: _isEdit ? 'Update Expense' : 'Save Expense', busyLabel: 'Saving…', icon: Icons.check_rounded,
                 loading: _saving, expand: narrow, onPressed: _save,
               );
               return narrow

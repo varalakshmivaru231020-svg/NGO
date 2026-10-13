@@ -2,6 +2,7 @@
 // the Manage Roles screen and the Team Members screen.
 import 'dart:convert';
 import 'role_storage.dart';
+import '../network/api_client.dart';
 import '../storage/kv_store.dart';
 
 // ══════════════════════════════════════════════════════════════════════
@@ -186,14 +187,34 @@ Set<String> modulesForRoleName(String roleName) {
 
 // Re-apply a template's permissions to every member assigned that role, then
 // persist. Keeps logged-in members' access in sync after editing a role.
+//
+// A member's real access comes from the backend User.modules CSV (read on
+// every login/reload), so linked members are patched server-side too —
+// otherwise the change only lived in this browser.
 void applyTemplateToMembers(String roleName) {
   final mods = modulesForRoleName(roleName);
   for (final m in appRoles) {
     if (m.roleName.toLowerCase() == roleName.toLowerCase()) {
       m.modules = {...mods};
+      final id = m.backendId;
+      if (id != null) {
+        apiClient.patch('/users/$id', {'modules': mods.join(',')}).catchError((_) => <String, dynamic>{});
+      }
     }
   }
   saveRoles();
+}
+
+// The role-template name whose modules match [modules] exactly — the backend
+// stores only the module CSV, so this recovers the role name for display.
+String? roleNameForModules(Set<String> modules) {
+  if (modules.isEmpty) return null;
+  for (final t in roleTemplates) {
+    final name = t['name'] as String;
+    final m = modulesForRoleName(name);
+    if (m.length == modules.length && m.containsAll(modules)) return name;
+  }
+  return null;
 }
 
 // Current session — null means admin (sees everything)

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../core/auth/role_auth.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/deleted_records_sheet.dart';
 import '../../../core/utils/native_file_saver.dart';
 import 'expense_report_generator.dart';
 import 'expense_voucher_generator.dart';
@@ -35,6 +37,9 @@ const _categoryInfo = {
   'Transport':          (Color(0xFF5BAE8A), Icons.local_shipping_outlined),
   'Miscellaneous':      (Color(0xFF93A29F), Icons.more_horiz),
 };
+
+const _monthNames = ['January','February','March','April','May','June','July',
+  'August','September','October','November','December'];
 
 const _modeLabels = {
   'CASH': 'Cash', 'UPI': 'UPI', 'BANK_TRANSFER': 'Bank Transfer', 'CHEQUE': 'Cheque', 'CARD': 'Card',
@@ -112,6 +117,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   // Backend category labels — categories are user-creatable, so the chip row
   // can't be limited to the hardcoded _categoryInfo keys.
   List<String> _backendCategories = [];
+  // Selected period for the list + totals. _month == null means the whole year.
+  int? _month = DateTime.now().month;
+  int _year = DateTime.now().year;
 
   @override
   void initState() {
@@ -237,12 +245,67 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     } catch (_) {}
   }
 
-  List<_Expense> get _filtered =>
-    _filter == 'All' ? _expenses : _expenses.where((e) => e.category == _filter).toList();
+  // Matched on the EXPENSE date (not entry date), so a backdated voucher
+  // counts towards the month it was actually spent in.
+  bool _inPeriod(_Expense e) =>
+      e.when != null && e.when!.year == _year && (_month == null || e.when!.month == _month);
+
+  String get _periodLabel => _month == null ? '$_year' : '${_monthNames[_month! - 1]} $_year';
+
+  // Pending submissions have no expense date yet — always listed (on top).
+  List<_Expense> get _filtered => _expenses
+      .where((e) => e.status == 'Pending Approval' || _inPeriod(e))
+      .where((e) => _filter == 'All' || e.category == _filter)
+      .toList();
 
   // Real (recorded) expenses only — pending-approval submissions are shown in
   // the list but excluded from the paid-out totals.
   List<_Expense> get _real => _expenses.where((e) => e.status != 'Pending Approval').toList();
+
+  // Recorded expenses in the selected month/year — drives the summary card.
+  List<_Expense> get _periodReal => _real.where(_inPeriod).toList();
+
+  // Years offered in the filter: every year that has an expense, plus the
+  // current one.
+  List<int> get _years {
+    final ys = {DateTime.now().year, _year, ..._real.map((e) => e.when?.year).whereType<int>()};
+    return ys.toList()..sort((a, b) => b.compareTo(a));
+  }
+
+  // Backend-recorded expense (not pending, not an offline-only local entry).
+  bool _isEditable(_Expense e) => e.status == 'Paid' && e.id.isNotEmpty && !e.id.startsWith('local_');
+
+  void _edit(_Expense e) => context.go('/expenses/${e.id}/edit');
+
+  Future<void> _delete(_Expense e) async {
+    var queued = false;
+    final ok = await AppConfirm.show(
+      context,
+      title: 'Delete expense?',
+      message: 'Delete voucher ${e.voucherNo} (${_inr(e.amount)} paid to ${e.paidTo})? '
+          'It will be removed from the list and totals. A copy is kept in the deleted records.',
+      confirmLabel: 'Delete Expense',
+      onConfirm: () async {
+        final r = await apiClient.delete('/expenses/${e.id}');
+        queued = (r?['meta'] as Map?)?['pendingApproval'] == true;
+      },
+      errorText: (err) => ApiClient.errorMessage(err, fallback: 'Could not delete the expense.'),
+    );
+    if (!ok || !mounted) return;
+    if (queued) {
+      AppToast.warning(context, 'Submitted for approval', detail: 'A Super Admin will review this deletion.');
+    } else {
+      setState(() => _expenses.removeWhere((x) => x.id == e.id));
+      AppToast.success(context, 'Expense deleted', detail: e.voucherNo);
+    }
+  }
+
+  void _showDeleted() => showDeletedRecordsSheet(
+    context,
+    title: 'Deleted Expenses',
+    path: '/expenses/deleted',
+    describe: (r) => (number: r['voucherNo'] as String? ?? '', name: r['paidTo'] as String? ?? 'Unknown'),
+  );
 
   bool _downloadingReport = false;
 
@@ -430,8 +493,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     if (mounted) setState(() => _downloadingReport = false);
   }
 
-  int get _monthTotal => _real.fold(0, (s, e) => s + e.amount);
-  int get _avgExpense => _real.isEmpty ? 0 : _monthTotal ~/ _real.length;
+  int get _monthTotal => _periodReal.fold(0, (s, e) => s + e.amount);
+  int get _avgExpense => _periodReal.isEmpty ? 0 : _monthTotal ~/ _periodReal.length;
 
   @override
   Widget build(BuildContext context) {
@@ -444,8 +507,17 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             Row(children: [
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text('Expenses', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
-                Text('${_real.length} expenses', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
+                Text('${_periodReal.length} expenses in $_periodLabel', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
               ])),
+              if (isAdmin)
+                Tooltip(
+                  message: 'Deleted expenses',
+                  child: GestureDetector(
+                    onTap: _showDeleted,
+                    child: Container(width: 44, height: 44, margin: const EdgeInsets.only(right: 10),
+                      decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: context.border)),
+                      child: Icon(Icons.history_rounded, color: context.textSub, size: 22))),
+                ),
               Tooltip(
                 message: _downloadingReport ? 'Preparing report…' : 'Download expense report',
                 child: GestureDetector(
@@ -470,21 +542,36 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 boxShadow: [BoxShadow(color: Color(0x40C2410C), blurRadius: 12, offset: Offset(0, 5))],
               ),
               child: Column(children: [
-                const Row(children: [
-                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Spent this month', style: TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w600)),
-                  ]),
+                Row(children: [
+                  Text('Spent in $_periodLabel', style: const TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w600)),
                 ]),
                 Align(alignment: Alignment.centerLeft, child: Text(_inr(_monthTotal), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.8))),
                 const SizedBox(height: 14),
                 Row(children: [
-                  Expanded(child: _SumStat('Expenses', '${_real.length}')),
+                  Expanded(child: _SumStat('Expenses', '${_periodReal.length}')),
                   Container(width: 1, height: 34, color: Colors.white24),
                   Expanded(child: _SumStat('Avg Expense', _inrC(_avgExpense))),
                 ]),
               ]),
             ),
             const SizedBox(height: 12),
+            Row(children: [
+              Expanded(child: _PeriodDropdown<int?>(
+                value: _month,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('All months')),
+                  for (int m = 1; m <= 12; m++) DropdownMenuItem(value: m, child: Text(_monthNames[m - 1])),
+                ],
+                onChanged: (v) => setState(() => _month = v),
+              )),
+              const SizedBox(width: 10),
+              SizedBox(width: 120, child: _PeriodDropdown<int>(
+                value: _year,
+                items: [for (final y in _years) DropdownMenuItem(value: y, child: Text('$y'))],
+                onChanged: (v) { if (v != null) setState(() => _year = v); },
+              )),
+            ]),
+            const SizedBox(height: 10),
             SizedBox(height: 36, child: ListView(scrollDirection: Axis.horizontal,
               children: _categories.map((t) {
                 final active = _filter == t;
@@ -535,6 +622,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     title: 'No expenses in this category',
                     message: 'Choose another category or All.',
                   )
+                : _real.isNotEmpty
+                ? EmptyState(
+                    icon: Icons.event_busy_outlined,
+                    title: 'No expenses in $_periodLabel',
+                    message: 'Pick another month or year to see earlier expenses.',
+                  )
                 : EmptyState(
                     icon: Icons.receipt_long_outlined,
                     title: 'No expenses yet',
@@ -548,7 +641,15 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             padding: const EdgeInsets.fromLTRB(18, 14, 18, 100),
             itemCount: items.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (_, i) => _ExpenseCard(e: items[i]),
+            itemBuilder: (_, i) {
+              final e = items[i];
+              final editable = _isEditable(e);
+              return _ExpenseCard(
+                e: e,
+                onEdit: editable ? () => _edit(e) : null,
+                onDelete: editable ? () => _delete(e) : null,
+              );
+            },
           );
     return Stack(children: [
       RefreshIndicator(onRefresh: _load, color: _orange, child: list),
@@ -569,9 +670,33 @@ class _SumStat extends StatelessWidget {
   ]);
 }
 
+class _PeriodDropdown<T> extends StatelessWidget {
+  const _PeriodDropdown({required this.value, required this.items, required this.onChanged});
+  final T value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?> onChanged;
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 40,
+    padding: const EdgeInsets.symmetric(horizontal: 12),
+    decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.border)),
+    child: DropdownButtonHideUnderline(child: DropdownButton<T>(
+      value: value,
+      items: items,
+      onChanged: onChanged,
+      isExpanded: true,
+      icon: const Icon(Icons.expand_more_rounded, size: 20, color: _orange),
+      dropdownColor: context.cardBg,
+      borderRadius: BorderRadius.circular(12),
+      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.textPrimary),
+    )),
+  );
+}
+
 class _ExpenseCard extends StatelessWidget {
-  const _ExpenseCard({required this.e});
+  const _ExpenseCard({required this.e, this.onEdit, this.onDelete});
   final _Expense e;
+  final VoidCallback? onEdit, onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -606,6 +731,7 @@ class _ExpenseCard extends StatelessWidget {
             Text(e.date.isNotEmpty ? e.date : e.entryDate,
                 style: TextStyle(fontSize: 11.5, color: context.textHint, fontWeight: FontWeight.w500)),
           ]),
+          if (onEdit != null || onDelete != null) _CardMenu(onEdit: onEdit, onDelete: onDelete),
         ])),
         Padding(padding: const EdgeInsets.fromLTRB(14, 0, 14, 10), child: Column(children: [
           _DashedDivider(borderColor: context.border),
@@ -683,4 +809,24 @@ class _DashPainter extends CustomPainter {
   }
   @override
   bool shouldRepaint(covariant CustomPainter _) => false;
+}
+
+// Edit / Delete overflow menu on a list card.
+class _CardMenu extends StatelessWidget {
+  const _CardMenu({this.onEdit, this.onDelete});
+  final VoidCallback? onEdit, onDelete;
+  @override
+  Widget build(BuildContext context) => PopupMenuButton<String>(
+    tooltip: 'More actions',
+    icon: Icon(Icons.more_vert_rounded, size: 20, color: context.textHint),
+    padding: EdgeInsets.zero,
+    onSelected: (v) => v == 'edit' ? onEdit?.call() : onDelete?.call(),
+    itemBuilder: (_) => [
+      if (onEdit != null) const PopupMenuItem(value: 'edit', child: Row(children: [
+        Icon(Icons.edit_outlined, size: 18), SizedBox(width: 10), Text('Edit')])),
+      if (onDelete != null) const PopupMenuItem(value: 'delete', child: Row(children: [
+        Icon(Icons.delete_outline, size: 18, color: _coral500), SizedBox(width: 10),
+        Text('Delete', style: TextStyle(color: _coral500))])),
+    ],
+  );
 }
