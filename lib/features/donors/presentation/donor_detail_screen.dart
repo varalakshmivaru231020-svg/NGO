@@ -359,7 +359,9 @@ class _QuickAction extends StatelessWidget {
     child: Column(mainAxisSize: MainAxisSize.min, children: [
       Icon(icon, color: Colors.white, size: 18),
       const SizedBox(height: 3),
-      Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 10, fontWeight: FontWeight.w700)),
+      // Shrinks instead of wrapping ("WhatsAp/p") on narrow phones.
+      FittedBox(fit: BoxFit.scaleDown, child: Text(label, maxLines: 1, softWrap: false,
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 10, fontWeight: FontWeight.w700))),
     ]),
   ));
 }

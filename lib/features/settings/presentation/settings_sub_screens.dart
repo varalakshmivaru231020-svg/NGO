@@ -3270,6 +3270,16 @@ class _ManageRolesState extends State<ManageRolesScreen> {
     body: Column(children: [
       _buildHeader(context, 'Manage Roles', sub: 'Control what each staff member can access',
         action: AppButton(label: 'New Role', icon: Icons.add, onPressed: () => _showRoleSheet(context))),
+      // No roles yet → say so (the page was just blank), with the same action.
+      if (_roles.isEmpty)
+        Expanded(child: SingleChildScrollView(child: EmptyState(
+          icon: Icons.admin_panel_settings_outlined,
+          title: 'No roles yet',
+          message: 'Create a role to choose which modules a team member can access.',
+          actionLabel: 'New Role',
+          onAction: () => _showRoleSheet(context),
+        )))
+      else
       Expanded(child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
         physics: const BouncingScrollPhysics(),

@@ -82,9 +82,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
         apiClient.get('/reports/overview'),
         apiClient.get('/reports/monthly-trend', params: {'months': '7'}),
         apiClient.get('/donations/types'),
-        apiClient.get('/donations', params: {'limit': '100', 'page': '1'}),
-        apiClient.get('/students', params: {'limit': '100', 'page': '1'}),
-        apiClient.get('/donors', params: {'limit': '100', 'page': '1'}),
+        // Only used for the Excel export — a slow/failed list must not blank
+        // the whole report (it showed "Couldn't load this page").
+        apiClient.get('/donations', params: {'limit': '100', 'page': '1'}).catchError((_) => <String, dynamic>{}),
+        apiClient.get('/students', params: {'limit': '100', 'page': '1'}).catchError((_) => <String, dynamic>{}),
+        apiClient.get('/donors', params: {'limit': '100', 'page': '1'}).catchError((_) => <String, dynamic>{}),
         // Expense endpoints must not take down the whole report if they fail.
         apiClient.get('/expenses', params: {'limit': '100', 'page': '1'}).catchError((_) => <String, dynamic>{}),
         apiClient.get('/expenses/summary').catchError((_) => <String, dynamic>{}),
@@ -623,18 +625,22 @@ class _TrendCard extends StatelessWidget {
             leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 22,
+            // interval 1 + whole-number check: fl_chart otherwise picks its
+            // own tick spacing and v.toInt() repeated each month several times.
+            bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 22, interval: 1,
               getTitlesWidget: (v, _) {
                 final i = v.toInt();
-                if (i < 0 || i >= trend.length) return const SizedBox();
+                if (v != i || i < 0 || i >= trend.length) return const SizedBox();
                 return Padding(padding: const EdgeInsets.only(top: 5), child: Text(trend[i].label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: context.textHint)));
               })),
           ),
           lineTouchData: LineTouchData(touchTooltipData: LineTouchTooltipData(
             getTooltipItems: (spots) => spots.map((s) => LineTooltipItem('₹${s.y.toStringAsFixed(0)}K', const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12))).toList(),
           )),
+          minY: 0,
           lineBarsData: [LineChartBarData(
-            spots: spots, isCurved: true, color: _brand600, barWidth: 2.5,
+            // No overshoot: the smoothed curve dipped below ₹0 between months.
+            spots: spots, isCurved: true, preventCurveOverShooting: true, color: _brand600, barWidth: 2.5,
             dotData: FlDotData(getDotPainter: (s, p, bar, i) => FlDotCirclePainter(radius: 4, color: Colors.white, strokeWidth: 2, strokeColor: _brand600)),
             belowBarData: BarAreaData(show: true, gradient: LinearGradient(colors: [_brand600.withValues(alpha: 0.18), _brand600.withValues(alpha: 0)], begin: Alignment.topCenter, end: Alignment.bottomCenter)),
           )],

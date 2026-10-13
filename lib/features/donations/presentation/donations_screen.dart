@@ -47,6 +47,9 @@ const _typeInfo = {
   'Infrastructure':    (Color(0xFF5BAE8A), Icons.business_outlined),
 };
 
+const _monthNames = ['January','February','March','April','May','June','July',
+  'August','September','October','November','December'];
+
 const _modeLabels = {
   'UPI': 'UPI',
   'BANK_TRANSFER': 'Bank Transfer',
@@ -65,7 +68,7 @@ class _Donation {
     required this.status, required this.attach,
     this.donorPhone = '', this.donorCity = '', this.donorPan = '', this.donorEmail = '',
     this.donorAddress = '', this.donorState = '', this.donorPincode = '', this.donorCountry = '',
-    this.reference = '', this.entryDate = '', this.notes = ''});
+    this.reference = '', this.entryDate = '', this.notes = '', this.when});
   final String id, donorId, name, type, method, receipt, date, status;
   final int amount, attach;
   final String donorPhone, donorCity, donorPan;
@@ -76,6 +79,8 @@ class _Donation {
   // When the record was ENTERED into the system (createdAt) — shown on the
   // list card. `date` stays the actual donation date and prints on the invoice.
   final String entryDate;
+  // Parsed donation date — drives the month/year filter.
+  final DateTime? when;
 
   factory _Donation.fromApi(Map<String, dynamic> j) {
     final donor = j['donor'] as Map<String, dynamic>? ?? {};
@@ -83,8 +88,10 @@ class _Donation {
     final rawDate = j['date'] as String? ?? '';
     const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     String formattedDate = rawDate;
+    DateTime? when;
     try {
       final dt = DateTime.parse(rawDate).toLocal();
+      when = dt;
       formattedDate = '${dt.day.toString().padLeft(2,'0')} ${m[dt.month-1]} ${dt.year}';
     } catch (_) {}
     String formattedEntry = '';
@@ -116,6 +123,7 @@ class _Donation {
       attach:   0,
       reference: j['reference'] as String? ?? '',
       notes:     j['notes'] as String? ?? '',
+      when:      when,
     );
   }
 }
@@ -130,6 +138,9 @@ class DonationsScreen extends StatefulWidget {
 class _DonationsScreenState extends State<DonationsScreen> {
   String _filter = 'All';
   List<_Donation> _donations = [];
+  // Selected period for the list + totals. _month == null means the whole year.
+  int? _month = DateTime.now().month;
+  int _year = DateTime.now().year;
   bool _loading = true;
   String? _error;
   // Server-side search (donor name / receipt no.) with a small debounce so we
@@ -302,8 +313,22 @@ class _DonationsScreenState extends State<DonationsScreen> {
 
   List<String> get _types => ['All', ...(_typeLabels.isNotEmpty ? _typeLabels : _typeInfo.keys)];
 
-  List<_Donation> get _filtered =>
-    _filter == 'All' ? _donations : _donations.where((d) => d.type == _filter).toList();
+  // Matched on the DONATION date, so a backdated entry counts in its own month.
+  bool _inPeriod(_Donation d) =>
+      d.when != null && d.when!.year == _year && (_month == null || d.when!.month == _month);
+
+  String get _periodLabel => _month == null ? '$_year' : '${_monthNames[_month! - 1]} $_year';
+
+  // Pending submissions have no donation date yet — always listed (on top).
+  List<_Donation> get _filtered => _donations
+      .where((d) => d.status == 'Pending Approval' || _inPeriod(d))
+      .where((d) => _filter == 'All' || d.type == _filter)
+      .toList();
+
+  List<int> get _years {
+    final ys = {DateTime.now().year, _year, ..._real.map((d) => d.when?.year).whereType<int>()};
+    return ys.toList()..sort((a, b) => b.compareTo(a));
+  }
 
   // Real (recorded) donations only — pending-approval submissions are shown in
   // the list but excluded from the collected totals.
@@ -347,9 +372,12 @@ class _DonationsScreenState extends State<DonationsScreen> {
     ),
   );
 
-  int get _monthTotal => _real.fold(0, (s, d) => s + d.amount);
-  int get _uniqueDonors => _real.map((d) => d.donorId).toSet().length;
-  int get _avgGift => _real.isEmpty ? 0 : _monthTotal ~/ _real.length;
+  // Recorded donations in the selected month/year — drives the summary card.
+  List<_Donation> get _periodReal => _real.where(_inPeriod).toList();
+
+  int get _monthTotal => _periodReal.fold(0, (s, d) => s + d.amount);
+  int get _uniqueDonors => _periodReal.map((d) => d.donorId).toSet().length;
+  int get _avgGift => _periodReal.isEmpty ? 0 : _monthTotal ~/ _periodReal.length;
 
   @override
   Widget build(BuildContext context) {
@@ -362,7 +390,7 @@ class _DonationsScreenState extends State<DonationsScreen> {
             Row(children: [
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text('Donations', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
-                Text('${_real.length} donations', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
+                Text('${_periodReal.length} donations in $_periodLabel', style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
               ])),
               if (isAdmin)
                 Tooltip(
@@ -388,9 +416,9 @@ class _DonationsScreenState extends State<DonationsScreen> {
               ),
               child: Column(children: [
                 Row(children: [
-                  const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Collected this month', style: TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w600)),
-                    SizedBox(height: 3),
+                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Collected in $_periodLabel', style: const TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 3),
                   ]),
                   const Spacer(),
                   GestureDetector(
@@ -406,7 +434,7 @@ class _DonationsScreenState extends State<DonationsScreen> {
                 Align(alignment: Alignment.centerLeft, child: Text(_inr(_monthTotal), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.8))),
                 const SizedBox(height: 14),
                 Row(children: [
-                  Expanded(child: _SumStat('Donations', '${_real.length}')),
+                  Expanded(child: _SumStat('Donations', '${_periodReal.length}')),
                   Container(width: 1, height: 34, color: Colors.white24),
                   Expanded(child: _SumStat('Avg Gift', _inrC(_avgGift))),
                   Container(width: 1, height: 34, color: Colors.white24),
@@ -435,6 +463,23 @@ class _DonationsScreenState extends State<DonationsScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(child: _PeriodDropdown<int?>(
+                value: _month,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('All months')),
+                  for (int m = 1; m <= 12; m++) DropdownMenuItem(value: m, child: Text(_monthNames[m - 1])),
+                ],
+                onChanged: (v) => setState(() => _month = v),
+              )),
+              const SizedBox(width: 10),
+              SizedBox(width: 120, child: _PeriodDropdown<int>(
+                value: _year,
+                items: [for (final y in _years) DropdownMenuItem(value: y, child: Text('$y'))],
+                onChanged: (v) { if (v != null) setState(() => _year = v); },
+              )),
+            ]),
             const SizedBox(height: 10),
             SizedBox(height: 36, child: ListView(scrollDirection: Axis.horizontal,
               children: _types.map((t) {
@@ -486,6 +531,12 @@ class _DonationsScreenState extends State<DonationsScreen> {
                     title: 'No matching donations',
                     message: 'Try a different search or type filter.',
                   )
+                : _real.isNotEmpty
+                ? EmptyState(
+                    icon: Icons.event_busy_outlined,
+                    title: 'No donations in $_periodLabel',
+                    message: 'Pick another month or year to see earlier donations.',
+                  )
                 : EmptyState(
                     icon: Icons.receipt_long_outlined,
                     title: 'No donations yet',
@@ -526,6 +577,29 @@ class _SumStat extends StatelessWidget {
     Text(value, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
     Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600)),
   ]);
+}
+
+class _PeriodDropdown<T> extends StatelessWidget {
+  const _PeriodDropdown({required this.value, required this.items, required this.onChanged});
+  final T value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?> onChanged;
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 40,
+    padding: const EdgeInsets.symmetric(horizontal: 12),
+    decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.border)),
+    child: DropdownButtonHideUnderline(child: DropdownButton<T>(
+      value: value,
+      items: items,
+      onChanged: onChanged,
+      isExpanded: true,
+      icon: const Icon(Icons.expand_more_rounded, size: 20, color: _brand600),
+      dropdownColor: context.cardBg,
+      borderRadius: BorderRadius.circular(12),
+      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.textPrimary),
+    )),
+  );
 }
 
 class _DonationCard extends StatelessWidget {
