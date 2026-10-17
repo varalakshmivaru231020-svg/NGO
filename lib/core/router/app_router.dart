@@ -5,6 +5,7 @@ import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/donors/presentation/donors_screen.dart';
 import '../../features/donors/presentation/donor_detail_screen.dart';
 import '../../features/donors/presentation/add_donor_screen.dart';
+import '../../features/donors/presentation/import_donors_screen.dart';
 import '../../features/donors/presentation/donor_categories_screen.dart';
 import '../../features/donors/presentation/category_donors_screen.dart';
 import '../../features/donations/presentation/donations_screen.dart';
@@ -52,6 +53,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/dashboard',       builder: (ctx, state) => const DashboardScreen()),
           GoRoute(path: '/donors',            builder: (ctx, state) => const DonorsScreen()),
           GoRoute(path: '/donors/new',        builder: (ctx, state) => const AddDonorScreen()),
+          GoRoute(path: '/donors/import',     builder: (ctx, state) => const ImportDonorsScreen()),
           GoRoute(path: '/donors/categories', builder: (ctx, state) => const DonorCategoriesScreen()),
           GoRoute(path: '/donors/categories/:id', builder: (ctx, state) => CategoryDonorsScreen(
             categoryId: state.pathParameters['id']!,

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'donor_categories_screen.dart' show donorCategoriesProvider;
 import '../../../core/network/api_client.dart';
+import '../../../core/auth/role_auth.dart' show isAdmin;
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/lazy_photo.dart';
 import 'package:saksham_app/core/ui/ui.dart';
@@ -360,6 +361,22 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
                     Text('${realDonors.length} total · ${categories.length} categories',
                       style: TextStyle(fontSize: 13, color: context.textSub, fontWeight: FontWeight.w600)),
                   ])),
+                  // Bulk import is admin-only on the server (RolesGuard), so
+                  // the entry point only shows for admins too.
+                  if (isAdmin) ...[
+                    Tooltip(
+                      message: 'Import donors from Excel / CSV',
+                      child: GestureDetector(
+                        onTap: () => context.go('/donors/import'),
+                        child: Container(
+                          width: 40, height: 40,
+                          decoration: BoxDecoration(color: context.surface2, shape: BoxShape.circle, border: Border.all(color: context.border)),
+                          child: Icon(Icons.upload_file_outlined, color: context.textSub, size: 20),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
                   GestureDetector(
                     onTap: () => context.go('/donors/new'),
                     child: Container(
