@@ -4,13 +4,16 @@ import { DonorsService } from './donors.service';
 import { CreateDonorDto } from './dto/create-donor.dto';
 import { UpdateDonorDto } from './dto/update-donor.dto';
 import { DonorQueryDto } from './dto/donor-query.dto';
+import { ImportDonorsDto } from './dto/import-donors.dto';
 import { CreateDonorActivityVideoDto } from './dto/create-donor-activity-video.dto';
 import { CreateDonorActivityImageDto } from './dto/create-donor-activity-image.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 
 @ApiTags('donors')
 @ApiBearerAuth('JWT')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('donors')
 export class DonorsController {
   constructor(private svc: DonorsService) {}
@@ -20,6 +23,11 @@ export class DonorsController {
 
   @Post() @ApiOperation({ summary: 'Create donor' })
   create(@Body() dto: CreateDonorDto) { return this.svc.create(dto); }
+
+  // ADMIN-only (RolesGuard): a 500-row payload has no place in the approval
+  // queue, and admins bypass the interceptor anyway.
+  @Post('import') @Roles('ADMIN') @ApiOperation({ summary: 'Bulk import donors from a spreadsheet; per-row results' })
+  importMany(@Body() dto: ImportDonorsDto) { return this.svc.importMany(dto); }
 
   @Get() @ApiOperation({ summary: 'List donors' })
   findAll(@Query() q: DonorQueryDto) { return this.svc.findAll(q); }
